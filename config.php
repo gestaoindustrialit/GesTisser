@@ -894,9 +894,9 @@ foreach ([['IMP','Impressora',45],['COR','Corte e Cose',45],['RET','Retratador',
 
 $pdo->exec('CREATE UNIQUE INDEX IF NOT EXISTS idx_users_username_unique ON users(username)');
 
-$hasAdmin = (int) $pdo->query('SELECT COUNT(*) FROM users WHERE is_admin = 1')->fetchColumn();
+$hasAdmin = (int) $pdo->query('SELECT COUNT(*) FROM users WHERE is_admin = 1 AND COALESCE(pin_only_login, 0) = 0')->fetchColumn();
 if ($hasAdmin === 0) {
-    $firstUserId = $pdo->query('SELECT id FROM users ORDER BY id ASC LIMIT 1')->fetchColumn();
+    $firstUserId = $pdo->query('SELECT id FROM users WHERE COALESCE(pin_only_login, 0) = 0 ORDER BY id ASC LIMIT 1')->fetchColumn();
     if ($firstUserId) {
         $stmt = $pdo->prepare('UPDATE users SET is_admin = 1 WHERE id = ?');
         $stmt->execute([(int) $firstUserId]);

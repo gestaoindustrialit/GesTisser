@@ -51,13 +51,15 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST' && $hasSqlite) {
     if ($name === '' || $email === '' || $password === '') {
         $error = 'Preencha todos os campos para criar o utilizador administrador.';
     } else {
-        $stmt = $pdo->query('SELECT COUNT(*) FROM users');
+        $stmt = $pdo->prepare('SELECT COUNT(*) FROM users WHERE LOWER(TRIM(email)) <> LOWER(TRIM(?)) AND COALESCE(pin_only_login, 0) = 0');
+        $stmt->execute(['shopfloor@calcadacorp.ch']);
         $usersCount = (int) $stmt->fetchColumn();
 
         if ($usersCount === 0) {
             $insert = $pdo->prepare('INSERT INTO users(name, username, email, password, is_admin, access_profile, is_active, must_change_password) VALUES (?, ?, ?, ?, 1, ?, 1, 0)');
             $insert->execute([$name, $email, $email, password_hash($password, PASSWORD_DEFAULT), 'Administração']);
             $adminId = (int) $pdo->lastInsertId();
+            $pdo->prepare('UPDATE users SET is_admin = 0 WHERE LOWER(TRIM(email)) = LOWER(TRIM(?)) AND COALESCE(pin_only_login, 0) = 1')->execute(['shopfloor@calcadacorp.ch']);
             set_app_setting($pdo, 'hr_alerts_inline_cron_enabled', '1');
             set_app_setting($pdo, 'hr_alerts_inline_cron_runs_per_day', '1440');
             set_app_setting($pdo, 'erp_module_enabled', '1');
