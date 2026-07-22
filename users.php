@@ -8,7 +8,7 @@ if (!is_admin($pdo, $userId)) {
     exit('Acesso reservado a administradores.');
 }
 
-$accessProfileOptions = ['Utilizador', 'Chefias', 'RH', 'Administração'];
+$accessProfileOptions = ['Utilizador', 'Produção', 'Chefias', 'RH', 'Administração'];
 $userTypeOptions = ['Funcionário', 'Administrador', 'Trabalhador Externo', 'Prestador'];
 $timezoneOptions = ['Europe/Lisbon', 'Europe/Madrid', 'UTC'];
 
