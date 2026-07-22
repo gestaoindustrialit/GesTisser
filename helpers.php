@@ -22,7 +22,7 @@ function is_logged_in(): bool
     return isset($_SESSION['user_id']);
 }
 
-function current_user(PDO $pdo): ?array
+function current_user(PDO $pdo)
 {
     if (!is_logged_in()) {
         return null;
@@ -97,13 +97,13 @@ function is_pin_only_user(array $user): bool
     return (int) ($user['pin_only_login'] ?? 0) === 1;
 }
 
-function redirect(string $url): void
+function redirect(string $url)
 {
     header('Location: ' . $url);
     exit;
 }
 
-function require_login(): void
+function require_login()
 {
     if (!is_logged_in()) {
         redirect('login.php');
@@ -137,7 +137,7 @@ function require_login(): void
     run_hr_alerts_inline_if_due($pdo, (int) ($user['id'] ?? 0));
 }
 
-function run_hr_alerts_inline_if_due(PDO $pdo, int $triggerUserId = 0): void
+function run_hr_alerts_inline_if_due(PDO $pdo, int $triggerUserId = 0)
 {
     static $alreadyExecutedInRequest = false;
     if ($alreadyExecutedInRequest) {
@@ -210,7 +210,7 @@ function run_hr_alerts_inline_if_due(PDO $pdo, int $triggerUserId = 0): void
     }
 }
 
-function fetch_pending_shopfloor_announcement_ack(PDO $pdo, int $targetUserId, string $targetSessionLoginAt = ''): ?array
+function fetch_pending_shopfloor_announcement_ack(PDO $pdo, int $targetUserId, string $targetSessionLoginAt = '')
 {
     $params = [$targetUserId, $targetUserId];
 
@@ -245,7 +245,7 @@ function team_accessible(PDO $pdo, int $teamId, int $userId): bool
     return (bool) $stmt->fetchColumn();
 }
 
-function project_for_user(PDO $pdo, int $projectId, int $userId): ?array
+function project_for_user(PDO $pdo, int $projectId, int $userId)
 {
     $stmt = $pdo->prepare(
         'SELECT p.*, t.name AS team_name,
@@ -324,7 +324,7 @@ function task_creation_field_catalog_for_team(PDO $pdo, int $teamId): array
     return array_merge(task_creation_field_catalog(), task_creation_custom_fields($pdo, $teamId));
 }
 
-function task_creation_field_rules(PDO $pdo, int $teamId, ?int $projectId = null, ?array $catalog = null): array
+function task_creation_field_rules(PDO $pdo, int $teamId, $projectId = null, $catalog = null): array
 {
     $fieldCatalog = $catalog ?? task_creation_field_catalog_for_team($pdo, $teamId);
     $rules = [];
@@ -399,7 +399,7 @@ function format_user_picker_label(array $user): string
     return trim($labelNumber . ' - ' . $userName, ' -');
 }
 
-function h(?string $value): string
+function h( $value): string
 {
     $text = (string) $value;
 
@@ -413,7 +413,7 @@ function h(?string $value): string
     return htmlspecialchars($text, ENT_QUOTES, 'UTF-8');
 }
 
-function log_app_event(PDO $pdo, ?int $userId, string $eventType, string $description, array $context = []): void
+function log_app_event(PDO $pdo, $userId, string $eventType, string $description, array $context = [])
 {
     $contextJson = null;
     if (count($context) > 0) {
@@ -428,7 +428,7 @@ function log_app_event(PDO $pdo, ?int $userId, string $eventType, string $descri
 }
 
 
-function record_ticket_status_history(PDO $pdo, int $ticketId, ?string $fromStatus, string $toStatus, ?int $changedBy): void
+function record_ticket_status_history(PDO $pdo, int $ticketId, $fromStatus, string $toStatus, $changedBy)
 {
     $stmt = $pdo->prepare('INSERT INTO team_ticket_status_history(ticket_id, from_status, to_status, changed_by) VALUES (?, ?, ?, ?)');
     $stmt->execute([$ticketId, $fromStatus, $toStatus, $changedBy]);
@@ -540,7 +540,7 @@ function taskforce_smtp_config(): array
     ];
 }
 
-function taskforce_write_report_log(array $lines): void
+function taskforce_write_report_log(array $lines)
 {
     @file_put_contents(__DIR__ . '/reports_sent.log', implode(PHP_EOL, $lines) . PHP_EOL, FILE_APPEND);
 }
@@ -564,7 +564,7 @@ function taskforce_smtp_expect($socket, array $expectedCodes): string
     return $response;
 }
 
-function taskforce_smtp_write($socket, string $command): void
+function taskforce_smtp_write($socket, string $command)
 {
     fwrite($socket, $command . "\r\n");
 }
@@ -644,7 +644,7 @@ function taskforce_smtp_send_mail(string $recipient, string $subject, string $bo
     }
 }
 
-function taskforce_build_mail_payload(string $subject, string $textBody, ?string $htmlBody = null, array $attachments = []): array
+function taskforce_build_mail_payload(string $subject, string $textBody, $htmlBody = null, array $attachments = []): array
 {
     $headers = taskforce_default_mail_headers();
     $normalizedHtmlBody = $htmlBody !== null ? trim($htmlBody) : null;
@@ -721,7 +721,7 @@ function taskforce_build_mail_payload(string $subject, string $textBody, ?string
     return ['headers' => $headers, 'body' => $message];
 }
 
-function deliver_report(string $email, string $subject, string $body, ?string $htmlBody = null, array $attachments = []): bool
+function deliver_report(string $email, string $subject, string $body, $htmlBody = null, array $attachments = []): bool
 {
     $payload = taskforce_build_mail_payload($subject, $body, $htmlBody, $attachments);
     $headers = $payload['headers'];
@@ -907,7 +907,7 @@ function taskforce_generate_monthly_layout_pdf(array $reportData): string
     }
     $canUseTtf = function_exists('imagettftext') && is_file($fontPath);
     $layoutScale = $canUseTtf ? 1.0 : 0.5;
-    $scale = static fn(float $value): int => (int) round($value * $layoutScale);
+    $scale = static function (float $value) use ($layoutScale): int { return (int) round($value * $layoutScale); };
     $width = $scale(1240);
     $height = $scale(1754);
 
@@ -926,7 +926,7 @@ function taskforce_generate_monthly_layout_pdf(array $reportData): string
         $converted = @iconv('UTF-8', 'ASCII//TRANSLIT//IGNORE', $value);
         return $converted !== false ? $converted : $value;
     };
-    $drawText = static function ($image, int $size, int $x, int $y, int $color, string $text) use ($canUseTtf, $fontPath, $toRenderableText): void {
+    $drawText = static function ($image, int $size, int $x, int $y, int $color, string $text) use ($canUseTtf, $fontPath, $toRenderableText) {
         if ($canUseTtf) {
             imagettftext($image, $size, 0, $x, $y, $color, $fontPath, $text);
             return;
@@ -1039,7 +1039,7 @@ function taskforce_generate_monthly_layout_pdf(array $reportData): string
     return taskforce_pdf_from_jpeg($jpeg, $width, $height);
 }
 
-function taskforce_generate_monthly_attendance_fpdf_pdf(array $reportData): ?string
+function taskforce_generate_monthly_attendance_fpdf_pdf(array $reportData)
 {
     if (!class_exists('FPDF')) {
         return null;
@@ -1181,7 +1181,7 @@ function taskforce_generate_monthly_attendance_fpdf_pdf(array $reportData): ?str
     }
 }
 
-function taskforce_generate_pdf_from_html(string $html): ?string
+function taskforce_generate_pdf_from_html(string $html)
 {
     if (trim($html) === '') {
         return null;
@@ -1240,7 +1240,7 @@ function taskforce_generate_pdf_from_html(string $html): ?string
         return null;
     }
 
-    $cleanup = static function () use ($htmlFile, $pdfFile): void {
+    $cleanup = static function () use ($htmlFile, $pdfFile) {
         @unlink($htmlFile);
         @unlink($pdfFile);
     };
@@ -1303,7 +1303,7 @@ function taskforce_generate_pdf_from_html(string $html): ?string
     return $pdfBinary;
 }
 
-function taskforce_store_generated_pdf_on_server(string $pdfContent, string $fileName, string $scope = 'relatorios-rh'): ?array
+function taskforce_store_generated_pdf_on_server(string $pdfContent, string $fileName, string $scope = 'relatorios-rh')
 {
     if ($pdfContent === '' || strncmp($pdfContent, '%PDF', 4) !== 0) {
         return null;
@@ -1438,7 +1438,7 @@ function taskforce_generate_monthly_attendance_report(PDO $pdo, array $user, Dat
         $weekday = (int) $day->format('N');
         $weekdayLabel = taskforce_weekday_label_pt($weekday);
         $dayEntries = $entriesByDate[$date] ?? [];
-        $times = array_map(static fn(array $entry): string => date('H:i', strtotime((string) ($entry['occurred_at'] ?? ''))), $dayEntries);
+        $times = array_map(static function (array $entry): string { return date('H:i', strtotime((string) ($entry['occurred_at'] ?? ''))); }, $dayEntries);
 
         $effectiveMinutes = 0;
         $openIn = null;
@@ -1494,7 +1494,7 @@ function taskforce_generate_monthly_attendance_report(PDO $pdo, array $user, Dat
             $typeLabel = 'Folga';
         }
 
-        $isValidated = !empty($dayEntries) && count(array_filter($dayEntries, static fn(array $entry): bool => !empty($entry['validated_at']))) === count($dayEntries);
+        $isValidated = !empty($dayEntries) && count(array_filter($dayEntries, static function (array $entry): bool { return !empty($entry['validated_at']); })) === count($dayEntries);
         if ($isValidated) {
             $daysValidated++;
         }
@@ -1821,7 +1821,7 @@ function taskforce_generate_monthly_attendance_report(PDO $pdo, array $user, Dat
     ];
 }
 
-function app_setting(PDO $pdo, string $settingKey, ?string $default = null): ?string
+function app_setting(PDO $pdo, string $settingKey, $default = null)
 {
     $stmt = $pdo->prepare('SELECT setting_value FROM app_settings WHERE setting_key = ?');
     $stmt->execute([$settingKey]);
@@ -1830,7 +1830,7 @@ function app_setting(PDO $pdo, string $settingKey, ?string $default = null): ?st
     return $value !== false ? (string) $value : $default;
 }
 
-function set_app_setting(PDO $pdo, string $settingKey, string $settingValue): void
+function set_app_setting(PDO $pdo, string $settingKey, string $settingValue)
 {
     $updateStmt = $pdo->prepare('UPDATE app_settings SET setting_value = ? WHERE setting_key = ?');
     $updateStmt->execute([$settingValue, $settingKey]);
@@ -2005,7 +2005,7 @@ function ticket_status_badge_style(PDO $pdo, string $value): string
     return 'background-color: ' . $hex . '; color: #111827; border: 1px solid rgba(0, 0, 0, 0.08);';
 }
 
-function save_brand_logo(array $file, string $prefix): ?string
+function save_brand_logo(array $file, string $prefix)
 {
     if (($file['error'] ?? UPLOAD_ERR_NO_FILE) !== UPLOAD_ERR_OK) {
         return null;
@@ -2074,7 +2074,7 @@ function save_brand_logo(array $file, string $prefix): ?string
     return 'assets/uploads/' . $filename;
 }
 
-function task_time_delta(?int $estimatedMinutes, ?int $actualMinutes): ?int
+function task_time_delta( $estimatedMinutes, $actualMinutes)
 {
     if ($estimatedMinutes === null || $actualMinutes === null) {
         return null;
@@ -2083,7 +2083,7 @@ function task_time_delta(?int $estimatedMinutes, ?int $actualMinutes): ?int
     return $actualMinutes - $estimatedMinutes;
 }
 
-function parse_duration_to_minutes(?string $input): ?int
+function parse_duration_to_minutes( $input)
 {
     $value = trim((string) $input);
     if ($value === '') {
@@ -2108,7 +2108,7 @@ function parse_duration_to_minutes(?string $input): ?int
     return null;
 }
 
-function format_minutes(?int $minutes): string
+function format_minutes( $minutes): string
 {
     if ($minutes === null) {
         return '00:00:00';

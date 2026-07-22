@@ -444,7 +444,7 @@ $requestType,
     if ($action === 'publish_announcement' && ($isAdmin || $isRh)) {
         $title = trim((string) ($_POST['title'] ?? ''));
         $body = trim((string) ($_POST['body'] ?? ''));
-        $targetUserIds = array_values(array_unique(array_filter(array_map('intval', (array) ($_POST['target_user_ids'] ?? [])), static fn (int $id): bool => $id > 0)));
+        $targetUserIds = array_values(array_unique(array_filter(array_map('intval', (array) ($_POST['target_user_ids'] ?? [])), static function (int $id): bool { return $id > 0; })));
 
         if ($title === '' || $body === '') {
             $flashError = 'Preencha título e conteúdo para publicar o comunicado.';
@@ -638,7 +638,7 @@ if ($scheduleName !== '' && preg_match('/\bGAP\s*([1-3])\b/i', $scheduleName, $g
 }
 $scheduleWeekdays = array_filter(
     array_map('trim', explode(',', (string) ($scheduleContext['weekdays_mask'] ?? '1,2,3,4,5'))),
-    static fn (string $day): bool => preg_match('/^[1-7]$/', $day) === 1
+    static function (string $day): bool { return preg_match('/^[1-7]$/', $day) === 1; }
 );
 if ($scheduleWeekdays === []) {
     $scheduleWeekdays = ['1', '2', '3', '4', '5'];

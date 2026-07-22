@@ -11,7 +11,7 @@ if (!can_access_hr_module($pdo, $userId)) {
 $flashSuccess = null;
 $flashError = null;
 
-function valid_schedule_time(?string $value): bool
+function valid_schedule_time( $value): bool
 {
     return $value !== null && preg_match('/^\d{2}:\d{2}$/', $value) === 1;
 }
@@ -115,7 +115,7 @@ require __DIR__ . '/partials/header.php';
                     <tr>
                         <td><?= h($schedule['name']) ?></td>
                         <td><?= h((string) $schedule['start_time']) ?> - <?= h((string) $schedule['end_time']) ?> · <?= h((string) ($schedule['second_start_time'] ?? '')) ?> - <?= h((string) ($schedule['second_end_time'] ?? '')) ?></td>
-                        <td><?= h(implode(', ', array_map(static fn($d) => $weekdayLabels[$d] ?? $d, $mask))) ?></td>
+                        <td><?= h(implode(', ', array_map(static function ($d) use ($weekdayLabels) { return $weekdayLabels[$d] ?? $d; }, $mask))) ?></td>
                         <td>
                             <form method="post" class="row g-1">
                                 <input type="hidden" name="action" value="update_schedule">

@@ -3,7 +3,7 @@ declare(strict_types=1);
 
 final class UploadService
 {
-    public static function secureUpload(array $file, array $allowedMimeTypes, int $maxBytes = 5242880): ?string
+    public static function secureUpload(array $file, array $allowedMimeTypes, int $maxBytes = 5242880)
     {
         if (($file['error'] ?? UPLOAD_ERR_NO_FILE) !== UPLOAD_ERR_OK) {
             return null;

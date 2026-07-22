@@ -12,7 +12,7 @@ $flashSuccess = null;
 $flashError = null;
 
 
-function output_calendar_csv_template(): void
+function output_calendar_csv_template()
 {
     $rows = [
         ['título', 'tipo', 'data_inicio', 'data_fim', 'cor'],
@@ -283,7 +283,7 @@ require __DIR__ . '/partials/header.php';
         </div>
     </div>
     <?php
-    $companyParts = array_values(array_filter([$companyName, $companyAddress, $companyPhone, $companyEmail], static fn (string $value): bool => $value !== ''));
+    $companyParts = array_values(array_filter([$companyName, $companyAddress, $companyPhone, $companyEmail], static function (string $value): bool { return $value !== ''; }));
     ?>
     <?php if ($companyParts): ?>
         <div class="calendar-print-footer"><?= h(implode(' • ', $companyParts)) ?></div>

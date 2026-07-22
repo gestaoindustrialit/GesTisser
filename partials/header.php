@@ -67,7 +67,7 @@ header('Content-Type: text/html; charset=UTF-8');
 <body class="<?= isset($bodyClass) ? h($bodyClass) : 'bg-light' ?>">
 <nav class="navbar navbar-expand-lg navbar-dark bg-dark">
     <div class="container">
-        <a class="navbar-brand d-flex align-items-center gap-2" href="dashboard.php">
+        <a class="navbar-brand d-flex align-items-center gap-2" href="<?= h(route_url('home', 'dashboard.php')) ?>">
             <?php if ($navbarLogo): ?>
                 <img src="<?= h($navbarLogo) ?>" alt="Logo empresa" class="brand-logo">
             <?php endif; ?>
@@ -93,12 +93,12 @@ header('Content-Type: text/html; charset=UTF-8');
             <div class="collapse navbar-collapse" id="mainNavbar">
                 <div class="navbar-nav me-auto ms-lg-4">
                     <?php if ($isPinOnlyUser): ?>
-                        <a class="nav-link" href="shopfloor.php">Shopfloor</a>
-                        <a class="nav-link" href="erp.php">ERP</a>
+                        <a class="nav-link" href="<?= h(route_url('shopfloor', 'shopfloor.php')) ?>">Shopfloor</a>
+                        <a class="nav-link" href="<?= h(route_url('erp', 'erp.php')) ?>">ERP</a>
                     <?php else: ?>
                     <a class="nav-link" href="dashboard.php">Vis&atilde;o geral</a>
-                    <a class="nav-link" href="shopfloor.php">Shopfloor</a>
-                    <a class="nav-link" href="erp.php">ERP</a>
+                    <a class="nav-link" href="<?= h(route_url('shopfloor', 'shopfloor.php')) ?>">Shopfloor</a>
+                    <a class="nav-link" href="<?= h(route_url('erp', 'erp.php')) ?>">ERP</a>
                     <?php if ($showHrMenu): ?>
                         <div class="nav-item dropdown">
                             <a class="nav-link dropdown-toggle" href="#" role="button" data-bs-toggle="dropdown" aria-expanded="false">RH</a>

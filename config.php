@@ -23,7 +23,7 @@ if (!function_exists('taskforce_error_id')) {
 }
 
 if (!function_exists('taskforce_log_bootstrap_error')) {
-    function taskforce_log_bootstrap_error(string $message): void
+    function taskforce_log_bootstrap_error(string $message)
     {
         error_log($message);
 
@@ -33,7 +33,7 @@ if (!function_exists('taskforce_log_bootstrap_error')) {
 }
 
 if (!function_exists('taskforce_render_internal_error')) {
-    function taskforce_render_internal_error(string $errorId): void
+    function taskforce_render_internal_error(string $errorId)
     {
         $forceVisibleError = isset($_GET['tf_debug_error']) && $_GET['tf_debug_error'] === '1';
 
@@ -68,7 +68,7 @@ if (!function_exists('taskforce_sqlite_index_exists')) {
 if (!defined('TASKFORCE_ERROR_HANDLERS_REGISTERED')) {
     define('TASKFORCE_ERROR_HANDLERS_REGISTERED', true);
 
-    set_exception_handler(static function (Throwable $exception): void {
+    set_exception_handler(static function (Throwable $exception) {
         try {
             $errorId = taskforce_error_id();
             taskforce_log_bootstrap_error('[TaskForce][' . $errorId . '] Exceção não tratada: ' . $exception->getMessage() . ' em ' . $exception->getFile() . ':' . $exception->getLine());
@@ -83,7 +83,7 @@ if (!defined('TASKFORCE_ERROR_HANDLERS_REGISTERED')) {
         }
     });
 
-    register_shutdown_function(static function (): void {
+    register_shutdown_function(static function () {
         try {
             $lastError = error_get_last();
             if ($lastError === null) {

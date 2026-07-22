@@ -503,7 +503,7 @@ $scheduledTasksStmt = $pdo->prepare("SELECT tt.id, tt.title, tt.description, tt.
         tt.created_at DESC");
 $scheduledTasksStmt->execute([$userId, $userId, $todayDate, $todayDate]);
 $scheduledTasks = $scheduledTasksStmt->fetchAll(PDO::FETCH_ASSOC);
-$scheduledTaskIds = array_map(static fn (array $task): int => (int) $task['id'], $scheduledTasks);
+$scheduledTaskIds = array_map(static function (array $task): int { return (int) $task['id']; }, $scheduledTasks);
 
 $todayDateObj = new DateTimeImmutable($todayDate);
 $recurringTasksTodayStmt = $pdo->prepare('SELECT rt.*, t.name AS team_name, p.name AS project_name, a.name AS assignee_name
@@ -525,7 +525,7 @@ $recurringTasksTodayStmt->execute([$userId, $userId, $todayDate, $userId]);
 $recurringTasksForDashboard = $recurringTasksTodayStmt->fetchAll(PDO::FETCH_ASSOC);
 
 $scheduledRecurringTasks = [];
-$scheduledRecurringTaskIds = array_values(array_unique(array_map(static fn (array $task): int => (int) $task['id'], $recurringTasksForDashboard)));
+$scheduledRecurringTaskIds = array_values(array_unique(array_map(static function (array $task): int { return (int) $task['id']; }, $recurringTasksForDashboard)));
 $recurringOverridesByTaskAndDate = [];
 $recurringCompletionsByTaskAndDate = [];
 $recurringStatusesByTaskAndDate = [];
@@ -915,7 +915,7 @@ foreach ($dailyReportRecurringTasks as $dailyReportTask) {
     $dailyReportTasks[] = $dailyReportTask;
 }
 
-usort($dailyReportTasks, static fn(array $a, array $b): int => strcmp((string) $b['updated_at'], (string) $a['updated_at']));
+usort($dailyReportTasks, static function (array $a, array $b): int { return strcmp((string) $b['updated_at'], (string) $a['updated_at']); });
 
 $dailyReportProjectsStmt = $pdo->prepare('SELECT DISTINCT p.id, p.name FROM projects p INNER JOIN team_members tm ON tm.team_id = p.team_id WHERE tm.user_id = ? ORDER BY p.name');
 $dailyReportProjectsStmt->execute([$userId]);
