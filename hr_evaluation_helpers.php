@@ -1041,12 +1041,12 @@ function taskforce_generate_evaluation_history_fpdf_pdf(array $reportData)
         ['Bónus final', taskforce_money((float) ($closure['final_bonus_value'] ?? 0))],
         ['Total anual', taskforce_money((float) ($closure['year_total_with_bonus'] ?? ($metrics['sum_period_total'] ?? 0)))],
     ];
-    foreach ($metricBlocks as [$label, $value]) {
+    foreach ($metricBlocks as list($label, $value)) {
         $pdf->SetFont('Arial', '', 9);
         $pdf->Cell($metricWidth, 6, $toPdfText($label), 1, 0, 'L', true);
     }
     $pdf->Ln();
-    foreach ($metricBlocks as [, $value]) {
+    foreach ($metricBlocks as list($_unusedMetricLabel, $value)) {
         $pdf->SetFont('Arial', 'B', 12);
         $pdf->Cell($metricWidth, 9, $toPdfText($value), 1, 0, 'L');
     }
@@ -1059,7 +1059,7 @@ function taskforce_generate_evaluation_history_fpdf_pdf(array $reportData)
         ['Período', 25], ['Entrevista', 20], ['Performance', 25], ['Comportamento', 25],
         ['Pontualidade', 24], ['Absentismo', 22], ['Total', 18], ['Obs. RH', 31],
     ];
-    foreach ($headers as [$label, $w]) {
+    foreach ($headers as list($label, $w)) {
         $pdf->Cell($w, 7, $toPdfText($label), 1, 0, 'L', true);
     }
     $pdf->Ln();
@@ -1163,7 +1163,7 @@ function taskforce_generate_evaluation_history_layout_pdf(array $reportData): st
     ];
     $cardWidth = $scale(270);
     $x = $scale(60);
-    foreach ($metricCards as [$label, $value]) {
+    foreach ($metricCards as list($label, $value)) {
         imagefilledrectangle($image, $x, $y, $x + $cardWidth, $y + $scale(105), $cardBg);
         imagerectangle($image, $x, $y, $x + $cardWidth, $y + $scale(105), $border);
         $drawText($image, $scale(12), $x + $scale(14), $y + $scale(30), $muted, $label);
@@ -1184,7 +1184,7 @@ function taskforce_generate_evaluation_history_layout_pdf(array $reportData): st
         ['Total', $scale(120)],
     ];
     $x = $scale(60);
-    foreach ($columns as [$label, $w]) {
+    foreach ($columns as list($label, $w)) {
         imagefilledrectangle($image, $x, $y, $x + $w, $y + $scale(34), $cardBg);
         imagerectangle($image, $x, $y, $x + $w, $y + $scale(34), $border);
         $drawText($image, $scale(12), $x + $scale(8), $y + $scale(22), $text, $label);

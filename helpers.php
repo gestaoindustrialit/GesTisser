@@ -983,7 +983,7 @@ function taskforce_generate_monthly_layout_pdf(array $reportData): string
         ['Justificação', $scale(250)],
     ];
     $x = $scale(60);
-    foreach ($columns as [$label, $w]) {
+    foreach ($columns as list($label, $w)) {
         imagefilledrectangle($image, $x, $y, $x + $w, $y + $scale(38), $headerBg);
         imagerectangle($image, $x, $y, $x + $w, $y + $scale(38), $border);
         $drawText($image, $scale(14), $x + $scale(8), $y + $scale(25), $text, $label);
@@ -1127,7 +1127,7 @@ function taskforce_generate_monthly_attendance_fpdf_pdf(array $reportData)
         ['Justificação', 59],
     ];
     $pdf->SetFont('Arial', 'B', 8.2);
-    foreach ($headers as [$label, $width]) {
+    foreach ($headers as list($label, $width)) {
         $pdf->Cell($width, 7, $toPdfText($label), 1, 0, 'L', true);
     }
     $pdf->Ln();
@@ -1148,7 +1148,7 @@ function taskforce_generate_monthly_attendance_fpdf_pdf(array $reportData)
         if ($pdf->GetY() > 268) {
             $pdf->AddPage();
             $pdf->SetFont('Arial', 'B', 8.2);
-            foreach ($headers as [$label, $width]) {
+            foreach ($headers as list($label, $width)) {
                 $pdf->Cell($width, 7, $toPdfText($label), 1, 0, 'L', true);
             }
             $pdf->Ln();
@@ -1685,7 +1685,7 @@ function taskforce_generate_monthly_attendance_report(PDO $pdo, array $user, Dat
         ['Saldos Férias', number_format($vacationBalance, 1, ',', '') . ' dias'],
     ];
     $summaryHtml = '';
-    foreach ($summaryItems as [$label, $value]) {
+    foreach ($summaryItems as list($label, $value)) {
         $summaryHtml .= '<td><strong class="label">' . h((string) $label) . '</strong><br><span class="value">' . h((string) $value) . '</span></td>';
     }
 
