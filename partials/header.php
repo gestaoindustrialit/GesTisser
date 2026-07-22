@@ -59,7 +59,7 @@ header('Content-Type: text/html; charset=UTF-8');
 <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title><?= isset($pageTitle) ? h($pageTitle) . ' · ' : '' ?>TaskForce</title>
+    <title><?= isset($pageTitle) ? h($pageTitle) . ' · ' : '' ?>gesTISSER</title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
     <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css" rel="stylesheet">
     <link href="assets/styles.css" rel="stylesheet">
@@ -71,7 +71,7 @@ header('Content-Type: text/html; charset=UTF-8');
             <?php if ($navbarLogo): ?>
                 <img src="<?= h($navbarLogo) ?>" alt="Logo empresa" class="brand-logo">
             <?php endif; ?>
-            <span>TaskForce</span>
+            <span>gesTISSER</span>
         </a>
         <?php if ($user): ?>
             <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#mainNavbar" aria-controls="mainNavbar" aria-expanded="false" aria-label="Alternar navega&ccedil;&atilde;o">
