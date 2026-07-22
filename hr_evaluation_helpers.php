@@ -47,7 +47,7 @@ function taskforce_evaluation_period_bounds(int $year, string $period)
         return null;
     }
 
-    [$startSuffix, $endSuffix] = $map[$period];
+    list($startSuffix, $endSuffix) = $map[$period];
     return [
         'start_date' => sprintf('%04d-%s', $year, $startSuffix),
         'end_date' => sprintf('%04d-%s', $year, $endSuffix),
@@ -1207,7 +1207,7 @@ function taskforce_generate_evaluation_history_layout_pdf(array $reportData): st
         ];
         $x = $scale(60);
         foreach ($columns as $idx => $column) {
-            [, $w] = $column;
+            $w = $column[1];
             imagerectangle($image, $x, $y, $x + $w, $y + $scale(30), $border);
             $txt = function_exists('mb_substr') ? mb_substr((string) $cells[$idx], 0, 28) : substr((string) $cells[$idx], 0, 28);
             $drawText($image, $scale(11), $x + $scale(7), $y + $scale(20), $text, $txt);

@@ -1005,7 +1005,7 @@ function taskforce_generate_monthly_layout_pdf(array $reportData): string
         ];
         $x = $scale(60);
         foreach ($columns as $index => $column) {
-            [, $w] = $column;
+            $w = $column[1];
             imagerectangle($image, $x, $y, $x + $w, $y + $scale(32), $border);
             $limit = $index === 3 ? 60 : 30;
             $txt = function_exists('mb_substr')
@@ -1457,8 +1457,8 @@ function taskforce_generate_monthly_attendance_report(PDO $pdo, array $user, Dat
         $scheduleApplies = $schedule !== null && in_array((string) $weekday, array_filter(explode(',', (string) ($schedule['weekdays_mask'] ?? ''))), true);
         $targetMinutes = 0;
         if ($scheduleApplies) {
-            [$startHour, $startMinute] = array_map('intval', explode(':', (string) $schedule['start_time']));
-            [$endHour, $endMinute] = array_map('intval', explode(':', (string) $schedule['end_time']));
+            list($startHour, $startMinute) = array_map('intval', explode(':', (string) $schedule['start_time']));
+            list($endHour, $endMinute) = array_map('intval', explode(':', (string) $schedule['end_time']));
             $targetMinutes = (($endHour * 60) + $endMinute) - (($startHour * 60) + $startMinute) - (int) ($schedule['break_minutes'] ?? 0);
             if ($targetMinutes < 0) {
                 $targetMinutes = 0;

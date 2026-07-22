@@ -725,8 +725,8 @@ $pendingVacationDays = (float) $pendingVacationDaysStmt->fetchColumn();
 
 $targetMinutes = (8 * 60) + 15;
 if (!empty($scheduleContext['start_time']) && !empty($scheduleContext['end_time'])) {
-    [$startHour, $startMinute] = array_map('intval', explode(':', (string) $scheduleContext['start_time']));
-    [$endHour, $endMinute] = array_map('intval', explode(':', (string) $scheduleContext['end_time']));
+    list($startHour, $startMinute) = array_map('intval', explode(':', (string) $scheduleContext['start_time']));
+    list($endHour, $endMinute) = array_map('intval', explode(':', (string) $scheduleContext['end_time']));
     $targetMinutes = (($endHour * 60) + $endMinute) - (($startHour * 60) + $startMinute) - (int) ($scheduleContext['break_minutes'] ?? 0);
     if ($targetMinutes < 0) {
         $targetMinutes = 0;
