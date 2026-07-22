@@ -18,7 +18,7 @@ if (!function_exists('taskforce_error_id')) {
 }
 
 if (!function_exists('safe_log')) {
-    function safe_log(string $message, array $context = []): void
+    function safe_log(string $message, array $context = [])
     {
         $logDir = dirname(__DIR__) . '/storage/logs';
         if (!is_dir($logDir)) {
@@ -39,7 +39,7 @@ if (!function_exists('safe_log')) {
 }
 
 if (!function_exists('taskforce_render_internal_error')) {
-    function taskforce_render_internal_error(string $errorId): void
+    function taskforce_render_internal_error(string $errorId)
     {
         if (!headers_sent()) {
             http_response_code(500);
@@ -53,7 +53,7 @@ if (!function_exists('taskforce_render_internal_error')) {
     }
 }
 
-set_exception_handler(static function (Throwable $exception): void {
+set_exception_handler(static function (Throwable $exception) {
     $errorId = taskforce_error_id();
     safe_log('Uncaught exception', [
         'error_id' => $errorId,
@@ -64,7 +64,7 @@ set_exception_handler(static function (Throwable $exception): void {
     taskforce_render_internal_error($errorId);
 });
 
-register_shutdown_function(static function (): void {
+register_shutdown_function(static function () {
     $lastError = error_get_last();
     if ($lastError === null) {
         return;

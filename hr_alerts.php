@@ -106,7 +106,7 @@ function fetch_alert_target_users(PDO $pdo, array $selectedUserIds): array
     return $stmt->fetchAll(PDO::FETCH_ASSOC);
 }
 
-function log_manual_alert_debug(string $message, array $context = []): void
+function log_manual_alert_debug(string $message, array $context = [])
 {
     $storageDir = __DIR__ . '/storage/logs';
     if (!is_dir($storageDir)) {
@@ -239,7 +239,7 @@ function run_alert_now(PDO $pdo, array $alert, int $currentUserId): array
     return ['ok' => $delivered > 0, 'message' => $summary];
 }
 
-function render_alert_collaborator_picker(string $pickerId, array $users, array $teams, array $selectedUsers, string $inputName, string $buttonLabel = 'Selecionar colaboradores'): void
+function render_alert_collaborator_picker(string $pickerId, array $users, array $teams, array $selectedUsers, string $inputName, string $buttonLabel = 'Selecionar colaboradores')
 {
     ?>
     <div class="alert-collaborator-picker" data-hr-alert-picker data-input-name="<?= h($inputName) ?>">
@@ -327,7 +327,7 @@ function render_alert_collaborator_picker(string $pickerId, array $users, array 
     <?php
 }
 
-function render_alert_schedule_fields(array $weekdayLabels, string $prefix, string $scheduleFrequency, array $selectedWeekdays, int $monthlyDay): void
+function render_alert_schedule_fields(array $weekdayLabels, string $prefix, string $scheduleFrequency, array $selectedWeekdays, int $monthlyDay)
 {
     ?>
     <div class="alert-schedule-config" data-alert-schedule-config>
@@ -699,7 +699,7 @@ require __DIR__ . '/partials/header.php';
                         <?php $monthlyDay = normalize_alert_monthly_day($alert['monthly_day'] ?? 1); ?>
                         <?php $scheduleSummary = $scheduleFrequency === 'monthly'
                             ? 'Mensal · dia ' . $monthlyDay
-                            : 'Semanal · ' . implode(', ', array_map(static fn($d) => $weekdayLabels[$d] ?? $d, $mask)); ?>
+                            : 'Semanal · ' . implode(', ', array_map(static function ($d) use ($weekdayLabels) { return $weekdayLabels[$d] ?? $d; }, $mask)); ?>
                         <tr>
                             <td><?= h($alert['name']) ?></td>
                             <td><?= h($alertTypeOptions[$alert['alert_type']] ?? $alert['alert_type']) ?></td>

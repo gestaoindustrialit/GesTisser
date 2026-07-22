@@ -49,7 +49,7 @@ function parse_csv_rows(string $filePath): array
 
     $rows = [];
     while (($row = fgetcsv($handle, 0, ',', '"', '\\')) !== false) {
-        $rows[] = array_map(static fn ($value) => trim((string) $value), $row);
+        $rows[] = array_map(static function ($value) { return trim((string) $value); }, $row);
     }
     fclose($handle);
 
@@ -224,7 +224,7 @@ function parse_binary_flag(string $value, string $fieldName, int $rowNumber): in
     throw new RuntimeException('Linha ' . $rowNumber . ': ' . $fieldName . ' deve ser 1/0, sim/não ou true/false.');
 }
 
-function output_absence_reason_template(): void
+function output_absence_reason_template()
 {
     $content = <<<XML
 <?xml version="1.0"?>

@@ -50,7 +50,7 @@ function ensure_hour_bank_row(PDO $pdo, int $targetUserId): float
     return (float) $balance;
 }
 
-function apply_hour_bank_delta(PDO $pdo, int $targetUserId, int $deltaSeconds, int $validatedBy, string $actionDate): void
+function apply_hour_bank_delta(PDO $pdo, int $targetUserId, int $deltaSeconds, int $validatedBy, string $actionDate)
 {
     if ($deltaSeconds === 0) {
         return;
@@ -219,7 +219,7 @@ function build_sage_payroll_export(array $records): string
     return $lines === [] ? '' : implode(PHP_EOL, $lines) . PHP_EOL;
 }
 
-function parse_signed_hhmm_to_minutes(string $value): ?int
+function parse_signed_hhmm_to_minutes(string $value)
 {
     if (!preg_match('/^([+-])?(\d{1,3}):(\d{2})$/', $value, $matches)) {
         return null;
@@ -235,7 +235,7 @@ function parse_signed_hhmm_to_minutes(string $value): ?int
     return $sign * (($hours * 60) + $minutes);
 }
 
-function parse_hhmm_to_minutes(string $value): ?int
+function parse_hhmm_to_minutes(string $value)
 {
     if (!preg_match('/^(\d{1,3}):(\d{2})$/', $value, $matches)) {
         return null;
@@ -275,7 +275,7 @@ function resolve_absence_minutes(array $absence, int $targetMinutes): int
     return $targetMinutes;
 }
 
-function get_override_bh_seconds(PDO $pdo, int $targetUserId, string $workDate): ?int
+function get_override_bh_seconds(PDO $pdo, int $targetUserId, string $workDate)
 {
     $overrideStmt = $pdo->prepare('SELECT bh_minutes FROM shopfloor_bh_overrides WHERE user_id = ? AND work_date = ? LIMIT 1');
     $overrideStmt->execute([$targetUserId, $workDate]);
@@ -299,7 +299,7 @@ function get_absence_allocated_seconds(PDO $pdo, int $targetUserId, string $work
     return ((int) $allocatedMinutes) * 60;
 }
 
-function persist_bh_override(PDO $pdo, int $targetUserId, string $workDate, int $overrideMinutes, string $overrideReason, int $actorUserId): void
+function persist_bh_override(PDO $pdo, int $targetUserId, string $workDate, int $overrideMinutes, string $overrideReason, int $actorUserId)
 {
     $previousStmt = $pdo->prepare('SELECT id, bh_minutes FROM shopfloor_bh_overrides WHERE user_id = ? AND work_date = ? LIMIT 1');
     $previousStmt->execute([$targetUserId, $workDate]);
@@ -325,7 +325,7 @@ function persist_bh_override(PDO $pdo, int $targetUserId, string $workDate, int 
     ]);
 }
 
-function clear_bh_override(PDO $pdo, int $targetUserId, string $workDate, int $actorUserId): void
+function clear_bh_override(PDO $pdo, int $targetUserId, string $workDate, int $actorUserId)
 {
     $existingStmt = $pdo->prepare('SELECT id, bh_minutes FROM shopfloor_bh_overrides WHERE user_id = ? AND work_date = ? LIMIT 1');
     $existingStmt->execute([$targetUserId, $workDate]);
@@ -959,7 +959,7 @@ foreach ($absenceReasonCatalogStmt->fetchAll(PDO::FETCH_ASSOC) as $catalogRow) {
         continue;
     }
 
-    $fullReason = trim(implode(' - ', array_filter([$reasonCode, $sageCode, $label], static fn ($value): bool => $value !== '')));
+    $fullReason = trim(implode(' - ', array_filter([$reasonCode, $sageCode, $label], static function ($value): bool { return $value !== ''; })));
     $absenceReasonCatalog[] = [
         'absence_code' => $sageCode !== '' ? $sageCode : $reasonCode,
         'reason' => $fullReason,

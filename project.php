@@ -13,7 +13,7 @@ if (!$project) {
 
 $isAjax = strtolower((string) ($_SERVER['HTTP_X_REQUESTED_WITH'] ?? '')) === 'xmlhttprequest';
 
-$ajaxResponse = static function (bool $ok, string $message = '', array $extra = []) use ($isAjax): void {
+$ajaxResponse = static function (bool $ok, string $message = '', array $extra = []) use ($isAjax) {
     if (!$isAjax) {
         return;
     }
@@ -26,7 +26,7 @@ $ajaxResponse = static function (bool $ok, string $message = '', array $extra = 
     exit;
 };
 
-$redirectBack = static function () use ($projectId): void {
+$redirectBack = static function () use ($projectId) {
     $view = $_GET['view'] ?? ($_POST['view'] ?? 'list');
     $showDone = (int) ($_GET['show_done'] ?? ($_POST['show_done'] ?? 1)) === 1;
     redirect('project.php?id=' . $projectId . '&view=' . $view . '&show_done=' . ($showDone ? '1' : '0'));

@@ -31,7 +31,7 @@ function taskforce_evaluation_period_sort(string $period): int
 }
 
 
-function taskforce_evaluation_period_bounds(int $year, string $period): ?array
+function taskforce_evaluation_period_bounds(int $year, string $period)
 {
     $map = [
         'jan_abr' => ['01-01', '04-30'],
@@ -175,7 +175,7 @@ function taskforce_normalize_rule_config(array $config, string $profileKey): arr
     return $normalized;
 }
 
-function taskforce_fetch_evaluation_employee(PDO $pdo, int $userId): ?array
+function taskforce_fetch_evaluation_employee(PDO $pdo, int $userId)
 {
     $stmt = $pdo->prepare(
         'SELECT u.id, u.user_number, u.name, u.email, u.department_id, u.award_profile, u.award_eligible,
@@ -193,7 +193,7 @@ function taskforce_fetch_evaluation_employee(PDO $pdo, int $userId): ?array
     return $row ?: null;
 }
 
-function taskforce_resolve_evaluation_rule(PDO $pdo, int $awardYear, string $profileKey, ?int $departmentId): array
+function taskforce_resolve_evaluation_rule(PDO $pdo, int $awardYear, string $profileKey, $departmentId): array
 {
     $profileKey = array_key_exists($profileKey, taskforce_evaluation_profiles()) ? $profileKey : 'operador';
     $departmentGroupId = null;
@@ -311,7 +311,7 @@ function taskforce_fetch_year_evaluations(PDO $pdo, int $userId, int $year): arr
     return $rows;
 }
 
-function taskforce_calculate_year_summary(PDO $pdo, int $userId, int $year, array $ruleConfig, int $finalAbsenceCount = 0, ?int $editingEvaluationId = null, ?array $editingValues = null): array
+function taskforce_calculate_year_summary(PDO $pdo, int $userId, int $year, array $ruleConfig, int $finalAbsenceCount = 0, $editingEvaluationId = null, $editingValues = null): array
 {
     $rows = taskforce_fetch_year_evaluations($pdo, $userId, $year);
 
@@ -401,7 +401,7 @@ function taskforce_build_evaluation_mail_html(string $employeeName, string $lead
 }
 
 if (!function_exists('taskforce_store_generated_pdf_on_server')) {
-    function taskforce_store_generated_pdf_on_server(string $pdfContent, string $fileName, string $scope = 'hr-evaluations'): ?array
+    function taskforce_store_generated_pdf_on_server(string $pdfContent, string $fileName, string $scope = 'hr-evaluations')
     {
         if ($pdfContent === '' || strncmp($pdfContent, '%PDF', 4) !== 0) {
             return null;
@@ -484,7 +484,7 @@ function taskforce_can_use_mpdf_engine(): bool
     return class_exists('\\Mpdf\\Mpdf');
 }
 
-function taskforce_generate_single_evaluation_fpdf_pdf(array $reportData): ?string
+function taskforce_generate_single_evaluation_fpdf_pdf(array $reportData)
 {
     if (!class_exists('FPDF')) {
         return null;
@@ -580,7 +580,7 @@ function taskforce_generate_single_evaluation_fpdf_pdf(array $reportData): ?stri
     }
 }
 
-function taskforce_send_evaluation_pdf(PDO $pdo, array $employee, array $evaluation, ?array $closure, int $year, string $periodLabel, ?string $sentBy = null): array
+function taskforce_send_evaluation_pdf(PDO $pdo, array $employee, array $evaluation, $closure, int $year, string $periodLabel, $sentBy = null): array
 {
     $recipientEmail = trim((string) ($employee['email'] ?? ''));
     if ($recipientEmail === '') {
@@ -816,7 +816,7 @@ function taskforce_send_evaluation_pdf(PDO $pdo, array $employee, array $evaluat
         : ['ok' => false, 'message' => 'Não foi possível enviar o email com o PDF da avaliação.'];
 }
 
-function taskforce_send_evaluation_history_pdf(PDO $pdo, array $employee, int $year, array $evaluations, array $metrics, string $predominantRule, ?array $closure, ?string $sentBy = null): array
+function taskforce_send_evaluation_history_pdf(PDO $pdo, array $employee, int $year, array $evaluations, array $metrics, string $predominantRule, $closure, $sentBy = null): array
 {
     $recipientEmail = trim((string) ($employee['email'] ?? ''));
     if ($recipientEmail === '') {
@@ -966,7 +966,7 @@ function taskforce_send_evaluation_history_pdf(PDO $pdo, array $employee, int $y
         : ['ok' => false, 'message' => 'Não foi possível enviar o email com o PDF do histórico.'];
 }
 
-function taskforce_generate_evaluation_history_fpdf_pdf(array $reportData): ?string
+function taskforce_generate_evaluation_history_fpdf_pdf(array $reportData)
 {
     if (!class_exists('FPDF')) {
         return null;
@@ -1109,7 +1109,7 @@ function taskforce_generate_evaluation_history_layout_pdf(array $reportData): st
     }
     $canUseTtf = function_exists('imagettftext') && is_file($fontPath);
     $layoutScale = $canUseTtf ? 1.0 : 0.5;
-    $scale = static fn(float $value): int => (int) round($value * $layoutScale);
+    $scale = static function (float $value) use ($layoutScale): int { return (int) round($value * $layoutScale); };
     $width = $scale(1240);
     $height = $scale(1754);
 
@@ -1128,7 +1128,7 @@ function taskforce_generate_evaluation_history_layout_pdf(array $reportData): st
         $converted = @iconv('UTF-8', 'ASCII//TRANSLIT//IGNORE', $value);
         return $converted !== false ? $converted : $value;
     };
-    $drawText = static function ($image, int $size, int $x, int $y, int $color, string $content) use ($canUseTtf, $fontPath, $toRenderableText): void {
+    $drawText = static function ($image, int $size, int $x, int $y, int $color, string $content) use ($canUseTtf, $fontPath, $toRenderableText) {
         if ($canUseTtf) {
             imagettftext($image, $size, 0, $x, $y, $color, $fontPath, $content);
             return;

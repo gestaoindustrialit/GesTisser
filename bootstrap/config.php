@@ -7,7 +7,7 @@ if (defined('TASKFORCE_BOOTSTRAP_CONFIG_LOADED')) {
 define('TASKFORCE_BOOTSTRAP_CONFIG_LOADED', true);
 
 if (!function_exists('app_config')) {
-    function app_config(?string $key = null, mixed $default = null): mixed
+    function app_config( $key = null, $default = null)
     {
         static $config;
 
