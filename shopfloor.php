@@ -1,0 +1,1580 @@
+<?php
+require_once __DIR__ . '/helpers.php';
+require_login();
+
+$userId = (int) $_SESSION['user_id'];
+$user = current_user($pdo);
+$profile = (string) ($user['access_profile'] ?? 'Utilizador');
+$isAdmin = (int) ($user['is_admin'] ?? 0) === 1;
+$isRh = $profile === 'RH';
+$isChief = $profile === 'Chefias';
+
+if (!$isAdmin && !in_array($profile, ['Utilizador', 'Chefias', 'RH'], true)) {
+    http_response_code(403);
+    exit('Acesso reservado aos perfis Utilizador, Chefias e RH.');
+}
+
+$flashSuccess = null;
+$flashError = null;
+$sessionLoginAt = trim((string) ($_SESSION['login_at'] ?? ''));
+$latestClockEntryTodayStmt = $pdo->prepare('SELECT entry_type FROM shopfloor_time_entries WHERE user_id = ? AND date(occurred_at, "localtime") = date("now", "localtime") ORDER BY occurred_at DESC LIMIT 1');
+$latestClockEntryTodayStmt->execute([$userId]);
+$latestClockEntryToday = (string) ($latestClockEntryTodayStmt->fetchColumn() ?: '');
+$hasOpenClockEntryToday = $latestClockEntryToday === 'entrada';
+if (isset($_GET['announcement_ack_required'])) {
+    $flashError = 'Tem de validar o conhecimento do comunicado pendente para continuar.';
+}
+
+if (!function_exists('shopfloor_parse_absence_code')) {
+    function shopfloor_parse_absence_code(string $reason): string
+    {
+        if (preg_match('/·\s*([A-Z0-9\-]+)\s*-/', $reason, $matches)) {
+            return normalize_sage_code((string) ($matches[1] ?? ''));
+        }
+
+        return '';
+    }
+}
+
+if (!function_exists('shopfloor_should_exclude_absence_credit')) {
+    function shopfloor_should_exclude_absence_credit(string $absenceCode): bool
+    {
+        $normalized = preg_replace('/\D+/', '', $absenceCode) ?? '';
+        return $normalized === '100';
+    }
+}
+
+if (!function_exists('shopfloor_resolve_absence_minutes')) {
+    function shopfloor_resolve_absence_minutes(array $absence, int $targetMinutes): int
+    {
+        $durationType = trim((string) ($absence['duration_type'] ?? 'Completa'));
+        if ($durationType === 'Parcial') {
+            return (int) round($targetMinutes / 2);
+        }
+
+        if ($durationType === 'Horas') {
+            $hoursValue = trim((string) ($absence['duration_hours'] ?? ''));
+            if (preg_match('/^(\d{1,2}):(\d{2})$/', $hoursValue, $matches)) {
+                $minutes = (((int) $matches[1]) * 60) + (int) $matches[2];
+                return max(0, min($targetMinutes, $minutes));
+            }
+        }
+
+        return $targetMinutes;
+    }
+}
+
+if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+    $action = trim((string) ($_POST['action'] ?? ''));
+    $pendingAnnouncementForAck = fetch_pending_shopfloor_announcement_ack($pdo, $userId, $sessionLoginAt);
+
+    if ($action === 'acknowledge_announcement') {
+        $announcementId = (int) ($_POST['announcement_id'] ?? 0);
+        if ($announcementId <= 0 || !$pendingAnnouncementForAck || (int) ($pendingAnnouncementForAck['id'] ?? 0) !== $announcementId) {
+            $flashError = 'Comunicado inválido para confirmação.';
+        } else {
+            $ackStmt = $pdo->prepare('INSERT OR IGNORE INTO shopfloor_announcement_acknowledgements(announcement_id, user_id) VALUES (?, ?)');
+            $ackStmt->execute([$announcementId, $userId]);
+            log_app_event(
+                $pdo,
+                $userId,
+                'shopfloor.announcement.acknowledge',
+                'Comunicado confirmado pelo utilizador.',
+                [
+                    'announcement_id' => $announcementId,
+                    'title' => (string) ($pendingAnnouncementForAck['title'] ?? ''),
+                    'acknowledged_at' => date('Y-m-d H:i:s'),
+                ]
+            );
+            $flashSuccess = 'Comunicado confirmado com sucesso.';
+            $pendingAnnouncementForAck = null;
+        }
+    }
+
+    if ($action !== 'acknowledge_announcement' && $pendingAnnouncementForAck) {
+        $flashError = 'Tem de confirmar o comunicado pendente antes de continuar.';
+    } else {
+
+    if ($action === 'clock_entry') {
+        $entryType = trim((string) ($_POST['entry_type'] ?? ''));
+        $note = trim((string) ($_POST['note'] ?? ''));
+
+        if (!in_array($entryType, ['entrada', 'saida'], true)) {
+            $flashError = 'Tipo de registo de ponto inválido.';
+        } else {
+            $stmt = $pdo->prepare('INSERT INTO shopfloor_time_entries(user_id, entry_type, note) VALUES (?, ?, ?)');
+            $stmt->execute([$userId, $entryType, $note !== '' ? $note : null]);
+            log_app_event($pdo, $userId, 'shopfloor.clock.' . $entryType, 'Registo de ponto no Shopfloor.', ['entry_type' => $entryType]);
+            $flashSuccess = $entryType === 'entrada' ? 'Ponto de entrada registado com sucesso.' : 'Ponto de saída registado com sucesso.';
+        }
+    }
+
+    if ($action === 'start_break') {
+        $breakReasonId = (int) ($_POST['break_reason_id'] ?? 0);
+        $reasonStmt = $pdo->prepare('SELECT id, code, label, break_type, requires_comment FROM shopfloor_break_reasons WHERE id = ? AND is_active = 1 LIMIT 1');
+        $reasonStmt->execute([$breakReasonId]);
+        $reason = $reasonStmt->fetch(PDO::FETCH_ASSOC) ?: null;
+
+        $openBreakStmt = $pdo->prepare('SELECT id FROM shopfloor_break_entries WHERE user_id = ? AND ended_at IS NULL LIMIT 1');
+        $openBreakStmt->execute([$userId]);
+        $openBreakId = (int) ($openBreakStmt->fetchColumn() ?: 0);
+
+        if (!$reason) {
+            $flashError = 'Selecione um tipo de pausa/paragem válido.';
+        } elseif (!$hasOpenClockEntryToday) {
+            $flashError = 'Não pode iniciar uma pausa/paragem sem registar primeiro o ponto de entrada.';
+        } elseif ($openBreakId > 0) {
+            $flashError = 'Já existe uma pausa/paragem em curso.';
+        } else {
+            $comment = trim((string) ($_POST['break_comment'] ?? ''));
+            $insertBreakStmt = $pdo->prepare('INSERT INTO shopfloor_break_entries(user_id, break_reason_id, break_type, comment) VALUES (?, ?, ?, ?)');
+            $insertBreakStmt->execute([
+                $userId,
+                (int) $reason['id'],
+                (string) ($reason['break_type'] ?? 'Pausa'),
+                $comment !== '' ? $comment : null,
+            ]);
+            $flashSuccess = ((string) ($reason['break_type'] ?? 'Pausa')) . ' iniciada: ' . (string) ($reason['code'] ?? '') . ' · ' . (string) ($reason['label'] ?? '');
+        }
+    }
+
+    if ($action === 'stop_break') {
+        $activeBreakToStopStmt = $pdo->prepare('SELECT b.id, r.requires_comment FROM shopfloor_break_entries b INNER JOIN shopfloor_break_reasons r ON r.id = b.break_reason_id WHERE b.user_id = ? AND b.ended_at IS NULL ORDER BY b.started_at DESC LIMIT 1');
+        $activeBreakToStopStmt->execute([$userId]);
+        $activeBreakToStop = $activeBreakToStopStmt->fetch(PDO::FETCH_ASSOC) ?: null;
+        $stopComment = trim((string) ($_POST['break_comment'] ?? ''));
+
+        if (!$activeBreakToStop) {
+            $flashError = 'Não existe pausa/paragem ativa para terminar.';
+        } elseif ((int) ($activeBreakToStop['requires_comment'] ?? 0) === 1 && $stopComment === '') {
+            $flashError = 'Este tipo exige comentário obrigatório para terminar.';
+        } else {
+            $stopBreakStmt = $pdo->prepare('UPDATE shopfloor_break_entries SET ended_at = CURRENT_TIMESTAMP, comment = COALESCE(NULLIF(TRIM(?), ""), comment) WHERE id = ?');
+            $stopBreakStmt->execute([$stopComment, (int) $activeBreakToStop['id']]);
+            $flashSuccess = 'Pausa/paragem terminada com sucesso.';
+        }
+    }
+
+    if ($action === 'submit_absence') {
+        $requestType = trim((string) ($_POST['request_type'] ?? 'Dias inteiros'));
+        if ($hasOpenClockEntryToday) {
+            $flashError = 'Não é possível criar pedidos de ausência enquanto o ponto do dia estiver aberto (sem saída).';
+        } else {
+        $startDate = trim((string) ($_POST['start_date'] ?? ''));
+        $endDate = trim((string) ($_POST['end_date'] ?? ''));
+        $singleDate = trim((string) ($_POST['single_date'] ?? ''));
+        $startTime = trim((string) ($_POST['start_time'] ?? ''));
+        $endTime = trim((string) ($_POST['end_time'] ?? ''));
+        $reasonId = (int) ($_POST['reason_id'] ?? 0);
+        $details = trim((string) ($_POST['details'] ?? ''));
+        $durationType = trim((string) ($_POST['duration_type'] ?? 'Completa'));
+        $durationHours = trim((string) ($_POST['duration_hours'] ?? ''));
+
+        $reasonStmt = $pdo->prepare('SELECT reason_code, sage_code, label FROM shopfloor_absence_reasons WHERE id = ? AND is_active = 1 AND (? = 1 OR ? = 1 OR show_in_shopfloor = 1) LIMIT 1');
+        $reasonStmt->execute([$reasonId, $isAdmin ? 1 : 0, $isRh ? 1 : 0]);
+        $reasonData = $reasonStmt->fetch(PDO::FETCH_ASSOC);
+
+        if (!in_array($requestType, ['Dias inteiros', 'Intervalo de tempo'], true)) {
+            $flashError = 'Tipo de ausência inválido.';
+        } elseif (!in_array($durationType, ['Completa', 'Parcial', 'Horas'], true)) {
+            $flashError = 'Tipo de duração inválido.';
+        } elseif (!$reasonData) {
+            $flashError = 'Selecione um motivo para comunicar ausência.';
+        } elseif ($requestType === 'Dias inteiros' && ($startDate === '' || $endDate === '')) {
+            $flashError = 'Preencha datas e selecione um motivo para comunicar ausência.';
+        } elseif ($requestType === 'Dias inteiros' && $endDate < $startDate) {
+            $flashError = 'A data final da ausência não pode ser anterior à inicial.';
+        } elseif ($requestType === 'Intervalo de tempo' && ($singleDate === '' || $startTime === '' || $endTime === '')) {
+            $flashError = 'Preencha data e horas para o intervalo de tempo.';
+        } elseif ($requestType === 'Intervalo de tempo' && $endTime <= $startTime) {
+            $flashError = 'A hora final deve ser posterior à hora inicial.';
+        } else {
+            if ($requestType === 'Intervalo de tempo') {
+                $startDate = $singleDate;
+                $endDate = $singleDate;
+            }
+            $reason = trim((string) ($reasonData['reason_code'] ?? '')) . ' · ' . normalize_sage_code((string) ($reasonData['sage_code'] ?? '')) . ' - ' . trim((string) ($reasonData['label'] ?? ''));
+            $stmt = $pdo->prepare('INSERT INTO shopfloor_absence_requests(user_id, request_type, duration_type, duration_hours, start_date, end_date, start_time, end_time, reason, details) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)');
+            $stmt->execute([
+                $userId,
+$requestType,
+                $durationType,
+                $durationType === 'Horas' ? $durationHours : null,
+                $startDate,
+                $endDate,
+                $requestType === 'Intervalo de tempo' ? $startTime : null,
+                $requestType === 'Intervalo de tempo' ? $endTime : null,
+                $reason,
+                $details !== '' ? $details : null,
+            ]);
+            $absenceId = (int) $pdo->lastInsertId();
+            if ($absenceId > 0) {
+                $pdo->prepare('UPDATE shopfloor_absence_requests SET status = ? WHERE id = ?')->execute(['Pendente Nível 1', $absenceId]);
+            }
+            log_app_event($pdo, $userId, 'shopfloor.absence.create', 'Comunicação de ausência submetida.', ['request_type' => $requestType, 'duration_type' => $durationType, 'duration_hours' => $durationHours, 'start_date' => $startDate, 'end_date' => $endDate, 'reason_id' => $reasonId]);
+            $flashSuccess = 'Comunicação de ausência submetida com sucesso.';
+        }
+        }
+    }
+
+    if ($action === 'review_absence' && ($isAdmin || $isChief || $isRh)) {
+        $absenceId = (int) ($_POST['absence_id'] ?? 0);
+        $decision = trim((string) ($_POST['decision'] ?? ''));
+
+        $absenceStmt = $pdo->prepare('SELECT id, status FROM shopfloor_absence_requests WHERE id = ? LIMIT 1');
+        $absenceStmt->execute([$absenceId]);
+        $absence = $absenceStmt->fetch(PDO::FETCH_ASSOC);
+
+        if (!$absence || $absenceId <= 0 || !in_array($decision, ['approve', 'reject'], true)) {
+            $flashError = 'Pedido inválido para validação.';
+        } else {
+            $currentStatus = (string) ($absence['status'] ?? '');
+            $newStatus = null;
+
+            if ($isAdmin && $decision === 'approve') {
+                $newStatus = 'Aprovado';
+            } elseif ($isAdmin && $decision === 'reject') {
+                $newStatus = 'Rejeitado';
+            } elseif ($isChief) {
+                if ($currentStatus !== 'Pendente Nível 1') {
+                    $flashError = 'Este pedido já não está pendente do Nível 1.';
+                } elseif ($decision === 'approve') {
+                    $newStatus = 'Pendente Nível 2';
+                } else {
+                    $newStatus = 'Rejeitado';
+                }
+            } elseif ($isRh) {
+                if (!in_array($currentStatus, ['Pendente Nível 2', 'Pendente'], true)) {
+                    $flashError = 'Este pedido já não está pendente do Nível 2.';
+                } elseif ($decision === 'approve') {
+                    $newStatus = 'Aprovado';
+                } else {
+                    $newStatus = 'Rejeitado';
+                }
+            }
+
+            if ($newStatus !== null) {
+                $updateStmt = $pdo->prepare('UPDATE shopfloor_absence_requests SET status = ?, reviewed_by = ?, reviewed_at = CURRENT_TIMESTAMP WHERE id = ?');
+                $updateStmt->execute([$newStatus, $userId, $absenceId]);
+                log_app_event($pdo, $userId, 'shopfloor.absence.review', 'Validação de ausência efetuada.', ['absence_id' => $absenceId, 'status' => $newStatus]);
+                $flashSuccess = 'Estado do pedido atualizado para ' . $newStatus . '.';
+            }
+        }
+    }
+
+
+    if ($action === 'edit_absence' && ($isAdmin || $isRh)) {
+        $absenceId = (int) ($_POST['absence_id'] ?? 0);
+        $requestType = trim((string) ($_POST['request_type'] ?? 'Dias inteiros'));
+        $durationType = trim((string) ($_POST['duration_type'] ?? 'Completa'));
+        $durationHours = trim((string) ($_POST['duration_hours'] ?? ''));
+        $startDate = trim((string) ($_POST['start_date'] ?? ''));
+        $endDate = trim((string) ($_POST['end_date'] ?? ''));
+        $startTime = trim((string) ($_POST['start_time'] ?? ''));
+        $endTime = trim((string) ($_POST['end_time'] ?? ''));
+        $details = trim((string) ($_POST['details'] ?? ''));
+
+        if ($absenceId <= 0 || !in_array($requestType, ['Dias inteiros', 'Intervalo de tempo'], true) || !in_array($durationType, ['Completa', 'Parcial', 'Horas'], true) || $startDate === '' || $endDate === '' || $endDate < $startDate) {
+            $flashError = 'Dados inválidos para editar ausência.';
+        } elseif ($durationType === 'Horas' && !preg_match('/^\d{1,2}:\d{2}$/', $durationHours)) {
+            $flashError = 'Indique a duração no formato hh:mm.';
+        } elseif ($requestType === 'Intervalo de tempo' && ($startTime === '' || $endTime === '' || $endTime <= $startTime)) {
+            $flashError = 'Preencha um intervalo horário válido.';
+        } else {
+            $updateStmt = $pdo->prepare('UPDATE shopfloor_absence_requests SET request_type = ?, duration_type = ?, duration_hours = ?, start_date = ?, end_date = ?, start_time = ?, end_time = ?, details = ? WHERE id = ?');
+            $updateStmt->execute([$requestType, $durationType, $durationType === 'Horas' ? $durationHours : null, $startDate, $endDate, $requestType === 'Intervalo de tempo' ? $startTime : null, $requestType === 'Intervalo de tempo' ? $endTime : null, $details !== '' ? $details : null, $absenceId]);
+            log_app_event($pdo, $userId, 'shopfloor.absence.edit', 'Pedido de ausência editado por RH/Admin.', ['absence_id' => $absenceId, 'request_type' => $requestType, 'duration_type' => $durationType, 'duration_hours' => $durationHours, 'start_date' => $startDate, 'end_date' => $endDate]);
+            $flashSuccess = 'Pedido de ausência atualizado com sucesso.';
+        }
+    }
+
+    if ($action === 'submit_justification') {
+        $absenceRequestId = (int) ($_POST['absence_request_id'] ?? 0);
+        $eventDate = date('Y-m-d');
+        $description = trim((string) ($_POST['description'] ?? ''));
+        $photoFile = $_FILES['photo'] ?? null;
+        $attachmentPath = null;
+        $hasPhotoUpload = is_array($photoFile) && (($photoFile['error'] ?? UPLOAD_ERR_NO_FILE) !== UPLOAD_ERR_NO_FILE);
+
+        if ($hasPhotoUpload) {
+            $allowedImageMimeTypes = [
+                'image/jpeg' => 'jpg',
+                'image/png' => 'png',
+                'image/webp' => 'webp',
+            ];
+
+            $uploadError = (int) ($photoFile['error'] ?? UPLOAD_ERR_NO_FILE);
+            if ($uploadError !== UPLOAD_ERR_OK) {
+                $flashError = 'Não foi possível carregar a fotografia da justificação.';
+            } elseif (!isset($photoFile['tmp_name']) || !is_string($photoFile['tmp_name']) || !is_file($photoFile['tmp_name'])) {
+                $flashError = 'O ficheiro da fotografia submetida é inválido.';
+            } else {
+                $detectedMimeType = '';
+                if (function_exists('finfo_open')) {
+                    $finfo = finfo_open(FILEINFO_MIME_TYPE);
+                    if ($finfo !== false) {
+                        $finfoMimeType = finfo_file($finfo, (string) $photoFile['tmp_name']);
+                        if (is_string($finfoMimeType)) {
+                            $detectedMimeType = $finfoMimeType;
+                        }
+                        finfo_close($finfo);
+                    }
+                }
+
+                if ($detectedMimeType === '' && function_exists('mime_content_type')) {
+                    $mimeType = mime_content_type((string) $photoFile['tmp_name']);
+                    if (is_string($mimeType)) {
+                        $detectedMimeType = $mimeType;
+                    }
+                }
+
+                if (!isset($allowedImageMimeTypes[$detectedMimeType])) {
+                    $flashError = 'Formato de imagem inválido. Use JPG, PNG ou WEBP.';
+                } else {
+                    $uploadDir = __DIR__ . '/assets/uploads/justifications';
+                    if (!is_dir($uploadDir)) {
+                        mkdir($uploadDir, 0775, true);
+                    }
+
+                    $filename = sprintf(
+                        'justification_%d_%s.%s',
+                        $userId,
+                        bin2hex(random_bytes(6)),
+                        $allowedImageMimeTypes[$detectedMimeType]
+                    );
+                    $targetPath = $uploadDir . '/' . $filename;
+
+                    if (!move_uploaded_file((string) $photoFile['tmp_name'], $targetPath)) {
+                        $flashError = 'Falha ao guardar a fotografia da justificação.';
+                    } else {
+                        $attachmentPath = 'assets/uploads/justifications/' . $filename;
+                    }
+                }
+            }
+        }
+
+        if ($flashError === null && !$hasPhotoUpload) {
+            $flashError = 'Anexe uma fotografia para a justificação.';
+        }
+
+        if ($flashError === null) {
+            $targetAbsenceId = null;
+            if ($absenceRequestId > 0) {
+                $checkAbsenceStmt = $pdo->prepare('SELECT id FROM shopfloor_absence_requests WHERE id = ? AND user_id = ?');
+                $checkAbsenceStmt->execute([$absenceRequestId, $userId]);
+                $targetAbsenceId = (int) $checkAbsenceStmt->fetchColumn();
+                if ($targetAbsenceId <= 0) {
+                    $targetAbsenceId = null;
+                }
+            }
+
+            $stmt = $pdo->prepare('INSERT INTO shopfloor_justifications(user_id, absence_request_id, event_date, description) VALUES (?, ?, ?, ?)');
+            $justificationDescription = $description !== '' ? $description : 'Fotografia anexada';
+            $stmt->execute([$userId, $targetAbsenceId, $eventDate, $justificationDescription]);
+            if ($attachmentPath !== null) {
+                $justificationId = (int) $pdo->lastInsertId();
+                if ($justificationId > 0) {
+                    $attachmentStmt = $pdo->prepare('UPDATE shopfloor_justifications SET attachment_path = ? WHERE id = ? AND user_id = ?');
+                    $attachmentStmt->execute([$attachmentPath, $justificationId, $userId]);
+                }
+            }
+            log_app_event($pdo, $userId, 'shopfloor.justification.create', 'Justificação submetida no Shopfloor.', ['event_date' => $eventDate]);
+            $flashSuccess = 'Justificação submetida com sucesso.';
+        }
+    }
+
+    if ($action === 'submit_vacation') {
+        $startDate = trim((string) ($_POST['start_date'] ?? ''));
+        $endDate = trim((string) ($_POST['end_date'] ?? ''));
+        $notes = trim((string) ($_POST['notes'] ?? ''));
+
+        if ($hasOpenClockEntryToday) {
+            $flashError = 'Não é possível criar pedidos de férias enquanto o ponto do dia estiver aberto (sem saída).';
+        } elseif ($startDate === '' || $endDate === '') {
+            $flashError = 'Indique o período de férias.';
+        } elseif ($endDate < $startDate) {
+            $flashError = 'A data final das férias não pode ser anterior à inicial.';
+        } else {
+            $start = new DateTimeImmutable($startDate);
+            $end = new DateTimeImmutable($endDate);
+            $totalDays = (float) $start->diff($end)->days + 1;
+
+            $stmt = $pdo->prepare('INSERT INTO shopfloor_vacation_requests(user_id, start_date, end_date, total_days, notes) VALUES (?, ?, ?, ?, ?)');
+            $stmt->execute([$userId, $startDate, $endDate, $totalDays, $notes !== '' ? $notes : null]);
+            log_app_event($pdo, $userId, 'shopfloor.vacation.create', 'Pedido de férias submetido no Shopfloor.', ['start_date' => $startDate, 'end_date' => $endDate]);
+            $flashSuccess = 'Pedido de férias submetido com sucesso.';
+        }
+    }
+
+
+    if ($action === 'publish_announcement' && ($isAdmin || $isRh)) {
+        $title = trim((string) ($_POST['title'] ?? ''));
+        $body = trim((string) ($_POST['body'] ?? ''));
+        $targetUserIds = array_values(array_unique(array_filter(array_map('intval', (array) ($_POST['target_user_ids'] ?? [])), static fn (int $id): bool => $id > 0)));
+
+        if ($title === '' || $body === '') {
+            $flashError = 'Preencha título e conteúdo para publicar o comunicado.';
+        } else {
+            $validTargetUserIds = [];
+            if ($targetUserIds !== []) {
+                $targetPlaceholders = implode(',', array_fill(0, count($targetUserIds), '?'));
+                $targetUsersStmt = $pdo->prepare('SELECT id FROM users WHERE id IN (' . $targetPlaceholders . ')');
+                $targetUsersStmt->execute($targetUserIds);
+                $validTargetUserIds = array_map('intval', $targetUsersStmt->fetchAll(PDO::FETCH_COLUMN));
+            }
+
+            $audience = $validTargetUserIds === [] ? 'shopfloor' : 'targeted';
+            $stmt = $pdo->prepare('INSERT INTO shopfloor_announcements(title, body, audience, created_by) VALUES (?, ?, ?, ?)');
+            $stmt->execute([$title, $body, $audience, $userId]);
+            $announcementId = (int) $pdo->lastInsertId();
+
+            if ($announcementId > 0 && $validTargetUserIds !== []) {
+                $targetInsertStmt = $pdo->prepare('INSERT OR IGNORE INTO shopfloor_announcement_targets(announcement_id, user_id) VALUES (?, ?)');
+                foreach ($validTargetUserIds as $targetUserId) {
+                    $targetInsertStmt->execute([$announcementId, $targetUserId]);
+                }
+            }
+
+            $recipientRows = [];
+            if ($validTargetUserIds !== []) {
+                $recipientPlaceholders = implode(',', array_fill(0, count($validTargetUserIds), '?'));
+                $recipientStmt = $pdo->prepare('SELECT id, name, email, username FROM users WHERE id IN (' . $recipientPlaceholders . ') ORDER BY name COLLATE NOCASE ASC');
+                $recipientStmt->execute($validTargetUserIds);
+                $recipientRows = $recipientStmt->fetchAll(PDO::FETCH_ASSOC);
+            } else {
+                $recipientStmt = $pdo->query('SELECT id, name, email, username FROM users WHERE is_active = 1 ORDER BY name COLLATE NOCASE ASC');
+                $recipientRows = $recipientStmt->fetchAll(PDO::FETCH_ASSOC);
+            }
+
+            log_app_event(
+                $pdo,
+                $userId,
+                'shopfloor.announcement.create',
+                'Comunicado publicado no Shopfloor.',
+                [
+                    'announcement_id' => $announcementId,
+                    'title' => $title,
+                    'body' => $body,
+                    'audience' => $audience,
+                    'target_user_ids' => $validTargetUserIds,
+                    'submitted_to_users' => $recipientRows,
+                ]
+            );
+            $flashSuccess = 'Comunicado publicado com sucesso.';
+        }
+    }
+
+    if ($action === 'toggle_announcement' && ($isAdmin || $isRh)) {
+        $announcementId = (int) ($_POST['announcement_id'] ?? 0);
+        $toggleStmt = $pdo->prepare('UPDATE shopfloor_announcements SET is_active = CASE WHEN is_active = 1 THEN 0 ELSE 1 END WHERE id = ?');
+        $toggleStmt->execute([$announcementId]);
+
+        if ($toggleStmt->rowCount() > 0) {
+            log_app_event($pdo, $userId, 'shopfloor.announcement.toggle', 'Comunicado ativado/desativado no Shopfloor.', ['announcement_id' => $announcementId]);
+            $flashSuccess = 'Estado do comunicado atualizado com sucesso.';
+        } else {
+            $flashError = 'Comunicado inválido para alteração de estado.';
+        }
+    }
+
+    if ($action === 'delete_announcement' && ($isAdmin || $isRh)) {
+        $announcementId = (int) ($_POST['announcement_id'] ?? 0);
+        $deleteStmt = $pdo->prepare('DELETE FROM shopfloor_announcements WHERE id = ?');
+        $deleteStmt->execute([$announcementId]);
+
+        if ($deleteStmt->rowCount() > 0) {
+            log_app_event($pdo, $userId, 'shopfloor.announcement.delete', 'Comunicado eliminado no Shopfloor.', ['announcement_id' => $announcementId]);
+            $flashSuccess = 'Comunicado eliminado com sucesso.';
+        } else {
+            $flashError = 'Comunicado inválido para eliminação.';
+        }
+    }
+    }
+}
+
+$hourBankStmt = $pdo->prepare('SELECT balance_hours, updated_at FROM shopfloor_hour_banks WHERE user_id = ? LIMIT 1');
+$hourBankStmt->execute([$userId]);
+$hourBank = $hourBankStmt->fetch(PDO::FETCH_ASSOC);
+if (!$hourBank) {
+    $pdo->prepare('INSERT INTO shopfloor_hour_banks(user_id, balance_hours, notes) VALUES (?, 0, NULL)')->execute([$userId]);
+    $hourBank = ['balance_hours' => 0, 'updated_at' => date('Y-m-d H:i:s')];
+}
+
+$todayEntriesStmt = $pdo->prepare('SELECT entry_type, note, datetime(occurred_at, "localtime") AS occurred_at FROM shopfloor_time_entries WHERE user_id = ? AND date(occurred_at, "localtime") = date("now", "localtime") ORDER BY occurred_at DESC');
+$todayEntriesStmt->execute([$userId]);
+$todayEntries = $todayEntriesStmt->fetchAll(PDO::FETCH_ASSOC);
+
+$activeBreakEntryStmt = $pdo->prepare('SELECT b.id, b.break_reason_id, b.break_type, b.started_at, r.code, r.label, r.requires_comment FROM shopfloor_break_entries b INNER JOIN shopfloor_break_reasons r ON r.id = b.break_reason_id WHERE b.user_id = ? AND b.ended_at IS NULL ORDER BY b.started_at DESC LIMIT 1');
+$activeBreakEntryStmt->execute([$userId]);
+$activeBreakEntry = $activeBreakEntryStmt->fetch(PDO::FETCH_ASSOC) ?: null;
+
+$dailyBreakSummaryStmt = $pdo->prepare(
+    'SELECT b.break_type, COUNT(*) AS total_count, SUM(CASE WHEN b.ended_at IS NULL THEN CAST((julianday(CURRENT_TIMESTAMP) - julianday(b.started_at)) * 86400 AS INTEGER) ELSE CAST((julianday(b.ended_at) - julianday(b.started_at)) * 86400 AS INTEGER) END) AS total_seconds
+     FROM shopfloor_break_entries b
+     WHERE b.user_id = ? AND date(b.started_at) = date("now", "localtime")
+     GROUP BY b.break_type'
+);
+$dailyBreakSummaryStmt->execute([$userId]);
+$dailyBreakSummaryRows = $dailyBreakSummaryStmt->fetchAll(PDO::FETCH_ASSOC);
+$dailyBreakSummaryMap = ['Pausa' => ['count' => 0, 'seconds' => 0], 'Paragem' => ['count' => 0, 'seconds' => 0]];
+foreach ($dailyBreakSummaryRows as $dailyBreakSummaryRow) {
+    $type = (string) ($dailyBreakSummaryRow['break_type'] ?? 'Pausa');
+    if (!isset($dailyBreakSummaryMap[$type])) {
+        continue;
+    }
+    $dailyBreakSummaryMap[$type] = [
+        'count' => (int) ($dailyBreakSummaryRow['total_count'] ?? 0),
+        'seconds' => max(0, (int) ($dailyBreakSummaryRow['total_seconds'] ?? 0)),
+    ];
+}
+$dailyBreakByReasonStmt = $pdo->prepare(
+    'SELECT r.code, r.label, b.break_type, COUNT(*) AS total_count, SUM(CASE WHEN b.ended_at IS NULL THEN CAST((julianday(CURRENT_TIMESTAMP) - julianday(b.started_at)) * 86400 AS INTEGER) ELSE CAST((julianday(b.ended_at) - julianday(b.started_at)) * 86400 AS INTEGER) END) AS total_seconds
+     FROM shopfloor_break_entries b
+     INNER JOIN shopfloor_break_reasons r ON r.id = b.break_reason_id
+     WHERE b.user_id = ? AND date(b.started_at) = date("now", "localtime")
+     GROUP BY r.id, r.code, r.label, b.break_type
+     ORDER BY r.code COLLATE NOCASE ASC'
+);
+$dailyBreakByReasonStmt->execute([$userId]);
+$dailyBreakByReason = $dailyBreakByReasonStmt->fetchAll(PDO::FETCH_ASSOC);
+$latestTodayEntryType = (string) ($todayEntries[0]['entry_type'] ?? '');
+$hasOpenClockEntryToday = $latestTodayEntryType === 'entrada';
+
+$absenceReasonsStmt = $pdo->prepare('SELECT id, reason_code, sage_code, label, color FROM shopfloor_absence_reasons WHERE is_active = 1 AND (? = 1 OR ? = 1 OR show_in_shopfloor = 1) ORDER BY reason_code COLLATE NOCASE ASC, label COLLATE NOCASE ASC');
+$absenceReasonsStmt->execute([$isAdmin ? 1 : 0, $isRh ? 1 : 0]);
+$absenceReasons = $absenceReasonsStmt->fetchAll(PDO::FETCH_ASSOC);
+
+$absenceRequestsStmt = $pdo->prepare('SELECT a.id, a.request_type, a.duration_type, a.duration_hours, a.start_date, a.end_date, a.start_time, a.end_time, a.reason, a.details, a.status, a.created_at, r.color AS reason_color, j.attachment_path AS latest_attachment_path FROM shopfloor_absence_requests a LEFT JOIN shopfloor_absence_reasons r ON a.reason LIKE (r.reason_code || " · %") LEFT JOIN shopfloor_justifications j ON j.id = (SELECT j2.id FROM shopfloor_justifications j2 WHERE j2.absence_request_id = a.id AND j2.attachment_path IS NOT NULL AND TRIM(j2.attachment_path) <> "" ORDER BY j2.created_at DESC LIMIT 1) WHERE a.user_id = ? ORDER BY a.created_at DESC LIMIT 10');
+$absenceRequestsStmt->execute([$userId]);
+$absenceRequests = $absenceRequestsStmt->fetchAll(PDO::FETCH_ASSOC);
+
+$pendingChiefValidations = [];
+if ($isAdmin || $isChief) {
+    $pendingChiefStmt = $pdo->query('SELECT a.id, a.start_date, a.end_date, a.request_type, a.duration_type, a.duration_hours, a.start_time, a.end_time, a.reason, a.status, u.name AS user_name FROM shopfloor_absence_requests a INNER JOIN users u ON u.id = a.user_id WHERE a.status = "Pendente Nível 1" ORDER BY a.created_at ASC LIMIT 20');
+    $pendingChiefValidations = $pendingChiefStmt->fetchAll(PDO::FETCH_ASSOC);
+}
+
+$rhFilter = trim((string) ($_GET['rh_filter'] ?? 'todos'));
+if (!in_array($rhFilter, ['todos', 'pendentes', 'aprovados'], true)) {
+    $rhFilter = 'todos';
+}
+$rhAbsenceRows = [];
+if ($isAdmin || $isRh) {
+    $rhWhere = 'WHERE a.status LIKE "Pendente%" OR a.status = "Aprovado"';
+    if ($rhFilter === 'pendentes') {
+        $rhWhere = 'WHERE a.status LIKE "Pendente%"';
+    } elseif ($rhFilter === 'aprovados') {
+        $rhWhere = 'WHERE a.status = "Aprovado"';
+    }
+    $rhAbsenceStmt = $pdo->query('SELECT a.id, a.request_type, a.duration_type, a.duration_hours, a.start_date, a.end_date, a.start_time, a.end_time, a.reason, a.status, a.created_at, a.details, u.name AS user_name FROM shopfloor_absence_requests a INNER JOIN users u ON u.id = a.user_id ' . $rhWhere . ' ORDER BY a.created_at DESC LIMIT 100');
+    $rhAbsenceRows = $rhAbsenceStmt->fetchAll(PDO::FETCH_ASSOC);
+}
+
+$absenceJustificationsStmt = $pdo->prepare('SELECT id, absence_request_id, event_date, description, attachment_path, status, created_at FROM shopfloor_justifications WHERE user_id = ? AND absence_request_id IS NOT NULL ORDER BY created_at DESC LIMIT 100');
+$absenceJustificationsStmt->execute([$userId]);
+$absenceJustificationsRows = $absenceJustificationsStmt->fetchAll(PDO::FETCH_ASSOC);
+$absenceJustificationsByRequestId = [];
+foreach ($absenceJustificationsRows as $absenceJustificationRow) {
+    $requestId = (int) ($absenceJustificationRow['absence_request_id'] ?? 0);
+    if ($requestId <= 0) {
+        continue;
+    }
+    if (!array_key_exists($requestId, $absenceJustificationsByRequestId)) {
+        $absenceJustificationsByRequestId[$requestId] = [];
+    }
+    $absenceJustificationsByRequestId[$requestId][] = $absenceJustificationRow;
+}
+
+$vacationRequestsStmt = $pdo->prepare('SELECT id, start_date, end_date, total_days, status, created_at FROM shopfloor_vacation_requests WHERE user_id = ? ORDER BY created_at DESC LIMIT 10');
+$vacationRequestsStmt->execute([$userId]);
+$vacationRequests = $vacationRequestsStmt->fetchAll(PDO::FETCH_ASSOC);
+
+$vacationYear = (int) ($_GET['vacation_year'] ?? date('Y'));
+if ($vacationYear < 2000 || $vacationYear > 2100) {
+    $vacationYear = (int) date('Y');
+}
+
+$scheduleContextStmt = $pdo->prepare('SELECT s.name AS schedule_name, s.weekdays_mask, s.start_time, s.end_time, s.break_minutes FROM users u LEFT JOIN hr_schedules s ON s.id = u.schedule_id WHERE u.id = ? LIMIT 1');
+$scheduleContextStmt->execute([$userId]);
+$scheduleContext = $scheduleContextStmt->fetch(PDO::FETCH_ASSOC) ?: [];
+$scheduleName = trim((string) ($scheduleContext['schedule_name'] ?? ''));
+$scheduleGap = '';
+if ($scheduleName !== '' && preg_match('/\bGAP\s*([1-3])\b/i', $scheduleName, $gapMatches) === 1) {
+    $scheduleGap = 'GAP' . $gapMatches[1];
+}
+$scheduleWeekdays = array_filter(
+    array_map('trim', explode(',', (string) ($scheduleContext['weekdays_mask'] ?? '1,2,3,4,5'))),
+    static fn (string $day): bool => preg_match('/^[1-7]$/', $day) === 1
+);
+if ($scheduleWeekdays === []) {
+    $scheduleWeekdays = ['1', '2', '3', '4', '5'];
+}
+$scheduleWeekdaysMap = array_fill_keys($scheduleWeekdays, true);
+
+$yearStart = sprintf('%04d-01-01', $vacationYear);
+$yearEnd = sprintf('%04d-12-31', $vacationYear);
+
+$calendarEventsStmt = $pdo->prepare('SELECT event_type, title, start_date, end_date FROM hr_calendar_events WHERE start_date <= ? AND end_date >= ?');
+$calendarEventsStmt->execute([$yearEnd, $yearStart]);
+$calendarEvents = $calendarEventsStmt->fetchAll(PDO::FETCH_ASSOC);
+$blockedDates = [];
+foreach ($calendarEvents as $calendarEvent) {
+    $eventType = trim((string) ($calendarEvent['event_type'] ?? ''));
+    $eventTitle = mb_strtolower(trim((string) ($calendarEvent['title'] ?? '')));
+    $isGlobalBlocked = in_array($eventType, ['Feriado', 'Ponte'], true);
+    $isVacationBlocked = $eventType === 'Férias' && ($scheduleGap === '' || strpos($eventTitle, mb_strtolower($scheduleGap)) !== false || strpos($eventTitle, 'gerais') !== false);
+    if (!$isGlobalBlocked && !$isVacationBlocked) {
+        continue;
+    }
+
+    try {
+        $eventStart = new DateTimeImmutable(max((string) $calendarEvent['start_date'], $yearStart));
+        $eventEnd = new DateTimeImmutable(min((string) $calendarEvent['end_date'], $yearEnd));
+    } catch (Exception $exception) {
+        continue;
+    }
+
+    for ($currentDate = $eventStart; $currentDate <= $eventEnd; $currentDate = $currentDate->modify('+1 day')) {
+        $blockedDates[$currentDate->format('Y-m-d')] = true;
+    }
+}
+
+$expectedWorkDays = 0;
+for ($currentDate = new DateTimeImmutable($yearStart); $currentDate <= new DateTimeImmutable($yearEnd); $currentDate = $currentDate->modify('+1 day')) {
+    $weekday = (string) $currentDate->format('N');
+    $dateKey = $currentDate->format('Y-m-d');
+    if (isset($scheduleWeekdaysMap[$weekday]) && !isset($blockedDates[$dateKey])) {
+        $expectedWorkDays++;
+    }
+}
+
+$workedDaysStmt = $pdo->prepare('SELECT COUNT(DISTINCT date(occurred_at)) FROM shopfloor_time_entries WHERE user_id = ? AND entry_type = "entrada" AND date(occurred_at) BETWEEN ? AND ?');
+$workedDaysStmt->execute([$userId, $yearStart, $yearEnd]);
+$workedDays = (int) $workedDaysStmt->fetchColumn();
+
+$assignedVacationDaysStmt = $pdo->prepare('SELECT COALESCE(assigned_days, 0) FROM hr_vacation_balances WHERE user_id = ? AND year = ? LIMIT 1');
+$assignedVacationDaysStmt->execute([$userId, $vacationYear]);
+$assignedVacationDays = (float) $assignedVacationDaysStmt->fetchColumn();
+
+$requestedVacationDaysStmt = $pdo->prepare('SELECT COALESCE(SUM(total_days), 0) FROM shopfloor_vacation_requests WHERE user_id = ? AND status LIKE "Pendente%" AND start_date <= ? AND end_date >= ?');
+$requestedVacationDaysStmt->execute([$userId, $yearEnd, $yearStart]);
+$requestedVacationDays = (float) $requestedVacationDaysStmt->fetchColumn();
+
+$validatedVacationDaysStmt = $pdo->prepare('SELECT COALESCE(SUM(total_days), 0) FROM shopfloor_vacation_requests WHERE user_id = ? AND status = "Aprovado" AND start_date <= ? AND end_date >= ?');
+$validatedVacationDaysStmt->execute([$userId, $yearEnd, $yearStart]);
+$validatedVacationDays = (float) $validatedVacationDaysStmt->fetchColumn();
+
+$takenVacationDaysStmt = $pdo->prepare('SELECT COALESCE(SUM(total_days), 0) FROM hr_vacation_events WHERE user_id = ? AND status = "Aprovado" AND start_date <= ? AND end_date >= ?');
+$takenVacationDaysStmt->execute([$userId, $yearEnd, $yearStart]);
+$takenVacationDays = (float) $takenVacationDaysStmt->fetchColumn();
+
+$announcementTargetUsers = [];
+if ($isAdmin || $isRh) {
+    $announcementTargetUsersStmt = $pdo->query('SELECT id, name, username FROM users ORDER BY name COLLATE NOCASE ASC');
+    $announcementTargetUsers = $announcementTargetUsersStmt->fetchAll(PDO::FETCH_ASSOC);
+}
+
+$announcementsStmt = $pdo->prepare('SELECT a.id, a.title, a.body, a.created_at, a.is_active, a.audience, COALESCE(u.name, "Sistema") AS created_by_name FROM shopfloor_announcements a LEFT JOIN users u ON u.id = a.created_by WHERE a.is_active = 1 AND (a.audience IN ("all", "shopfloor") OR EXISTS (SELECT 1 FROM shopfloor_announcement_targets t WHERE t.announcement_id = a.id AND t.user_id = ?)) ORDER BY a.created_at DESC LIMIT 8');
+$announcementsStmt->execute([$userId]);
+$announcements = $announcementsStmt->fetchAll(PDO::FETCH_ASSOC);
+$pendingAnnouncementAck = fetch_pending_shopfloor_announcement_ack($pdo, $userId, $sessionLoginAt);
+
+$managedAnnouncements = [];
+if ($isAdmin || $isRh) {
+    $managedAnnouncementsStmt = $pdo->query('SELECT a.id, a.title, a.body, a.created_at, a.is_active, a.audience, COALESCE(u.name, "Sistema") AS created_by_name, (SELECT COUNT(*) FROM shopfloor_announcement_targets t WHERE t.announcement_id = a.id) AS target_count FROM shopfloor_announcements a LEFT JOIN users u ON u.id = a.created_by ORDER BY a.created_at DESC LIMIT 25');
+    $managedAnnouncements = $managedAnnouncementsStmt->fetchAll(PDO::FETCH_ASSOC);
+}
+
+$pendingVacationDaysStmt = $pdo->prepare('SELECT COALESCE(SUM(total_days), 0) FROM shopfloor_vacation_requests WHERE user_id = ? AND status IN ("Pendente", "Aprovado")');
+$pendingVacationDaysStmt->execute([$userId]);
+$pendingVacationDays = (float) $pendingVacationDaysStmt->fetchColumn();
+
+$targetMinutes = (8 * 60) + 15;
+if (!empty($scheduleContext['start_time']) && !empty($scheduleContext['end_time'])) {
+    [$startHour, $startMinute] = array_map('intval', explode(':', (string) $scheduleContext['start_time']));
+    [$endHour, $endMinute] = array_map('intval', explode(':', (string) $scheduleContext['end_time']));
+    $targetMinutes = (($endHour * 60) + $endMinute) - (($startHour * 60) + $startMinute) - (int) ($scheduleContext['break_minutes'] ?? 0);
+    if ($targetMinutes < 0) {
+        $targetMinutes = 0;
+    }
+}
+
+$bhAdjustmentMinutes = 0;
+$rangeStart = $yearStart;
+$rangeEnd = min($yearEnd, date('Y-m-d'));
+if ($rangeEnd >= $rangeStart) {
+    $absenceImpactStmt = $pdo->prepare('SELECT start_date, end_date, reason, duration_type, duration_hours FROM shopfloor_absence_requests WHERE user_id = ? AND status = "Aprovado" AND start_date <= ? AND end_date >= ?');
+    $absenceImpactStmt->execute([$userId, $rangeEnd, $rangeStart]);
+    $absenceImpactRows = $absenceImpactStmt->fetchAll(PDO::FETCH_ASSOC);
+
+    $approvedMinutesByDate = [];
+    $excludedCode100MinutesByDate = [];
+    foreach ($absenceImpactRows as $absenceImpact) {
+        $absenceMinutes = shopfloor_resolve_absence_minutes($absenceImpact, $targetMinutes);
+        if ($absenceMinutes <= 0) {
+            continue;
+        }
+
+        $absenceCode = shopfloor_parse_absence_code((string) ($absenceImpact['reason'] ?? ''));
+        $isCode100 = shopfloor_should_exclude_absence_credit($absenceCode);
+
+        try {
+            $start = new DateTimeImmutable(max((string) ($absenceImpact['start_date'] ?? ''), $rangeStart));
+            $end = new DateTimeImmutable(min((string) ($absenceImpact['end_date'] ?? ''), $rangeEnd));
+        } catch (Exception $exception) {
+            continue;
+        }
+
+        for ($dateCursor = $start; $dateCursor <= $end; $dateCursor = $dateCursor->modify('+1 day')) {
+            $dateKey = $dateCursor->format('Y-m-d');
+            $approvedMinutesByDate[$dateKey] = ($approvedMinutesByDate[$dateKey] ?? 0) + $absenceMinutes;
+            if ($isCode100) {
+                $excludedCode100MinutesByDate[$dateKey] = ($excludedCode100MinutesByDate[$dateKey] ?? 0) + $absenceMinutes;
+            }
+        }
+    }
+
+    $workedMapStmt = $pdo->prepare('SELECT DISTINCT date(occurred_at) AS work_date FROM shopfloor_time_entries WHERE user_id = ? AND entry_type = "entrada" AND date(occurred_at) BETWEEN ? AND ?');
+    $workedMapStmt->execute([$userId, $rangeStart, $rangeEnd]);
+    $workedDateMap = [];
+    foreach ($workedMapStmt->fetchAll(PDO::FETCH_ASSOC) as $workedRow) {
+        $workedDate = (string) ($workedRow['work_date'] ?? '');
+        if ($workedDate !== '') {
+            $workedDateMap[$workedDate] = true;
+        }
+    }
+
+    foreach ($approvedMinutesByDate as $dateKey => $approvedMinutes) {
+        try {
+            $dateObj = new DateTimeImmutable($dateKey);
+        } catch (Exception $exception) {
+            continue;
+        }
+
+        $weekday = (string) $dateObj->format('N');
+        if (!isset($scheduleWeekdaysMap[$weekday]) || isset($blockedDates[$dateKey]) || isset($workedDateMap[$dateKey])) {
+            continue;
+        }
+
+        $excludedMinutes = (int) ($excludedCode100MinutesByDate[$dateKey] ?? 0);
+        $creditMinutes = max(0, (int) $approvedMinutes - $excludedMinutes);
+        $bhAdjustmentMinutes += $creditMinutes;
+    }
+}
+
+$displayedHourBankHours = (float) ($hourBank['balance_hours'] ?? 0) + ($bhAdjustmentMinutes / 60);
+$displayedHourBankMinutes = (int) round($displayedHourBankHours * 60);
+$displayedHourBankAbsMinutes = abs($displayedHourBankMinutes);
+$formattedHourBank = sprintf('%s%02dh%02dm', $displayedHourBankMinutes < 0 ? '-' : '', intdiv($displayedHourBankAbsMinutes, 60), $displayedHourBankAbsMinutes % 60);
+
+$pageTitle = 'Shopfloor';
+$bodyClass = 'bg-light';
+require __DIR__ . '/partials/header.php';
+?>
+
+<section class="shopfloor-shell">
+    <div class="shopfloor-topbar">
+        <div class="shopfloor-topbar-title">
+            <h1 class="h4 mb-1">Gestão pessoal</h1>
+            <p class="text-secondary mb-0">Pedidos ligados ao módulo de RH e respetivas justificações.</p>
+        </div>
+        <div class="shopfloor-topbar-kpis" aria-label="Resumo rápido de horas e férias">
+            <article class="shopfloor-kpi-card shopfloor-kpi-card-compact">
+                <h2>Balanço de BH</h2>
+                <strong><?= h($formattedHourBank) ?></strong>
+            </article>
+            <article class="shopfloor-kpi-card shopfloor-kpi-card-compact">
+                <h2>Dias de férias</h2>
+                <strong><?= h(number_format($pendingVacationDays, 1, ',', '.')) ?></strong>
+            </article>
+            <article class="shopfloor-kpi-card shopfloor-kpi-card-compact">
+                <h2>Pausas (dia)</h2>
+                <strong><?= h(format_minutes((int) ($dailyBreakSummaryMap['Pausa']['seconds'] ?? 0))) ?></strong>
+                <span class="small text-secondary">(<?= (int) ($dailyBreakSummaryMap['Pausa']['count'] ?? 0) ?>)</span>
+            </article>
+            <article class="shopfloor-kpi-card shopfloor-kpi-card-compact">
+                <h2>Paragens (dia)</h2>
+                <strong><?= h(format_minutes((int) ($dailyBreakSummaryMap['Paragem']['seconds'] ?? 0))) ?></strong>
+                <span class="small text-secondary">(<?= (int) ($dailyBreakSummaryMap['Paragem']['count'] ?? 0) ?>)</span>
+            </article>
+        </div>
+    </div>
+
+    <?php if ($flashSuccess): ?>
+        <div class="alert alert-success mt-3 mb-3"><?= h($flashSuccess) ?></div>
+    <?php endif; ?>
+    <?php if ($flashError): ?>
+        <div class="alert alert-danger mt-3 mb-3"><?= h($flashError) ?></div>
+    <?php endif; ?>
+
+    <?php if ($pendingAnnouncementAck): ?>
+        <div class="modal fade" id="shopfloorAnnouncementAcknowledgeModal" tabindex="-1" aria-labelledby="shopfloorAnnouncementAcknowledgeModalLabel" aria-hidden="true" data-bs-backdrop="static" data-bs-keyboard="false">
+            <div class="modal-dialog modal-lg modal-dialog-centered">
+                <div class="modal-content">
+                    <div class="modal-header">
+                        <h2 class="modal-title fs-5" id="shopfloorAnnouncementAcknowledgeModalLabel"><?= h((string) $pendingAnnouncementAck['title']) ?></h2>
+                    </div>
+                    <div class="modal-body">
+                        <p class="small text-secondary mb-2">Comunicado emitido por <?= h((string) $pendingAnnouncementAck['created_by_name']) ?> em <?= h((string) $pendingAnnouncementAck['created_at']) ?>.</p>
+                        <div class="border rounded p-3 bg-light"><?= nl2br(h((string) $pendingAnnouncementAck['body'])) ?></div>
+                    </div>
+                    <div class="modal-footer">
+                        <form method="post" class="w-100 d-grid">
+                            <input type="hidden" name="action" value="acknowledge_announcement">
+                            <input type="hidden" name="announcement_id" value="<?= (int) $pendingAnnouncementAck['id'] ?>">
+                            <button type="submit" class="btn btn-primary btn-lg fw-semibold">Tomei conhecimento</button>
+                        </form>
+                    </div>
+                </div>
+            </div>
+        </div>
+    <?php endif; ?>
+
+    <div class="<?= $pendingAnnouncementAck ? 'd-none' : '' ?>">
+    <div class="shopfloor-panel mb-4">
+        <div class="shopfloor-panel-header flex-wrap gap-2">
+            <h2 class="h4 mb-0">Pausas e paragens</h2>
+            <?php if ($isAdmin || $isRh): ?>
+                <a href="shopfloor_break_reasons.php" class="btn btn-outline-primary btn-sm fw-semibold">Configurar tipos</a>
+            <?php endif; ?>
+        </div>
+        <?php if ($activeBreakEntry): ?>
+            <div class="small text-secondary mt-1 mb-3">Em curso: <?= h((string) ($activeBreakEntry['break_type'] ?? 'Pausa')) ?> · <?= h((string) ($activeBreakEntry['code'] ?? '')) ?> | <?= h((string) ($activeBreakEntry['label'] ?? '')) ?> (<?= h((string) ($activeBreakEntry['started_at'] ?? '')) ?>)</div>
+        <?php endif; ?>
+        <div class="table-responsive">
+            <table class="table table-sm shopfloor-table mb-0">
+                <thead>
+                    <tr><th>Tipo</th><th>Código</th><th>Nome</th><th>Contagem</th><th>Tempo</th></tr>
+                </thead>
+                <tbody>
+                    <?php if ($dailyBreakByReason): ?>
+                        <?php foreach ($dailyBreakByReason as $dailyBreakReason): ?>
+                            <tr>
+                                <td><?= h((string) ($dailyBreakReason['break_type'] ?? '')) ?></td>
+                                <td><?= h((string) ($dailyBreakReason['code'] ?? '')) ?></td>
+                                <td><?= h((string) ($dailyBreakReason['label'] ?? '')) ?></td>
+                                <td><?= (int) ($dailyBreakReason['total_count'] ?? 0) ?></td>
+                                <td><?= h(format_minutes((int) ($dailyBreakReason['total_seconds'] ?? 0))) ?></td>
+                            </tr>
+                        <?php endforeach; ?>
+                    <?php else: ?>
+                        <tr><td colspan="5" class="text-secondary">Sem pausas/paragens registadas hoje.</td></tr>
+                    <?php endif; ?>
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <div class="shopfloor-panel mb-4">
+        <div class="shopfloor-panel-header">
+            <h2 class="h4 mb-0">Pedidos de ausência</h2>
+            <?php if ($hasOpenClockEntryToday): ?>
+                <button class="btn btn-secondary btn-sm fw-semibold" type="button" disabled aria-disabled="true">Novo pedido</button>
+            <?php else: ?>
+                <button class="btn btn-primary btn-sm fw-semibold" type="button" data-bs-toggle="collapse" data-bs-target="#absenceFormPanel" aria-expanded="false" aria-controls="absenceFormPanel">Novo pedido</button>
+            <?php endif; ?>
+        </div>
+        <?php if ($hasOpenClockEntryToday): ?>
+            <p class="small text-secondary mb-3">Os pedidos de ausência só podem ser criados quando não existe ponto em aberto no dia atual.</p>
+        <?php endif; ?>
+
+        <div class="collapse mb-3" id="absenceFormPanel">
+            <form method="post" class="shopfloor-form-grid shopfloor-form-grid-request" id="absenceRequestForm">
+                <input type="hidden" name="action" value="submit_absence">
+                <div>
+                    <label class="form-label">Tipo</label>
+                    <select name="request_type" class="form-select" id="absenceRequestType" required>
+                        <option value="Dias inteiros">Dia(s) inteiro(s)</option>
+                        <option value="Intervalo de tempo">Intervalo de tempo</option>
+                    </select>
+                </div>
+                <div>
+                    <label class="form-label d-flex justify-content-between align-items-center gap-2">
+                        <span>Motivo (RH)</span>
+                        <?php if ($isAdmin || $isRh): ?>
+                            <a href="shopfloor_absence_reasons.php" class="small link-primary">Gerir motivos</a>
+                        <?php endif; ?>
+                    </label>
+                    <select name="reason_id" class="form-select shopfloor-reason-select d-none" id="absenceReasonSelect">
+                        <option value="" data-color="#475569">Selecionar motivo</option>
+                        <?php foreach ($absenceReasons as $reasonOption): ?>
+                            <option value="<?= (int) $reasonOption['id'] ?>" data-color="<?= h((string) ($reasonOption['color'] ?? '#1e293b')) ?>"><?= h((string) $reasonOption['reason_code']) ?> · <?= h(normalize_sage_code((string) $reasonOption['sage_code'])) ?> — <?= h((string) $reasonOption['label']) ?></option>
+                        <?php endforeach; ?>
+                    </select>
+                    <div class="shopfloor-reason-picker" id="absenceReasonPicker">
+                        <button type="button" class="form-select text-start shopfloor-reason-picker-toggle" data-role="toggle">Selecionar motivo</button>
+                        <div class="shopfloor-reason-picker-menu d-none" data-role="menu">
+                            <input type="text" class="form-control form-control-sm shopfloor-reason-picker-search" data-role="search" placeholder="Pesquisar por código ou motivo">
+                            <div class="shopfloor-reason-picker-list" data-role="list">
+                                <?php foreach ($absenceReasons as $reasonOption): ?>
+                                    <?php
+                                        $reasonColor = (string) ($reasonOption['color'] ?? '#1e293b');
+                                        $reasonLabel = (string) $reasonOption['reason_code'] . ' · ' . normalize_sage_code((string) $reasonOption['sage_code']) . ' — ' . (string) $reasonOption['label'];
+                                    ?>
+                                    <button type="button" class="shopfloor-reason-option" data-role="option" data-value="<?= (int) $reasonOption['id'] ?>" data-color="<?= h($reasonColor) ?>" data-search="<?= h(strtolower($reasonLabel)) ?>">
+                                        <span class="shopfloor-dot" style="background: <?= h($reasonColor) ?>"></span>
+                                        <span><?= h($reasonLabel) ?></span>
+                                    </button>
+                                <?php endforeach; ?>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <div>
+                    <label class="form-label">Duração</label>
+                    <select name="duration_type" class="form-select" required><option value="Completa">Completa</option><option value="Parcial">Parcial</option><option value="Horas">Horas</option></select>
+                </div>
+                <div class="absence-full-days-field request-second-row">
+                    <label class="form-label">Data início</label>
+                    <input type="date" name="start_date" class="form-control" required>
+                </div>
+                <div class="absence-full-days-field request-second-row">
+                    <label class="form-label">Data fim</label>
+                    <input type="date" name="end_date" class="form-control" required>
+                </div>
+                <div class="absence-time-range-field d-none request-second-row">
+                    <label class="form-label">Data</label>
+                    <input type="date" name="single_date" class="form-control">
+                </div>
+                <div class="absence-time-range-field d-none request-second-row">
+                    <label class="form-label">Hora início</label>
+                    <input type="time" name="start_time" class="form-control">
+                </div>
+                <div class="absence-time-range-field d-none request-second-row">
+                    <label class="form-label">Hora fim</label>
+                    <input type="time" name="end_time" class="form-control">
+                </div>
+                <div>
+                    <label class="form-label">Duração (hh:mm)</label>
+                    <input type="text" name="duration_hours" class="form-control" placeholder="02:00">
+                </div>
+                <div class="full">
+                    <label class="form-label">Justificação</label>
+                    <textarea name="details" class="form-control" rows="3" placeholder="Opcional"></textarea>
+                </div>
+                <div class="full">
+                    <button type="submit" class="btn btn-primary w-100 fw-semibold">Submeter pedido</button>
+                </div>
+            </form>
+        </div>
+
+        <div class="table-responsive">
+            <table class="table table-sm shopfloor-table mb-0">
+                <thead><tr><th>Motivo</th><th>Data</th><th>Estado</th><th class="text-end">Justificação</th></tr></thead>
+                <tbody>
+                <?php if ($absenceRequests): foreach ($absenceRequests as $absence): ?>
+                    <tr>
+                        <td>
+                            <div class="d-flex align-items-center gap-2">
+                                <span class="shopfloor-dot" style="background: <?= h((string) ($absence['reason_color'] ?? '#2563eb')) ?>"></span>
+                                <span><?= h((string) $absence['reason']) ?></span><br><span class="small text-secondary">Duração: <?= h((string) ($absence['duration_type'] ?? 'Completa')) ?><?= !empty($absence['duration_hours']) ? ' · ' . h((string) $absence['duration_hours']) : '' ?></span>
+                            </div>
+                            <div class="small text-secondary">Código: <?= (int) $absence['id'] ?></div>
+                        </td>
+                        <td>
+                            <?php if (($absence['request_type'] ?? 'Dias inteiros') === 'Intervalo de tempo'): ?>
+                                <?= h((string) $absence['start_date']) ?> · <?= h((string) ($absence['start_time'] ?? '')) ?> → <?= h((string) ($absence['end_time'] ?? '')) ?>
+                            <?php else: ?>
+                                <?= h((string) $absence['start_date']) ?><?= $absence['end_date'] !== $absence['start_date'] ? ' → ' . h((string) $absence['end_date']) : '' ?>
+                            <?php endif; ?>
+                        </td>
+                        <td><span class="badge shopfloor-status-pill"><?= h((string) $absence['status']) ?></span></td>
+                        <td class="text-end">
+                            <div class="d-inline-flex align-items-center gap-2">
+                                <?php if (!empty($absence['latest_attachment_path'])): ?>
+                                    <a
+                                        href="<?= h((string) $absence['latest_attachment_path']) ?>"
+                                        class="btn btn-outline-secondary btn-sm"
+                                        data-lightbox-image="<?= h((string) $absence['latest_attachment_path']) ?>"
+                                    >Ver ficheiro</a>
+                                <?php endif; ?>
+                                <button class="btn btn-primary btn-sm" type="button" data-bs-toggle="collapse" data-bs-target="#justification-form-<?= (int) $absence['id'] ?>">Anexar</button>
+                            </div>
+                        </td>
+                    </tr>
+                    <tr class="collapse" id="justification-form-<?= (int) $absence['id'] ?>">
+                        <td colspan="4" class="bg-transparent">
+                            <form method="post" class="row g-2 align-items-end" enctype="multipart/form-data">
+                                <input type="hidden" name="action" value="submit_justification">
+                                <input type="hidden" name="absence_request_id" value="<?= (int) $absence['id'] ?>">
+                                <div class="col-md-10">
+                                    <label class="form-label mb-1">Fotografia</label>
+                                    <input type="file" name="photo" class="form-control form-control-sm" accept="image/jpeg,image/png,image/webp" required>
+                                </div>
+                                <div class="col-md-2">
+                                    <button type="submit" class="btn btn-outline-primary btn-sm w-100">Submeter</button>
+                                </div>
+                            </form>
+
+                            <?php $absenceJustifications = $absenceJustificationsByRequestId[(int) $absence['id']] ?? []; ?>
+                            <?php if ($absenceJustifications): ?>
+                                <div class="mt-3 border-top pt-2">
+                                    <div class="small text-secondary mb-2">Justificações ligadas a esta ausência</div>
+                                    <div class="d-flex flex-column gap-2">
+                                        <?php foreach ($absenceJustifications as $absenceJustification): ?>
+                                            <div class="d-flex flex-wrap align-items-center gap-2 small">
+                                                <span class="text-secondary"><?= h((string) $absenceJustification['event_date']) ?></span>
+                                                <span>— <?= h((string) $absenceJustification['description']) ?></span>
+                                                <?php if (!empty($absenceJustification['attachment_path'])): ?>
+                                                    <a
+                                                        href="<?= h((string) $absenceJustification['attachment_path']) ?>"
+                                                        class="btn btn-outline-secondary btn-sm py-0 px-2"
+                                                        data-lightbox-image="<?= h((string) $absenceJustification['attachment_path']) ?>"
+                                                    >Ver ficheiro</a>
+                                                <?php else: ?>
+                                                    <span class="text-secondary">Sem anexo</span>
+                                                <?php endif; ?>
+                                                <span class="badge shopfloor-status-pill"><?= h((string) $absenceJustification['status']) ?></span>
+                                            </div>
+                                        <?php endforeach; ?>
+                                    </div>
+                                </div>
+                            <?php endif; ?>
+                        </td>
+                    </tr>
+                <?php endforeach; else: ?>
+                    <tr><td colspan="4" class="text-secondary">Sem comunicações de ausência.</td></tr>
+                <?php endif; ?>
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <?php if ($isAdmin || $isChief): ?>
+        <div class="shopfloor-panel mb-4">
+            <div class="shopfloor-panel-header">
+                <h2 class="h5 mb-0">Validação Nível 1 (Chefe do departamento)</h2>
+                <span class="badge text-bg-light border"><?= (int) count($pendingChiefValidations) ?> pendente(s)</span>
+            </div>
+            <div class="table-responsive">
+                <table class="table table-sm shopfloor-table mb-0">
+                    <thead><tr><th>Colaborador</th><th>Motivo</th><th>Data</th><th>Estado</th><th class="text-end">Ações</th></tr></thead>
+                    <tbody>
+                    <?php if ($pendingChiefValidations): foreach ($pendingChiefValidations as $pendingAbsence): ?>
+                        <tr>
+                            <td><?= h((string) $pendingAbsence['user_name']) ?></td>
+                            <td><?= h((string) $pendingAbsence['reason']) ?></td>
+                            <td>
+                                <?php if (($pendingAbsence['request_type'] ?? 'Dias inteiros') === 'Intervalo de tempo'): ?>
+                                    <?= h((string) $pendingAbsence['start_date']) ?> · <?= h((string) ($pendingAbsence['start_time'] ?? '')) ?> → <?= h((string) ($pendingAbsence['end_time'] ?? '')) ?>
+                                <?php else: ?>
+                                    <?= h((string) $pendingAbsence['start_date']) ?><?= $pendingAbsence['end_date'] !== $pendingAbsence['start_date'] ? ' → ' . h((string) $pendingAbsence['end_date']) : '' ?>
+                                <?php endif; ?>
+                            </td>
+                            <td><span class="badge shopfloor-status-pill"><?= h((string) $pendingAbsence['status']) ?></span></td>
+                            <td class="text-end">
+                                <div class="d-inline-flex gap-2">
+                                    <form method="post">
+                                        <input type="hidden" name="action" value="review_absence">
+                                        <input type="hidden" name="absence_id" value="<?= (int) $pendingAbsence['id'] ?>">
+                                        <input type="hidden" name="decision" value="approve">
+                                        <button class="btn btn-sm btn-outline-success">Aprovar</button>
+                                    </form>
+                                    <form method="post">
+                                        <input type="hidden" name="action" value="review_absence">
+                                        <input type="hidden" name="absence_id" value="<?= (int) $pendingAbsence['id'] ?>">
+                                        <input type="hidden" name="decision" value="reject">
+                                        <button class="btn btn-sm btn-outline-danger">Rejeitar</button>
+                                    </form>
+                                </div>
+                            </td>
+                        </tr>
+                    <?php endforeach; else: ?>
+                        <tr><td colspan="5" class="text-secondary">Sem pedidos pendentes para validação de Nível 1.</td></tr>
+                    <?php endif; ?>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    <?php endif; ?>
+
+    <?php if ($isAdmin || $isRh): ?>
+        <div class="shopfloor-panel mb-4">
+            <div class="shopfloor-panel-header flex-wrap gap-2">
+                <h2 class="h5 mb-0">Acompanhamento RH (pendentes e aprovados)</h2>
+                <div class="btn-group btn-group-sm" role="group" aria-label="Filtro RH">
+                    <a class="btn <?= $rhFilter === 'todos' ? 'btn-primary' : 'btn-outline-primary' ?>" href="shopfloor.php?rh_filter=todos">Todos</a>
+                    <a class="btn <?= $rhFilter === 'pendentes' ? 'btn-primary' : 'btn-outline-primary' ?>" href="shopfloor.php?rh_filter=pendentes">Pendentes</a>
+                    <a class="btn <?= $rhFilter === 'aprovados' ? 'btn-primary' : 'btn-outline-primary' ?>" href="shopfloor.php?rh_filter=aprovados">Aprovados</a>
+                </div>
+            </div>
+            <div class="table-responsive">
+                <table class="table table-sm shopfloor-table mb-0">
+                    <thead><tr><th>Colaborador</th><th>Motivo</th><th>Data</th><th>Estado</th><th class="text-end">Validação RH</th></tr></thead>
+                    <tbody>
+                    <?php if ($rhAbsenceRows): foreach ($rhAbsenceRows as $rhAbsence): ?>
+                        <tr>
+                            <td><?= h((string) $rhAbsence['user_name']) ?></td>
+                            <td><?= h((string) $rhAbsence['reason']) ?></td>
+                            <td>
+                                <?php if (($rhAbsence['request_type'] ?? 'Dias inteiros') === 'Intervalo de tempo'): ?>
+                                    <?= h((string) $rhAbsence['start_date']) ?> · <?= h((string) ($rhAbsence['start_time'] ?? '')) ?> → <?= h((string) ($rhAbsence['end_time'] ?? '')) ?>
+                                <?php else: ?>
+                                    <?= h((string) $rhAbsence['start_date']) ?><?= $rhAbsence['end_date'] !== $rhAbsence['start_date'] ? ' → ' . h((string) $rhAbsence['end_date']) : '' ?>
+                                <?php endif; ?>
+                            </td>
+                            <td><span class="badge shopfloor-status-pill"><?= h((string) $rhAbsence['status']) ?></span></td>
+                            <td class="text-end">
+                                <?php if (($rhAbsence['status'] ?? '') === 'Pendente Nível 2' || ($rhAbsence['status'] ?? '') === 'Pendente'): ?>
+                                    <div class="d-inline-flex gap-2">
+                                        <form method="post">
+                                            <input type="hidden" name="action" value="review_absence">
+                                            <input type="hidden" name="absence_id" value="<?= (int) $rhAbsence['id'] ?>">
+                                            <input type="hidden" name="decision" value="approve">
+                                            <button class="btn btn-sm btn-outline-success">Aprovar</button>
+                                        </form>
+                                        <form method="post">
+                                            <input type="hidden" name="action" value="review_absence">
+                                            <input type="hidden" name="absence_id" value="<?= (int) $rhAbsence['id'] ?>">
+                                            <input type="hidden" name="decision" value="reject">
+                                            <button class="btn btn-sm btn-outline-danger">Rejeitar</button>
+                                        </form>
+                                    </div>
+                                <?php else: ?>
+                                    <span class="text-secondary small">Sem ação</span>
+                                <?php endif; ?>
+                                <button class="btn btn-sm btn-outline-secondary ms-2" type="button" data-bs-toggle="collapse" data-bs-target="#edit-absence-<?= (int) $rhAbsence['id'] ?>">Editar</button>
+                            </td>
+                        </tr>
+                        <tr class="collapse" id="edit-absence-<?= (int) $rhAbsence['id'] ?>">
+                            <td colspan="5">
+                                <form method="post" class="row g-2 align-items-end">
+                                    <input type="hidden" name="action" value="edit_absence">
+                                    <input type="hidden" name="absence_id" value="<?= (int) $rhAbsence['id'] ?>">
+                                    <div class="col-md-2"><label class="form-label">Tipo</label><select class="form-select" name="request_type"><option value="Dias inteiros" <?= ($rhAbsence['request_type'] ?? '') === 'Dias inteiros' ? 'selected' : '' ?>>Dias inteiros</option><option value="Intervalo de tempo" <?= ($rhAbsence['request_type'] ?? '') === 'Intervalo de tempo' ? 'selected' : '' ?>>Intervalo</option></select></div>
+                                    <div class="col-md-2"><label class="form-label">Duração</label><select class="form-select" name="duration_type"><option value="Completa" <?= ($rhAbsence['duration_type'] ?? '') === 'Completa' ? 'selected' : '' ?>>Completa</option><option value="Parcial" <?= ($rhAbsence['duration_type'] ?? '') === 'Parcial' ? 'selected' : '' ?>>Parcial</option><option value="Horas" <?= ($rhAbsence['duration_type'] ?? '') === 'Horas' ? 'selected' : '' ?>>Horas</option></select></div>
+                                    <div class="col-md-2"><label class="form-label">Início</label><input class="form-control" type="date" name="start_date" value="<?= h((string) $rhAbsence['start_date']) ?>" required></div>
+                                    <div class="col-md-2"><label class="form-label">Fim</label><input class="form-control" type="date" name="end_date" value="<?= h((string) $rhAbsence['end_date']) ?>" required></div>
+                                    <div class="col-md-1"><label class="form-label">H. ini</label><input class="form-control" type="time" name="start_time" value="<?= h((string) ($rhAbsence['start_time'] ?? '')) ?>"></div>
+                                    <div class="col-md-1"><label class="form-label">H. fim</label><input class="form-control" type="time" name="end_time" value="<?= h((string) ($rhAbsence['end_time'] ?? '')) ?>"></div>
+                                    <div class="col-md-2"><label class="form-label">Duração</label><input class="form-control" name="duration_hours" placeholder="hh:mm" value="<?= h((string) ($rhAbsence['duration_hours'] ?? '')) ?>"></div><div class="col-md-2"><label class="form-label">Detalhes</label><input class="form-control" name="details" value="<?= h((string) ($rhAbsence['details'] ?? '')) ?>"></div>
+                                    <div class="col-md-12 d-grid"><button class="btn btn-dark btn-sm">Guardar edição</button></div>
+                                </form>
+                            </td>
+                        </tr>
+                    <?php endforeach; else: ?>
+                        <tr><td colspan="5" class="text-secondary">Sem pedidos para o filtro selecionado.</td></tr>
+                    <?php endif; ?>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    <?php endif; ?>
+
+    <div class="shopfloor-panel mb-4">
+        <div class="shopfloor-panel-header">
+            <h2 class="h4 mb-0">Pedidos de férias</h2>
+            <div class="d-flex align-items-center gap-2 flex-wrap justify-content-end">
+                <form method="get" class="d-flex align-items-center gap-2">
+                    <?php if ($rhFilter !== 'todos'): ?><input type="hidden" name="rh_filter" value="<?= h($rhFilter) ?>"><?php endif; ?>
+                    <input type="number" name="vacation_year" class="form-control form-control-sm" style="width:100px" min="2000" max="2100" value="<?= (int) $vacationYear ?>">
+                    <button class="btn btn-outline-secondary btn-sm">Ano</button>
+                </form>
+                <?php if ($hasOpenClockEntryToday): ?>
+                    <button class="btn btn-secondary btn-sm fw-semibold" type="button" disabled aria-disabled="true">Novo pedido</button>
+                <?php else: ?>
+                    <button class="btn btn-primary btn-sm fw-semibold" type="button" data-bs-toggle="collapse" data-bs-target="#vacationFormPanel" aria-expanded="false" aria-controls="vacationFormPanel">Novo pedido</button>
+                <?php endif; ?>
+            </div>
+        </div>
+        <?php if ($hasOpenClockEntryToday): ?>
+            <p class="small text-secondary mb-3">Os pedidos de férias só podem ser criados quando não existe ponto em aberto no dia atual.</p>
+        <?php endif; ?>
+        <div class="row g-2 mb-3">
+            <div class="col-lg-3 col-md-6">
+                <div class="border rounded p-2 bg-white h-100">
+                    <div class="small text-secondary">Ano analisado</div>
+                    <div class="fw-semibold">
+                        <?= (int) $vacationYear ?>
+                        <?php if ($scheduleGap !== ''): ?><span class="text-secondary"> · <?= h($scheduleGap) ?></span><?php endif; ?>
+                    </div>
+                    <div class="small text-secondary">Supostos: <?= (int) $expectedWorkDays ?> · Trabalhados: <?= (int) $workedDays ?></div>
+                </div>
+            </div>
+            <div class="col-lg-2 col-md-6"><div class="border rounded p-2 bg-white h-100"><div class="small text-secondary">Atribuídos</div><div class="fw-semibold"><?= h(number_format($assignedVacationDays, 1, ',', '.')) ?> dias</div></div></div>
+            <div class="col-lg-2 col-md-6"><div class="border rounded p-2 bg-white h-100"><div class="small text-secondary">Pedidos</div><div class="fw-semibold"><?= h(number_format($requestedVacationDays, 1, ',', '.')) ?> dias</div></div></div>
+            <div class="col-lg-2 col-md-6"><div class="border rounded p-2 bg-white h-100"><div class="small text-secondary">Validados</div><div class="fw-semibold"><?= h(number_format($validatedVacationDays, 1, ',', '.')) ?> dias</div></div></div>
+            <div class="col-lg-3 col-md-12"><div class="border rounded p-2 bg-white h-100"><div class="small text-secondary">Gozados (registo RH)</div><div class="fw-semibold"><?= h(number_format($takenVacationDays, 1, ',', '.')) ?> dias</div></div></div>
+        </div>
+
+        <div class="collapse mb-3" id="vacationFormPanel">
+            <form method="post" class="shopfloor-form-grid">
+                <input type="hidden" name="action" value="submit_vacation">
+                <div>
+                    <label class="form-label">Início</label>
+                    <input type="date" name="start_date" class="form-control" required>
+                </div>
+                <div>
+                    <label class="form-label">Fim</label>
+                    <input type="date" name="end_date" class="form-control" required>
+                </div>
+                <div class="full">
+                    <label class="form-label">Notas</label>
+                    <textarea name="notes" class="form-control" rows="2" placeholder="Observações opcionais"></textarea>
+                </div>
+                <div class="full">
+                    <button type="submit" class="btn btn-primary w-100 fw-semibold">Submeter pedido</button>
+                </div>
+            </form>
+        </div>
+
+        <div class="table-responsive">
+            <table class="table table-sm shopfloor-table mb-0">
+                <thead><tr><th>Início</th><th>Fim</th><th>Dias</th><th>Estado</th></tr></thead>
+                <tbody>
+                <?php if ($vacationRequests): foreach ($vacationRequests as $vacation): ?>
+                    <tr>
+                        <td><?= h((string) $vacation['start_date']) ?></td>
+                        <td><?= h((string) $vacation['end_date']) ?></td>
+                        <td><?= h(number_format((float) ($vacation['total_days'] ?? 0), 1, ',', '.')) ?></td>
+                        <td><span class="badge shopfloor-status-pill"><?= h((string) $vacation['status']) ?></span></td>
+                    </tr>
+                <?php endforeach; else: ?>
+                    <tr><td colspan="4" class="text-secondary">Sem pedidos de férias.</td></tr>
+                <?php endif; ?>
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <div class="row g-3">
+        <div class="col-xl-6">
+            <div class="shopfloor-panel h-100">
+                <h2 class="h5 mb-3">Histórico do dia (ponto)</h2>
+                <ul class="list-group list-group-flush">
+                    <?php if ($todayEntries): foreach ($todayEntries as $entry): ?>
+                        <li class="list-group-item shopfloor-list-item">
+                            <span class="fw-semibold"><?= $entry['entry_type'] === 'entrada' ? 'Entrada' : 'Saída' ?></span>
+                            <span class="text-secondary small ms-2"><?= h(date('H:i:s', strtotime((string) $entry['occurred_at']))) ?></span>
+                            <?php if (!empty($entry['note'])): ?>
+                                <div class="small text-secondary mt-1"><?= h((string) $entry['note']) ?></div>
+                            <?php endif; ?>
+                        </li>
+                    <?php endforeach; else: ?>
+                        <li class="list-group-item shopfloor-list-item text-secondary">Sem registos de ponto hoje.</li>
+                    <?php endif; ?>
+                </ul>
+            </div>
+        </div>
+        <div class="col-xl-6">
+            <div class="shopfloor-panel h-100">
+                <h2 class="h5 mb-3">Comunicados da chefia / RH</h2>
+                <ul class="list-group list-group-flush mb-3">
+                    <?php if ($announcements): foreach ($announcements as $announcement): ?>
+                        <li class="list-group-item shopfloor-list-item">
+                            <div class="fw-semibold"><?= h((string) $announcement['title']) ?></div>
+                            <div class="small text-secondary mb-1">Por <?= h((string) $announcement['created_by_name']) ?> em <?= h((string) $announcement['created_at']) ?></div>
+                            <div><?= nl2br(h((string) $announcement['body'])) ?></div>
+                        </li>
+                    <?php endforeach; else: ?>
+                        <li class="list-group-item shopfloor-list-item text-secondary">Sem comunicados ativos.</li>
+                    <?php endif; ?>
+                </ul>
+
+                <?php if ($isAdmin || $isRh): ?>
+                    <h3 class="h6">Publicar comunicado</h3>
+                    <form method="post" class="vstack gap-2 mb-4" data-user-picker-modal-target="#shopfloorAnnouncementUsersModal" data-user-picker-input-name="target_user_ids[]" data-user-picker-all-label="Todos os utilizadores Shopfloor" data-user-picker-selected-suffix="utilizadores selecionados">
+                        <input type="hidden" name="action" value="publish_announcement">
+                        <input type="text" name="title" class="form-control" placeholder="Título" required>
+                        <textarea name="body" class="form-control" rows="3" placeholder="Mensagem" required></textarea>
+                        <div>
+                            <label class="form-label mb-1">Direcionado a utilizadores (opcional)</label>
+                            <div class="user-picker-meta">
+                                <div class="form-text mt-0 js-user-picker-summary user-picker-summary">Todos os utilizadores Shopfloor</div>
+                                <div class="user-picker-chips js-user-picker-chips"></div>
+                            </div>
+                            <button
+                                type="button"
+                                class="btn btn-outline-secondary w-100 d-flex justify-content-between align-items-center"
+                                data-bs-toggle="modal"
+                                data-bs-target="#shopfloorAnnouncementUsersModal"
+                            >
+                                <span class="text-start">Selecionar utilizadores</span>
+                                <span class="badge text-bg-dark js-user-picker-count">0</span>
+                            </button>
+                            <div class="d-none js-user-picker-hidden-inputs"></div>
+                            <div class="form-text">Se não selecionar ninguém, o comunicado fica visível para todos os utilizadores do Shopfloor.</div>
+                        </div>
+                        <button type="submit" class="btn btn-outline-primary">Publicar</button>
+                    </form>
+
+                    <div class="modal fade" id="shopfloorAnnouncementUsersModal" tabindex="-1" aria-labelledby="shopfloorAnnouncementUsersModalLabel" aria-hidden="true">
+                        <div class="modal-dialog modal-dialog-scrollable modal-lg">
+                            <div class="modal-content">
+                                <div class="modal-header">
+                                    <div>
+                                        <h3 class="modal-title fs-5" id="shopfloorAnnouncementUsersModalLabel">Escolher utilizadores</h3>
+                                        <p class="text-muted small mb-0">Pesquise e selecione vários utilizadores para direcionar o comunicado.</p>
+                                    </div>
+                                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Fechar"></button>
+                                </div>
+                                <div class="modal-body">
+                                    <div class="row g-2 align-items-center mb-3">
+                                        <div class="col-md-8">
+                                            <input type="search" class="form-control js-user-picker-search" placeholder="Pesquisar utilizador">
+                                        </div>
+                                        <div class="col-md-4">
+                                            <div class="d-flex flex-wrap gap-2 justify-content-md-end">
+                                                <button type="button" class="btn btn-outline-secondary btn-sm js-user-picker-select-all">Selecionar todos</button>
+                                                <button type="button" class="btn btn-outline-secondary btn-sm js-user-picker-clear-all">Limpar</button>
+                                            </div>
+                                        </div>
+                                    </div>
+                                    <div class="user-picker-modal-list border rounded p-2">
+                                        <?php foreach ($announcementTargetUsers as $targetUser): ?>
+                                            <?php $targetLabel = (string) ($targetUser['name'] . ' ' . $targetUser['username']); ?>
+                                            <?php $targetLabelSearch = function_exists('mb_strtolower') ? mb_strtolower($targetLabel) : strtolower($targetLabel); ?>
+                                            <label class="user-picker-option border px-2 py-2 rounded" data-user-option data-user-id="<?= (int) $targetUser['id'] ?>" data-user-label="<?= h($targetLabelSearch) ?>">
+                                                <input class="form-check-input user-picker-checkbox js-user-picker-checkbox" type="checkbox" value="<?= (int) $targetUser['id'] ?>">
+                                                <span class="user-picker-meta-label flex-grow-1">
+                                                    <span class="d-block fw-semibold js-user-picker-name"><?= h((string) $targetUser['name']) ?></span>
+                                                    <span class="d-block text-muted small"><?= h((string) $targetUser['username']) ?></span>
+                                                </span>
+                                            </label>
+                                        <?php endforeach; ?>
+                                    </div>
+                                </div>
+                                <div class="modal-footer">
+                                    <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancelar</button>
+                                    <button type="button" class="btn btn-dark js-user-picker-apply">Aplicar</button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <h3 class="h6">Gerir comunicados</h3>
+                    <ul class="list-group list-group-flush">
+                        <?php if ($managedAnnouncements): foreach ($managedAnnouncements as $announcement): ?>
+                            <li class="list-group-item shopfloor-list-item">
+                                <div class="d-flex justify-content-between align-items-start gap-2 mb-1">
+                                    <div class="fw-semibold"><?= h((string) $announcement['title']) ?></div>
+                                    <span class="badge <?= ((int) $announcement['is_active'] === 1) ? 'text-bg-success' : 'text-bg-secondary' ?>"><?= ((int) $announcement['is_active'] === 1) ? 'Ativo' : 'Inativo' ?></span>
+                                </div>
+                                <div class="small text-secondary mb-1">Por <?= h((string) $announcement['created_by_name']) ?> em <?= h((string) $announcement['created_at']) ?></div>
+                                <div class="small text-secondary mb-2">
+                                    <?= (string) $announcement['audience'] === 'targeted' ? ('Direcionado a ' . (int) $announcement['target_count'] . ' utilizador(es).') : 'Visível para todos os utilizadores Shopfloor.' ?>
+                                </div>
+                                <div class="d-flex gap-2">
+                                    <form method="post">
+                                        <input type="hidden" name="action" value="toggle_announcement">
+                                        <input type="hidden" name="announcement_id" value="<?= (int) $announcement['id'] ?>">
+                                        <button type="submit" class="btn btn-sm btn-outline-secondary"><?= ((int) $announcement['is_active'] === 1) ? 'Desativar' : 'Ativar' ?></button>
+                                    </form>
+                                    <form method="post" onsubmit="return confirm('Eliminar este comunicado?');">
+                                        <input type="hidden" name="action" value="delete_announcement">
+                                        <input type="hidden" name="announcement_id" value="<?= (int) $announcement['id'] ?>">
+                                        <button type="submit" class="btn btn-sm btn-outline-danger">Eliminar</button>
+                                    </form>
+                                </div>
+                            </li>
+                        <?php endforeach; else: ?>
+                            <li class="list-group-item shopfloor-list-item text-secondary">Sem comunicados para gerir.</li>
+                        <?php endif; ?>
+                    </ul>
+                <?php endif; ?>
+            </div>
+        </div>
+    </div>
+    </div>
+
+</section>
+
+<div class="modal fade" id="justificationLightbox" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered modal-xl">
+        <div class="modal-content bg-dark border-0">
+            <div class="modal-header border-0">
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Fechar"></button>
+            </div>
+            <div class="modal-body text-center pt-0">
+                <img src="" alt="Anexo da justificação" id="justificationLightboxImage" class="img-fluid rounded">
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="modal fade" id="justificationLightbox" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered modal-xl">
+        <div class="modal-content bg-dark border-0">
+            <div class="modal-header border-0">
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Fechar"></button>
+            </div>
+            <div class="modal-body text-center pt-0">
+                <img src="" alt="Anexo da justificação" id="justificationLightboxImage" class="img-fluid rounded">
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+(() => {
+    const typeSelect = document.getElementById('absenceRequestType');
+    const form = document.getElementById('absenceRequestForm');
+    if (!typeSelect || !form) {
+        return;
+    }
+
+    const fullDayFields = form.querySelectorAll('.absence-full-days-field');
+    const intervalFields = form.querySelectorAll('.absence-time-range-field');
+    const startDateInput = form.querySelector('input[name="start_date"]');
+    const endDateInput = form.querySelector('input[name="end_date"]');
+    const singleDateInput = form.querySelector('input[name="single_date"]');
+    const startTimeInput = form.querySelector('input[name="start_time"]');
+    const endTimeInput = form.querySelector('input[name="end_time"]');
+    const reasonSelect = document.getElementById('absenceReasonSelect');
+    const reasonPicker = document.getElementById('absenceReasonPicker');
+
+    const refreshFields = () => {
+        const isInterval = typeSelect.value === 'Intervalo de tempo';
+
+        fullDayFields.forEach((field) => {
+            field.classList.toggle('d-none', isInterval);
+        });
+        intervalFields.forEach((field) => {
+            field.classList.toggle('d-none', !isInterval);
+        });
+
+        if (startDateInput) {
+            startDateInput.required = !isInterval;
+        }
+        if (endDateInput) {
+            endDateInput.required = !isInterval;
+        }
+        if (singleDateInput) {
+            singleDateInput.required = isInterval;
+        }
+        if (startTimeInput) {
+            startTimeInput.required = isInterval;
+        }
+        if (endTimeInput) {
+            endTimeInput.required = isInterval;
+        }
+    };
+
+    typeSelect.addEventListener('change', refreshFields);
+    refreshFields();
+
+    const applyReasonColor = (selectedOption = null) => {
+        if (!reasonSelect || !reasonPicker) {
+            return;
+        }
+        const resolvedOption = selectedOption || reasonSelect.options[reasonSelect.selectedIndex];
+        const selectedColor = resolvedOption?.dataset?.color || '#0f172a';
+        const toggleButton = reasonPicker.querySelector('[data-role="toggle"]');
+        if (toggleButton) {
+            toggleButton.style.color = selectedColor;
+        }
+    };
+
+    const setupReasonPicker = () => {
+        if (!reasonSelect || !reasonPicker) {
+            return;
+        }
+
+        const toggleButton = reasonPicker.querySelector('[data-role="toggle"]');
+        const menu = reasonPicker.querySelector('[data-role="menu"]');
+        const searchInput = reasonPicker.querySelector('[data-role="search"]');
+        const options = Array.from(reasonPicker.querySelectorAll('[data-role="option"]'));
+        if (!toggleButton || !menu || !searchInput || options.length === 0) {
+            return;
+        }
+
+        const closeMenu = () => {
+            menu.classList.add('d-none');
+        };
+        const openMenu = () => {
+            menu.classList.remove('d-none');
+            searchInput.focus();
+        };
+
+        toggleButton.addEventListener('click', () => {
+            if (menu.classList.contains('d-none')) {
+                openMenu();
+            } else {
+                closeMenu();
+            }
+        });
+
+        options.forEach((optionButton) => {
+            optionButton.addEventListener('click', () => {
+                const value = optionButton.getAttribute('data-value') || '';
+                const labelElement = optionButton.querySelector('span:last-child');
+                const label = (labelElement?.textContent || '').trim();
+                reasonSelect.value = value;
+                toggleButton.textContent = label || 'Selecionar motivo';
+                applyReasonColor({ dataset: { color: optionButton.getAttribute('data-color') || '#0f172a' } });
+                closeMenu();
+            });
+        });
+
+        searchInput.addEventListener('input', () => {
+            const term = searchInput.value.trim().toLowerCase();
+            options.forEach((optionButton) => {
+                const haystack = optionButton.getAttribute('data-search') || '';
+                optionButton.classList.toggle('d-none', term !== '' && !haystack.includes(term));
+            });
+        });
+
+        document.addEventListener('click', (event) => {
+            if (!(event.target instanceof Node)) {
+                return;
+            }
+            if (!reasonPicker.contains(event.target)) {
+                closeMenu();
+            }
+        });
+    };
+
+    reasonSelect?.addEventListener('change', () => applyReasonColor());
+    setupReasonPicker();
+    applyReasonColor();
+})();
+
+(() => {
+    window.addEventListener('load', () => {
+        const modalElement = document.getElementById('justificationLightbox');
+        const imageElement = document.getElementById('justificationLightboxImage');
+        if (!modalElement || !imageElement || typeof bootstrap === 'undefined') {
+            return;
+        }
+
+        const lightboxModal = new bootstrap.Modal(modalElement);
+        document.querySelectorAll('[data-lightbox-image]').forEach((link) => {
+            link.addEventListener('click', (event) => {
+                event.preventDefault();
+                const imageUrl = link.getAttribute('data-lightbox-image');
+                if (!imageUrl) {
+                    return;
+                }
+                imageElement.src = imageUrl;
+                lightboxModal.show();
+            });
+        });
+
+        modalElement.addEventListener('hidden.bs.modal', () => {
+            imageElement.src = '';
+        });
+    }, { once: true });
+})();
+
+(() => {
+    window.addEventListener('load', () => {
+        const modalElement = document.getElementById('shopfloorAnnouncementAcknowledgeModal');
+        if (!modalElement || typeof bootstrap === 'undefined') {
+            return;
+        }
+
+        const announcementModal = bootstrap.Modal.getOrCreateInstance(modalElement, {
+            backdrop: 'static',
+            keyboard: false
+        });
+
+        modalElement.addEventListener('hide.bs.modal', (event) => {
+            event.preventDefault();
+        });
+
+        announcementModal.show();
+    }, { once: true });
+})();
+</script>
+
+<?php require __DIR__ . '/partials/footer.php'; ?>
