@@ -95,6 +95,40 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $flashError = 'Tem de confirmar o comunicado pendente antes de continuar.';
     } else {
 
+
+    if ($action === 'ack_of_document') {
+        $documentId = (int) ($_POST['document_id'] ?? 0);
+        $stmt = $pdo->prepare('INSERT OR IGNORE INTO erp_production_order_document_acknowledgements(document_id, user_id) VALUES (?, ?)');
+        $stmt->execute([$documentId, $userId]);
+        $flashSuccess = 'Documento da OF confirmado.';
+    }
+
+    if ($action === 'start_of_operation') {
+        $poOperationId = (int) ($_POST['po_operation_id'] ?? 0);
+        $pendingDocsStmt = $pdo->prepare('SELECT COUNT(*) FROM erp_production_order_documents d JOIN erp_production_order_operations opo ON opo.production_order_id = d.production_order_id WHERE opo.id = ? AND d.is_required = 1 AND NOT EXISTS (SELECT 1 FROM erp_production_order_document_acknowledgements a WHERE a.document_id = d.id AND a.user_id = ?)');
+        $pendingDocsStmt->execute([$poOperationId, $userId]);
+        $openOpStmt = $pdo->prepare('SELECT id FROM erp_operation_time_entries WHERE user_id = ? AND ended_at IS NULL LIMIT 1');
+        $openOpStmt->execute([$userId]);
+        if ((int) $pendingDocsStmt->fetchColumn() > 0) {
+            $flashError = 'Tem de visualizar e confirmar todos os documentos obrigatórios da OF antes de iniciar.';
+        } elseif ((int) ($openOpStmt->fetchColumn() ?: 0) > 0) {
+            $flashError = 'Já existe uma operação em curso.';
+        } else {
+            $pdo->prepare('INSERT INTO erp_operation_time_entries(production_order_operation_id, user_id) VALUES (?, ?)')->execute([$poOperationId, $userId]);
+            $pdo->prepare('UPDATE erp_production_order_operations SET status = "Em curso" WHERE id = ?')->execute([$poOperationId]);
+            $flashSuccess = 'Operação iniciada.';
+        }
+    }
+
+    if ($action === 'stop_of_operation') {
+        $entryId = (int) ($_POST['entry_id'] ?? 0);
+        $good = (float) ($_POST['quantity_good'] ?? 0);
+        $reject = (float) ($_POST['quantity_rejected'] ?? 0);
+        $stmt = $pdo->prepare('UPDATE erp_operation_time_entries SET ended_at = CURRENT_TIMESTAMP, quantity_good = ?, quantity_rejected = ?, notes = ? WHERE id = ? AND user_id = ? AND ended_at IS NULL');
+        $stmt->execute([$good, $reject, trim((string)($_POST['notes'] ?? '')) ?: null, $entryId, $userId]);
+        $flashSuccess = $stmt->rowCount() > 0 ? 'Operação terminada e tempos registados na OF.' : 'Operação inválida.';
+    }
+
     if ($action === 'clock_entry') {
         $entryType = trim((string) ($_POST['entry_type'] ?? ''));
         $note = trim((string) ($_POST['note'] ?? ''));
@@ -410,7 +444,7 @@ $requestType,
     if ($action === 'publish_announcement' && ($isAdmin || $isRh)) {
         $title = trim((string) ($_POST['title'] ?? ''));
         $body = trim((string) ($_POST['body'] ?? ''));
-        $targetUserIds = array_values(array_unique(array_filter(array_map('intval', (array) ($_POST['target_user_ids'] ?? [])), static fn (int $id): bool => $id > 0)));
+        $targetUserIds = array_values(array_unique(array_filter(array_map('intval', (array) ($_POST['target_user_ids'] ?? [])), static function (int $id): bool { return $id > 0; })));
 
         if ($title === '' || $body === '') {
             $flashError = 'Preencha título e conteúdo para publicar o comunicado.';
@@ -604,7 +638,7 @@ if ($scheduleName !== '' && preg_match('/\bGAP\s*([1-3])\b/i', $scheduleName, $g
 }
 $scheduleWeekdays = array_filter(
     array_map('trim', explode(',', (string) ($scheduleContext['weekdays_mask'] ?? '1,2,3,4,5'))),
-    static fn (string $day): bool => preg_match('/^[1-7]$/', $day) === 1
+    static function (string $day): bool { return preg_match('/^[1-7]$/', $day) === 1; }
 );
 if ($scheduleWeekdays === []) {
     $scheduleWeekdays = ['1', '2', '3', '4', '5'];
@@ -691,8 +725,8 @@ $pendingVacationDays = (float) $pendingVacationDaysStmt->fetchColumn();
 
 $targetMinutes = (8 * 60) + 15;
 if (!empty($scheduleContext['start_time']) && !empty($scheduleContext['end_time'])) {
-    [$startHour, $startMinute] = array_map('intval', explode(':', (string) $scheduleContext['start_time']));
-    [$endHour, $endMinute] = array_map('intval', explode(':', (string) $scheduleContext['end_time']));
+    list($startHour, $startMinute) = array_map('intval', explode(':', (string) $scheduleContext['start_time']));
+    list($endHour, $endMinute) = array_map('intval', explode(':', (string) $scheduleContext['end_time']));
     $targetMinutes = (($endHour * 60) + $endMinute) - (($startHour * 60) + $startMinute) - (int) ($scheduleContext['break_minutes'] ?? 0);
     if ($targetMinutes < 0) {
         $targetMinutes = 0;
@@ -767,6 +801,22 @@ $displayedHourBankMinutes = (int) round($displayedHourBankHours * 60);
 $displayedHourBankAbsMinutes = abs($displayedHourBankMinutes);
 $formattedHourBank = sprintf('%s%02dh%02dm', $displayedHourBankMinutes < 0 ? '-' : '', intdiv($displayedHourBankAbsMinutes, 60), $displayedHourBankAbsMinutes % 60);
 
+
+$ofStmt = $pdo->query('SELECT o.id, o.order_number, o.planned_quantity, o.status, p.code AS product_code, p.description AS product_description FROM erp_production_orders o JOIN erp_products p ON p.id = o.product_id WHERE o.status IN ("Planeada", "Em curso") ORDER BY o.due_date IS NULL, o.due_date, o.id DESC LIMIT 25');
+$productionOrders = $ofStmt ? $ofStmt->fetchAll(PDO::FETCH_ASSOC) : [];
+$selectedOfId = (int) ($_GET['of_id'] ?? ($productionOrders[0]['id'] ?? 0));
+$selectedOf = null;
+foreach ($productionOrders as $ofRow) { if ((int)$ofRow['id'] === $selectedOfId) { $selectedOf = $ofRow; break; } }
+$ofDocuments = $ofOperations = [];
+if ($selectedOfId > 0) {
+    $docsStmt = $pdo->prepare('SELECT d.*, EXISTS(SELECT 1 FROM erp_production_order_document_acknowledgements a WHERE a.document_id=d.id AND a.user_id=?) AS acknowledged FROM erp_production_order_documents d WHERE d.production_order_id=? ORDER BY d.id');
+    $docsStmt->execute([$userId, $selectedOfId]);
+    $ofDocuments = $docsStmt->fetchAll(PDO::FETCH_ASSOC);
+    $opsStmt = $pdo->prepare('SELECT opo.id, opo.sequence_no, opo.status, op.code, op.name, op.standard_minutes, (SELECT id FROM erp_operation_time_entries te WHERE te.production_order_operation_id=opo.id AND te.user_id=? AND te.ended_at IS NULL LIMIT 1) AS open_entry_id FROM erp_production_order_operations opo JOIN erp_operations op ON op.id=opo.operation_id WHERE opo.production_order_id=? ORDER BY opo.sequence_no, opo.id');
+    $opsStmt->execute([$userId, $selectedOfId]);
+    $ofOperations = $opsStmt->fetchAll(PDO::FETCH_ASSOC);
+}
+
 $pageTitle = 'Shopfloor';
 $bodyClass = 'bg-light';
 require __DIR__ . '/partials/header.php';
@@ -831,6 +881,17 @@ require __DIR__ . '/partials/header.php';
     <?php endif; ?>
 
     <div class="<?= $pendingAnnouncementAck ? 'd-none' : '' ?>">
+
+    <div class="shopfloor-panel mb-4">
+        <div class="shopfloor-panel-header flex-wrap gap-2"><h2 class="h4 mb-0">Produção - escolher OF</h2><a href="erp.php" class="btn btn-outline-primary btn-sm">ERP / relatórios</a></div>
+        <form method="get" class="row g-2 align-items-end mb-3"><div class="col-md-8"><label class="form-label">Ordem de fabrico</label><select name="of_id" class="form-select" onchange="this.form.submit()"><?php foreach ($productionOrders as $of): ?><option value="<?= (int)$of['id'] ?>" <?= (int)$of['id']===$selectedOfId?'selected':'' ?>><?= h($of['order_number'].' · '.$of['product_code'].' · '.$of['product_description']) ?></option><?php endforeach; ?></select></div><div class="col-md-4"><button class="btn btn-primary w-100">Abrir OF</button></div></form>
+        <?php if ($selectedOf): ?>
+            <div class="alert alert-info small"><strong><?= h($selectedOf['order_number']) ?></strong> — Quantidade planeada: <?= h((string)$selectedOf['planned_quantity']) ?> · Estado: <?= h($selectedOf['status']) ?></div>
+            <h3 class="h6">Documentos obrigatórios</h3>
+            <div class="list-group mb-3"><?php if (!$ofDocuments): ?><div class="list-group-item text-secondary">Sem documentos anexados.</div><?php endif; foreach ($ofDocuments as $doc): ?><div class="list-group-item d-flex justify-content-between gap-2"><div><strong><?= h($doc['title']) ?></strong><?php if (!empty($doc['document_url'])): ?> · <a target="_blank" href="<?= h($doc['document_url']) ?>">visualizar</a><?php endif; ?><div class="small text-secondary"><?= nl2br(h((string)$doc['body'])) ?></div></div><form method="post"><input type="hidden" name="action" value="ack_of_document"><input type="hidden" name="document_id" value="<?= (int)$doc['id'] ?>"><button class="btn btn-sm <?= (int)$doc['acknowledged']===1?'btn-success':'btn-outline-success' ?>"><?= (int)$doc['acknowledged']===1?'Confirmado':'Tomei conhecimento' ?></button></form></div><?php endforeach; ?></div>
+            <h3 class="h6">Operações</h3><div class="table-responsive"><table class="table table-sm shopfloor-table"><thead><tr><th>Seq.</th><th>Operação</th><th>Estado</th><th>Ação</th></tr></thead><tbody><?php foreach ($ofOperations as $op): ?><tr><td><?= (int)$op['sequence_no'] ?></td><td><?= h($op['code'].' - '.$op['name']) ?></td><td><?= h($op['status']) ?></td><td><?php if ((int)($op['open_entry_id'] ?? 0)>0): ?><form method="post" class="row g-1"><input type="hidden" name="action" value="stop_of_operation"><input type="hidden" name="entry_id" value="<?= (int)$op['open_entry_id'] ?>"><div class="col"><input class="form-control form-control-sm" type="number" step="0.001" name="quantity_good" placeholder="Qtd. OK"></div><div class="col"><input class="form-control form-control-sm" type="number" step="0.001" name="quantity_rejected" placeholder="Refugo"></div><div class="col"><button class="btn btn-danger btn-sm w-100">Parar</button></div></form><?php else: ?><form method="post"><input type="hidden" name="action" value="start_of_operation"><input type="hidden" name="po_operation_id" value="<?= (int)$op['id'] ?>"><button class="btn btn-success btn-sm">Arrancar</button></form><?php endif; ?></td></tr><?php endforeach; ?></tbody></table></div>
+        <?php endif; ?>
+    </div>
     <div class="shopfloor-panel mb-4">
         <div class="shopfloor-panel-header flex-wrap gap-2">
             <h2 class="h4 mb-0">Pausas e paragens</h2>

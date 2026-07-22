@@ -14,7 +14,7 @@ if (!function_exists('is_logged_in')) {
 }
 
 if (!function_exists('current_user')) {
-    function current_user(?PDO $pdo = null): ?array
+    function current_user( $pdo = null)
     {
         if (!is_logged_in()) {
             return null;
@@ -30,7 +30,7 @@ if (!function_exists('current_user')) {
 }
 
 if (!function_exists('require_login')) {
-    function require_login(): void
+    function require_login()
     {
         if (!is_logged_in()) {
             redirect('login.php');
@@ -46,7 +46,7 @@ if (!function_exists('require_login')) {
 }
 
 if (!function_exists('require_admin')) {
-    function require_admin(): void
+    function require_admin()
     {
         require_login();
         $user = current_user(db());

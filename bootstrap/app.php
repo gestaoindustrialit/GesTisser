@@ -24,6 +24,7 @@ require_once __DIR__ . '/db.php';
 require_once __DIR__ . '/helpers.php';
 require_once __DIR__ . '/auth.php';
 
+require_once dirname(__DIR__) . '/app/routes.php';
 require_once dirname(__DIR__) . '/app/Services/RateLimiter.php';
 require_once dirname(__DIR__) . '/app/Services/AuditLog.php';
 require_once dirname(__DIR__) . '/app/Services/UploadService.php';

@@ -22,16 +22,20 @@ function taskforce_evaluation_period_label(string $period): string
 
 function taskforce_evaluation_period_sort(string $period): int
 {
-    return match ($period) {
-        'jan_abr' => 1,
-        'mai_ago' => 2,
-        'set_dez' => 3,
-        default => 999,
-    };
+    if ($period === 'jan_abr') {
+        return 1;
+    }
+    if ($period === 'mai_ago') {
+        return 2;
+    }
+    if ($period === 'set_dez') {
+        return 3;
+    }
+    return 999;
 }
 
 
-function taskforce_evaluation_period_bounds(int $year, string $period): ?array
+function taskforce_evaluation_period_bounds(int $year, string $period)
 {
     $map = [
         'jan_abr' => ['01-01', '04-30'],
@@ -43,7 +47,7 @@ function taskforce_evaluation_period_bounds(int $year, string $period): ?array
         return null;
     }
 
-    [$startSuffix, $endSuffix] = $map[$period];
+    list($startSuffix, $endSuffix) = $map[$period];
     return [
         'start_date' => sprintf('%04d-%s', $year, $startSuffix),
         'end_date' => sprintf('%04d-%s', $year, $endSuffix),
@@ -175,7 +179,7 @@ function taskforce_normalize_rule_config(array $config, string $profileKey): arr
     return $normalized;
 }
 
-function taskforce_fetch_evaluation_employee(PDO $pdo, int $userId): ?array
+function taskforce_fetch_evaluation_employee(PDO $pdo, int $userId)
 {
     $stmt = $pdo->prepare(
         'SELECT u.id, u.user_number, u.name, u.email, u.department_id, u.award_profile, u.award_eligible,
@@ -193,7 +197,7 @@ function taskforce_fetch_evaluation_employee(PDO $pdo, int $userId): ?array
     return $row ?: null;
 }
 
-function taskforce_resolve_evaluation_rule(PDO $pdo, int $awardYear, string $profileKey, ?int $departmentId): array
+function taskforce_resolve_evaluation_rule(PDO $pdo, int $awardYear, string $profileKey, $departmentId): array
 {
     $profileKey = array_key_exists($profileKey, taskforce_evaluation_profiles()) ? $profileKey : 'operador';
     $departmentGroupId = null;
@@ -311,7 +315,7 @@ function taskforce_fetch_year_evaluations(PDO $pdo, int $userId, int $year): arr
     return $rows;
 }
 
-function taskforce_calculate_year_summary(PDO $pdo, int $userId, int $year, array $ruleConfig, int $finalAbsenceCount = 0, ?int $editingEvaluationId = null, ?array $editingValues = null): array
+function taskforce_calculate_year_summary(PDO $pdo, int $userId, int $year, array $ruleConfig, int $finalAbsenceCount = 0, $editingEvaluationId = null, $editingValues = null): array
 {
     $rows = taskforce_fetch_year_evaluations($pdo, $userId, $year);
 
@@ -401,7 +405,7 @@ function taskforce_build_evaluation_mail_html(string $employeeName, string $lead
 }
 
 if (!function_exists('taskforce_store_generated_pdf_on_server')) {
-    function taskforce_store_generated_pdf_on_server(string $pdfContent, string $fileName, string $scope = 'hr-evaluations'): ?array
+    function taskforce_store_generated_pdf_on_server(string $pdfContent, string $fileName, string $scope = 'hr-evaluations')
     {
         if ($pdfContent === '' || strncmp($pdfContent, '%PDF', 4) !== 0) {
             return null;
@@ -484,7 +488,7 @@ function taskforce_can_use_mpdf_engine(): bool
     return class_exists('\\Mpdf\\Mpdf');
 }
 
-function taskforce_generate_single_evaluation_fpdf_pdf(array $reportData): ?string
+function taskforce_generate_single_evaluation_fpdf_pdf(array $reportData)
 {
     if (!class_exists('FPDF')) {
         return null;
@@ -580,7 +584,7 @@ function taskforce_generate_single_evaluation_fpdf_pdf(array $reportData): ?stri
     }
 }
 
-function taskforce_send_evaluation_pdf(PDO $pdo, array $employee, array $evaluation, ?array $closure, int $year, string $periodLabel, ?string $sentBy = null): array
+function taskforce_send_evaluation_pdf(PDO $pdo, array $employee, array $evaluation, $closure, int $year, string $periodLabel, $sentBy = null): array
 {
     $recipientEmail = trim((string) ($employee['email'] ?? ''));
     if ($recipientEmail === '') {
@@ -816,7 +820,7 @@ function taskforce_send_evaluation_pdf(PDO $pdo, array $employee, array $evaluat
         : ['ok' => false, 'message' => 'Não foi possível enviar o email com o PDF da avaliação.'];
 }
 
-function taskforce_send_evaluation_history_pdf(PDO $pdo, array $employee, int $year, array $evaluations, array $metrics, string $predominantRule, ?array $closure, ?string $sentBy = null): array
+function taskforce_send_evaluation_history_pdf(PDO $pdo, array $employee, int $year, array $evaluations, array $metrics, string $predominantRule, $closure, $sentBy = null): array
 {
     $recipientEmail = trim((string) ($employee['email'] ?? ''));
     if ($recipientEmail === '') {
@@ -966,7 +970,7 @@ function taskforce_send_evaluation_history_pdf(PDO $pdo, array $employee, int $y
         : ['ok' => false, 'message' => 'Não foi possível enviar o email com o PDF do histórico.'];
 }
 
-function taskforce_generate_evaluation_history_fpdf_pdf(array $reportData): ?string
+function taskforce_generate_evaluation_history_fpdf_pdf(array $reportData)
 {
     if (!class_exists('FPDF')) {
         return null;
@@ -1037,12 +1041,12 @@ function taskforce_generate_evaluation_history_fpdf_pdf(array $reportData): ?str
         ['Bónus final', taskforce_money((float) ($closure['final_bonus_value'] ?? 0))],
         ['Total anual', taskforce_money((float) ($closure['year_total_with_bonus'] ?? ($metrics['sum_period_total'] ?? 0)))],
     ];
-    foreach ($metricBlocks as [$label, $value]) {
+    foreach ($metricBlocks as list($label, $value)) {
         $pdf->SetFont('Arial', '', 9);
         $pdf->Cell($metricWidth, 6, $toPdfText($label), 1, 0, 'L', true);
     }
     $pdf->Ln();
-    foreach ($metricBlocks as [, $value]) {
+    foreach ($metricBlocks as list($_unusedMetricLabel, $value)) {
         $pdf->SetFont('Arial', 'B', 12);
         $pdf->Cell($metricWidth, 9, $toPdfText($value), 1, 0, 'L');
     }
@@ -1055,7 +1059,7 @@ function taskforce_generate_evaluation_history_fpdf_pdf(array $reportData): ?str
         ['Período', 25], ['Entrevista', 20], ['Performance', 25], ['Comportamento', 25],
         ['Pontualidade', 24], ['Absentismo', 22], ['Total', 18], ['Obs. RH', 31],
     ];
-    foreach ($headers as [$label, $w]) {
+    foreach ($headers as list($label, $w)) {
         $pdf->Cell($w, 7, $toPdfText($label), 1, 0, 'L', true);
     }
     $pdf->Ln();
@@ -1109,7 +1113,7 @@ function taskforce_generate_evaluation_history_layout_pdf(array $reportData): st
     }
     $canUseTtf = function_exists('imagettftext') && is_file($fontPath);
     $layoutScale = $canUseTtf ? 1.0 : 0.5;
-    $scale = static fn(float $value): int => (int) round($value * $layoutScale);
+    $scale = static function (float $value) use ($layoutScale): int { return (int) round($value * $layoutScale); };
     $width = $scale(1240);
     $height = $scale(1754);
 
@@ -1128,7 +1132,7 @@ function taskforce_generate_evaluation_history_layout_pdf(array $reportData): st
         $converted = @iconv('UTF-8', 'ASCII//TRANSLIT//IGNORE', $value);
         return $converted !== false ? $converted : $value;
     };
-    $drawText = static function ($image, int $size, int $x, int $y, int $color, string $content) use ($canUseTtf, $fontPath, $toRenderableText): void {
+    $drawText = static function ($image, int $size, int $x, int $y, int $color, string $content) use ($canUseTtf, $fontPath, $toRenderableText) {
         if ($canUseTtf) {
             imagettftext($image, $size, 0, $x, $y, $color, $fontPath, $content);
             return;
@@ -1159,7 +1163,7 @@ function taskforce_generate_evaluation_history_layout_pdf(array $reportData): st
     ];
     $cardWidth = $scale(270);
     $x = $scale(60);
-    foreach ($metricCards as [$label, $value]) {
+    foreach ($metricCards as list($label, $value)) {
         imagefilledrectangle($image, $x, $y, $x + $cardWidth, $y + $scale(105), $cardBg);
         imagerectangle($image, $x, $y, $x + $cardWidth, $y + $scale(105), $border);
         $drawText($image, $scale(12), $x + $scale(14), $y + $scale(30), $muted, $label);
@@ -1180,7 +1184,7 @@ function taskforce_generate_evaluation_history_layout_pdf(array $reportData): st
         ['Total', $scale(120)],
     ];
     $x = $scale(60);
-    foreach ($columns as [$label, $w]) {
+    foreach ($columns as list($label, $w)) {
         imagefilledrectangle($image, $x, $y, $x + $w, $y + $scale(34), $cardBg);
         imagerectangle($image, $x, $y, $x + $w, $y + $scale(34), $border);
         $drawText($image, $scale(12), $x + $scale(8), $y + $scale(22), $text, $label);
@@ -1203,7 +1207,7 @@ function taskforce_generate_evaluation_history_layout_pdf(array $reportData): st
         ];
         $x = $scale(60);
         foreach ($columns as $idx => $column) {
-            [, $w] = $column;
+            $w = $column[1];
             imagerectangle($image, $x, $y, $x + $w, $y + $scale(30), $border);
             $txt = function_exists('mb_substr') ? mb_substr((string) $cells[$idx], 0, 28) : substr((string) $cells[$idx], 0, 28);
             $drawText($image, $scale(11), $x + $scale(7), $y + $scale(20), $text, $txt);

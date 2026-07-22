@@ -297,7 +297,7 @@ $sql .= ' ORDER BY e.user_name COLLATE NOCASE ASC, e.award_year DESC';
 $listStmt = $pdo->prepare($sql);
 $listStmt->execute($params);
 $rows = $listStmt->fetchAll(PDO::FETCH_ASSOC);
-usort($rows, static fn(array $a, array $b): int => taskforce_evaluation_period_sort((string) $a['award_period']) <=> taskforce_evaluation_period_sort((string) $b['award_period']));
+usort($rows, static function (array $a, array $b): int { return taskforce_evaluation_period_sort((string) $a['award_period']) <=> taskforce_evaluation_period_sort((string) $b['award_period']); });
 
 $closureFormData = [
     'final_absence_count' => max(0, (int) ($formData['final_absence_count'] ?? 0)),

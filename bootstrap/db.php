@@ -40,7 +40,7 @@ if (!function_exists('db')) {
 }
 
 if (!function_exists('taskforce_ensure_security_tables')) {
-    function taskforce_ensure_security_tables(PDO $pdo): void
+    function taskforce_ensure_security_tables(PDO $pdo)
     {
         static $ran = false;
         if ($ran) {

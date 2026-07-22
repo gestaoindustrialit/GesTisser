@@ -16,7 +16,7 @@ final class RateLimiter
         }
     }
 
-    public static function recordLoginAttempt(PDO $pdo, string $identifier, string $ipAddress, bool $success): void
+    public static function recordLoginAttempt(PDO $pdo, string $identifier, string $ipAddress, bool $success)
     {
         try {
             $stmt = $pdo->prepare('INSERT INTO login_attempts(identifier, ip_address, was_success) VALUES (?, ?, ?)');
