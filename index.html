@@ -1,0 +1,66 @@
+<!doctype html>
+<html lang="pt">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>GesTisser ERP & RH</title>
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <header class="hero">
+      <div class="brand">
+        <span class="logo">GT</span>
+        <div>
+          <p class="eyebrow">Gestão Integrada Tisser</p>
+          <h1>ERP, Produção e Recursos Humanos</h1>
+        </div>
+      </div>
+      <div class="operator-card">
+        <span>Operador</span>
+        <strong>Patrícia</strong>
+      </div>
+    </header>
+
+    <main>
+      <section class="module-grid" aria-label="Módulos principais">
+        <article class="module rh">
+          <h2>Recursos Humanos</h2>
+          <button data-view="presencas">Presenças</button>
+          <button data-view="ausencias">Comunicação de ausências</button>
+          <button data-view="colaboradores">Colaboradores</button>
+          <button data-view="equipas">Equipas</button>
+        </article>
+
+        <article class="module erp">
+          <h2>ERP Industrial</h2>
+          <button data-view="clientes">Clientes</button>
+          <button data-view="artigos">Artigos</button>
+          <button data-view="ofs">Ordens de fabrico</button>
+          <button data-view="expedicao">Expedição</button>
+          <button data-view="operacoes">Operações</button>
+        </article>
+
+        <article class="module shopfloor">
+          <h2>Shopfloor</h2>
+          <p>Selecione a operação e inicie a OF diretamente no posto.</p>
+          <label for="operationSelect">Operação</label>
+          <select id="operationSelect"></select>
+          <button class="primary" id="openShopfloor" data-view="shopfloor">Abrir vista shopfloor</button>
+        </article>
+      </section>
+
+      <section class="workspace" aria-live="polite">
+        <div class="workspace-header">
+          <div>
+            <p class="eyebrow" id="viewType">ERP</p>
+            <h2 id="viewTitle">Clientes</h2>
+          </div>
+          <button id="printButton">Imprimir</button>
+        </div>
+        <div id="content"></div>
+      </section>
+    </main>
+
+    <script src="app.js"></script>
+  </body>
+</html>
