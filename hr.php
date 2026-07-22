@@ -41,7 +41,7 @@ function column_exists(PDO $pdo, string $tableName, string $columnName): bool
     return false;
 }
 
-function parse_hhmm_to_minutes(string $value): ?int
+function parse_hhmm_to_minutes(string $value)
 {
     if (!preg_match('/^(\d{1,2}):(\d{2})$/', trim($value), $matches)) {
         return null;

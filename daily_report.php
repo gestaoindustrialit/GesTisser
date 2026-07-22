@@ -63,12 +63,12 @@ foreach ($recurringTasks as $task) {
     $tasks[] = $task;
 }
 
-usort($tasks, static fn(array $a, array $b): int => strcmp((string) $b['updated_at'], (string) $a['updated_at']));
+usort($tasks, static function (array $a, array $b): int { return strcmp((string) $b['updated_at'], (string) $a['updated_at']); });
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'send_daily_report') {
     $selectedTaskIds = array_map('strval', $_POST['task_ids'] ?? []);
     $summaryText = trim($_POST['summary'] ?? '');
-    $reportTasks = array_values(array_filter($tasks, static fn($task) => in_array((string) ($task['entry_key'] ?? ''), $selectedTaskIds, true)));
+    $reportTasks = array_values(array_filter($tasks, static function ($task) use ($selectedTaskIds) { return in_array((string) ($task['entry_key'] ?? ''), $selectedTaskIds, true); }));
 
     if (!$reportTasks) {
         $_SESSION['flash_error'] = 'Selecione pelo menos uma tarefa alterada.';
@@ -131,7 +131,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'send_
     $stmt->execute([$userId, $selectedDate, $summaryText, $htmlContent]);
     $reportId = (int) $pdo->lastInsertId();
 
-    $teamIds = array_values(array_unique(array_map(static fn($task) => (int) $task['team_id'], $reportTasks)));
+    $teamIds = array_values(array_unique(array_map(static function ($task) { return (int) $task['team_id']; }, $reportTasks)));
     $emails = [];
     if ($teamIds) {
         $placeholders = implode(',', array_fill(0, count($teamIds), '?'));
