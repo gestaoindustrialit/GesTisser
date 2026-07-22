@@ -1,3 +1,4 @@
 <?php
-// Compatibilidade: alguns ambientes/documentação usam installer.php.
-require __DIR__ . '/install.php';
+// Compatibility entry point for deployments that use /installer.php.
+header('Location: install.php', true, 302);
+exit;

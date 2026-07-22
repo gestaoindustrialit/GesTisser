@@ -5,11 +5,13 @@ $hasSqlite = extension_loaded('pdo_sqlite');
 $error = null;
 $success = null;
 
-function installer_table_exists(PDO $pdo, string $tableName): bool
-{
-    $stmt = $pdo->prepare("SELECT name FROM sqlite_master WHERE type = 'table' AND name = ? LIMIT 1");
-    $stmt->execute([$tableName]);
-    return (bool) $stmt->fetchColumn();
+if (!function_exists('installer_table_exists')) {
+    function installer_table_exists(PDO $pdo, string $tableName): bool
+    {
+        $stmt = $pdo->prepare("SELECT name FROM sqlite_master WHERE type = 'table' AND name = ? LIMIT 1");
+        $stmt->execute([$tableName]);
+        return (bool) $stmt->fetchColumn();
+    }
 }
 
 $requiredErpTables = [
