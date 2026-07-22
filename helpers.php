@@ -436,20 +436,24 @@ function record_ticket_status_history(PDO $pdo, int $ticketId, $fromStatus, stri
 
 function task_badge_class(string $status): string
 {
-    return match ($status) {
-        'in_progress' => 'warning',
-        'done' => 'success',
-        default => 'secondary',
-    };
+    if ($status === 'in_progress') {
+        return 'warning';
+    }
+    if ($status === 'done') {
+        return 'success';
+    }
+    return 'secondary';
 }
 
 function status_label(string $status): string
 {
-    return match ($status) {
-        'in_progress' => 'Em Progresso',
-        'done' => 'Concluída',
-        default => 'Por Fazer',
-    };
+    if ($status === 'in_progress') {
+        return 'Em Progresso';
+    }
+    if ($status === 'done') {
+        return 'Concluída';
+    }
+    return 'Por Fazer';
 }
 
 
@@ -783,16 +787,8 @@ function deliver_report(string $email, string $subject, string $body, $htmlBody 
 
 function taskforce_weekday_label_pt(int $weekday): string
 {
-    return match ($weekday) {
-        1 => 'seg',
-        2 => 'ter',
-        3 => 'qua',
-        4 => 'qui',
-        5 => 'sex',
-        6 => 'sáb',
-        7 => 'dom',
-        default => '',
-    };
+    $labels = array(1 => 'seg', 2 => 'ter', 3 => 'qua', 4 => 'qui', 5 => 'sex', 6 => 'sáb', 7 => 'dom');
+    return isset($labels[$weekday]) ? $labels[$weekday] : '';
 }
 
 function taskforce_format_minutes_signed(int $minutes): string
@@ -954,12 +950,14 @@ function taskforce_generate_monthly_layout_pdf(array $reportData): string
     $logoPath = (string) ($reportData['logo_path'] ?? '');
     if ($logoPath !== '' && is_file($logoPath)) {
         $logoExt = strtolower(pathinfo($logoPath, PATHINFO_EXTENSION));
-        $logoImage = match ($logoExt) {
-            'jpg', 'jpeg' => @imagecreatefromjpeg($logoPath),
-            'png' => @imagecreatefrompng($logoPath),
-            'webp' => function_exists('imagecreatefromwebp') ? @imagecreatefromwebp($logoPath) : false,
-            default => false,
-        };
+        $logoImage = false;
+        if ($logoExt === 'jpg' || $logoExt === 'jpeg') {
+            $logoImage = @imagecreatefromjpeg($logoPath);
+        } elseif ($logoExt === 'png') {
+            $logoImage = @imagecreatefrompng($logoPath);
+        } elseif ($logoExt === 'webp' && function_exists('imagecreatefromwebp')) {
+            $logoImage = @imagecreatefromwebp($logoPath);
+        }
         if ($logoImage !== false) {
             $maxTargetW = $scale(220);
             $maxTargetH = $scale(90);
@@ -1599,12 +1597,14 @@ function taskforce_generate_monthly_attendance_report(PDO $pdo, array $user, Dat
         && function_exists('imagepng')
     ) {
         $logoExt = strtolower((string) pathinfo($logoFilePath, PATHINFO_EXTENSION));
-        $sourceImage = match ($logoExt) {
-            'jpg', 'jpeg' => function_exists('imagecreatefromjpeg') ? @imagecreatefromjpeg($logoFilePath) : false,
-            'png' => function_exists('imagecreatefrompng') ? @imagecreatefrompng($logoFilePath) : false,
-            'webp' => function_exists('imagecreatefromwebp') ? @imagecreatefromwebp($logoFilePath) : false,
-            default => false,
-        };
+        $sourceImage = false;
+        if (($logoExt === 'jpg' || $logoExt === 'jpeg') && function_exists('imagecreatefromjpeg')) {
+            $sourceImage = @imagecreatefromjpeg($logoFilePath);
+        } elseif ($logoExt === 'png' && function_exists('imagecreatefrompng')) {
+            $sourceImage = @imagecreatefrompng($logoFilePath);
+        } elseif ($logoExt === 'webp' && function_exists('imagecreatefromwebp')) {
+            $sourceImage = @imagecreatefromwebp($logoFilePath);
+        }
         if ($sourceImage !== false) {
             $sourceW = max(1, (int) imagesx($sourceImage));
             $sourceH = max(1, (int) imagesy($sourceImage));

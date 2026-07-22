@@ -22,12 +22,16 @@ function taskforce_evaluation_period_label(string $period): string
 
 function taskforce_evaluation_period_sort(string $period): int
 {
-    return match ($period) {
-        'jan_abr' => 1,
-        'mai_ago' => 2,
-        'set_dez' => 3,
-        default => 999,
-    };
+    if ($period === 'jan_abr') {
+        return 1;
+    }
+    if ($period === 'mai_ago') {
+        return 2;
+    }
+    if ($period === 'set_dez') {
+        return 3;
+    }
+    return 999;
 }
 
 

@@ -235,12 +235,16 @@ function parse_uploaded_user_rows(array $file): array
     $originalName = (string) ($file['name'] ?? '');
     $extension = strtolower(pathinfo($originalName, PATHINFO_EXTENSION));
 
-    return match ($extension) {
-        'csv' => parse_csv_rows($tmpPath),
-        'xlsx' => parse_xlsx_rows($tmpPath),
-        'xls', 'xml' => parse_spreadsheetml_rows($tmpPath),
-        default => throw new RuntimeException('Formato não suportado. Use .xlsx, .xls (XML 2003) ou .csv.'),
-    };
+    if ($extension === 'csv') {
+        return parse_csv_rows($tmpPath);
+    }
+    if ($extension === 'xlsx') {
+        return parse_xlsx_rows($tmpPath);
+    }
+    if ($extension === 'xls' || $extension === 'xml') {
+        return parse_spreadsheetml_rows($tmpPath);
+    }
+    throw new RuntimeException('Formato não suportado. Use .xlsx, .xls (XML 2003) ou .csv.');
 }
 
 function parse_binary_flag(string $value): int
