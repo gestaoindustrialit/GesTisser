@@ -187,11 +187,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $flashError = 'Indique um email válido para o remetente.';
         } elseif (count($ticketStatuses) === 0) {
             $flashError = 'Defina pelo menos um estado para os tickets.';
-        } elseif (!array_filter($ticketStatuses, static fn (array $status): bool => empty($status['is_completed']))) {
+        } elseif (!array_filter($ticketStatuses, static function (array $status): bool { return empty($status['is_completed']); })) {
             $flashError = 'Defina pelo menos um estado não concluído para os tickets.';
-        } elseif (!array_filter($recurrenceCatalog, static fn (array $entry): bool => !empty($entry['enabled']))) {
+        } elseif (!array_filter($recurrenceCatalog, static function (array $entry): bool { return !empty($entry['enabled']); })) {
             $flashError = 'Ative pelo menos um tipo de recorrência para tarefas recorrentes.';
-        } elseif (!array_filter($pendingDepartmentCatalog, static fn (array $entry): bool => !empty($entry['enabled']))) {
+        } elseif (!array_filter($pendingDepartmentCatalog, static function (array $entry): bool { return !empty($entry['enabled']); })) {
             $flashError = 'Ative pelo menos um departamento para pendentes no dashboard.';
         } else {
             set_app_setting($pdo, 'company_name', $companyName);

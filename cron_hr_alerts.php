@@ -23,13 +23,13 @@ function normalize_cron_monthly_day($value): int
     return $day;
 }
 
-function cron_log_line(string $message): void
+function cron_log_line(string $message)
 {
     $line = '[' . date('Y-m-d H:i:s') . '] ' . $message . PHP_EOL;
     @file_put_contents(__DIR__ . '/reports_sent.log', $line, FILE_APPEND);
 }
 
-function log_hr_alert_cron_event(PDO $pdo, string $eventType, string $description, array $context = []): void
+function log_hr_alert_cron_event(PDO $pdo, string $eventType, string $description, array $context = [])
 {
     try {
         log_app_event($pdo, null, $eventType, $description, $context);
@@ -69,7 +69,7 @@ function parse_selected_user_ids(string $raw): array
     }
 
     $ids = array_map('intval', array_map('trim', explode(',', $raw)));
-    $ids = array_values(array_filter($ids, static fn(int $id): bool => $id > 0));
+    $ids = array_values(array_filter($ids, static function (int $id): bool { return $id > 0; }));
 
     return array_values(array_unique($ids));
 }
@@ -367,7 +367,7 @@ try {
         $selectedUsersMissingDelivery = fetch_selected_users_missing_delivery_requirements($pdo, $selectedUserIds);
         if ($selectedUsersMissingDelivery) {
             $missingLabels = array_map(
-                static fn(array $user): string => ((string) ($user['name'] ?? 'Sem nome')) . ' (#' . (int) ($user['id'] ?? 0) . ')',
+                static function (array $user): string { return ((string) ($user['name'] ?? 'Sem nome')) . ' (#' . (int) ($user['id'] ?? 0) . ')'; },
                 $selectedUsersMissingDelivery
             );
 

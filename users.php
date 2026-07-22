@@ -8,7 +8,7 @@ if (!is_admin($pdo, $userId)) {
     exit('Acesso reservado a administradores.');
 }
 
-$accessProfileOptions = ['Utilizador', 'Chefias', 'RH', 'Administração'];
+$accessProfileOptions = ['Utilizador', 'Produção', 'Chefias', 'RH', 'Administração'];
 $userTypeOptions = ['Funcionário', 'Administrador', 'Trabalhador Externo', 'Prestador'];
 $timezoneOptions = ['Europe/Lisbon', 'Europe/Madrid', 'UTC'];
 
@@ -25,7 +25,7 @@ $flashSuccess = null;
 $flashError = null;
 $bulkImportSummary = null;
 
-function find_user_conflict(PDO $pdo, string $field, string $value, ?int $excludeUserId = null): ?array
+function find_user_conflict(PDO $pdo, string $field, string $value, $excludeUserId = null)
 {
     $normalizedValue = trim($value);
     if ($normalizedValue === '' || !in_array($field, ['email', 'username'], true)) {
@@ -47,7 +47,7 @@ function find_user_conflict(PDO $pdo, string $field, string $value, ?int $exclud
     return $row ?: null;
 }
 
-function build_user_conflict_message(string $field, string $value, ?array $existingUser = null): string
+function build_user_conflict_message(string $field, string $value, $existingUser = null): string
 {
     $label = $field === 'email' ? 'email' : 'utilizador';
     $message = 'Não foi possível guardar o utilizador: o ' . $label . ' “' . htmlspecialchars($value, ENT_QUOTES, 'UTF-8') . '” já está em uso';
@@ -121,7 +121,7 @@ function parse_csv_rows(string $filePath): array
 
     $rows = [];
     while (($row = fgetcsv($handle, 0, ',', '"', '\\')) !== false) {
-        $rows[] = array_map(static fn ($value) => trim((string) $value), $row);
+        $rows[] = array_map(static function ($value) { return trim((string) $value); }, $row);
     }
     fclose($handle);
 
@@ -235,12 +235,16 @@ function parse_uploaded_user_rows(array $file): array
     $originalName = (string) ($file['name'] ?? '');
     $extension = strtolower(pathinfo($originalName, PATHINFO_EXTENSION));
 
-    return match ($extension) {
-        'csv' => parse_csv_rows($tmpPath),
-        'xlsx' => parse_xlsx_rows($tmpPath),
-        'xls', 'xml' => parse_spreadsheetml_rows($tmpPath),
-        default => throw new RuntimeException('Formato não suportado. Use .xlsx, .xls (XML 2003) ou .csv.'),
-    };
+    if ($extension === 'csv') {
+        return parse_csv_rows($tmpPath);
+    }
+    if ($extension === 'xlsx') {
+        return parse_xlsx_rows($tmpPath);
+    }
+    if ($extension === 'xls' || $extension === 'xml') {
+        return parse_spreadsheetml_rows($tmpPath);
+    }
+    throw new RuntimeException('Formato não suportado. Use .xlsx, .xls (XML 2003) ou .csv.');
 }
 
 function parse_binary_flag(string $value): int
@@ -267,7 +271,7 @@ function get_bulk_value(array $rowData, array $headers, string $default = ''): s
     return $default;
 }
 
-function output_users_template(): void
+function output_users_template()
 {
     $content = <<<'XML'
 <?xml version="1.0"?>
@@ -932,7 +936,7 @@ $perPageRaw = $_GET['per_page'] ?? '15';
 $perPage = '15';
 if (is_string($perPageRaw) || is_numeric($perPageRaw)) {
     $perPageCandidate = is_string($perPageRaw) ? strtolower(trim($perPageRaw)) : (string) (int) $perPageRaw;
-    if (in_array($perPageCandidate, array_map(static fn ($option) => (string) $option, $allowedPerPageOptions), true)) {
+    if (in_array($perPageCandidate, array_map(static function ($option) { return (string) $option; }, $allowedPerPageOptions), true)) {
         $perPage = $perPageCandidate;
     }
 }
@@ -1201,7 +1205,7 @@ require __DIR__ . '/partials/header.php';
                         $pageQueryParams['page'] = (string) $i;
                         $pageQueryString = http_build_query(array_filter(
                             $pageQueryParams,
-                            static fn ($value) => $value !== ''
+                            static function ($value) { return $value !== ''; }
                         ));
                         ?>
                         <li class="page-item <?= $i === $page ? 'active' : '' ?>"><a class="page-link" href="users.php?<?= h($pageQueryString) ?>"><?= $i ?></a></li>

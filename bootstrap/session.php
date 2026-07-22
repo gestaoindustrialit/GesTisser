@@ -7,7 +7,7 @@ if (defined('TASKFORCE_BOOTSTRAP_SESSION_LOADED')) {
 define('TASKFORCE_BOOTSTRAP_SESSION_LOADED', true);
 
 if (!function_exists('taskforce_start_session')) {
-    function taskforce_start_session(): void
+    function taskforce_start_session()
     {
         if (session_status() === PHP_SESSION_ACTIVE) {
             return;

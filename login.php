@@ -16,7 +16,7 @@ $loginMode = 'identify';
 $pendingUser = null;
 $requestIp = (string) ($_SERVER['REMOTE_ADDR'] ?? '0.0.0.0');
 
-function safe_log_app_event(PDO $pdo, ?int $userId, string $eventType, string $description, array $context = []): void
+function safe_log_app_event(PDO $pdo, $userId, string $eventType, string $description, array $context = [])
 {
     try {
         log_app_event($pdo, $userId, $eventType, $description, $context);

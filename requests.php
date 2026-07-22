@@ -12,7 +12,7 @@ if (!function_exists('is_excel_file_path')) {
 }
 
 if (!function_exists('absolute_url_for_path')) {
-    function absolute_url_for_path(string $relativePath): ?string
+    function absolute_url_for_path(string $relativePath)
     {
         $host = $_SERVER['HTTP_HOST'] ?? '';
         if ($host === '') {
@@ -34,7 +34,7 @@ if (!function_exists('absolute_url_for_path')) {
 }
 
 if (!function_exists('google_docs_excel_preview_url')) {
-    function google_docs_excel_preview_url(string $relativePath): ?string
+    function google_docs_excel_preview_url(string $relativePath)
     {
         if (!is_excel_file_path($relativePath)) {
             return null;
@@ -488,8 +488,8 @@ foreach ($ticketStatuses as $statusConfig) {
     }
 }
 
-$quotedCompletedStatuses = array_map(static fn (string $value): string => $pdo->quote($value), $completedStatusValues);
-$quotedActiveStatuses = array_map(static fn (string $value): string => $pdo->quote($value), $activeStatusValues);
+$quotedCompletedStatuses = array_map(static function (string $value) use ($pdo): string { return $pdo->quote($value); }, $completedStatusValues);
+$quotedActiveStatuses = array_map(static function (string $value) use ($pdo): string { return $pdo->quote($value); }, $activeStatusValues);
 $completedStatusSql = count($quotedCompletedStatuses) > 0 ? implode(',', $quotedCompletedStatuses) : "''";
 $activeStatusSql = count($quotedActiveStatuses) > 0 ? implode(',', $quotedActiveStatuses) : "''";
 

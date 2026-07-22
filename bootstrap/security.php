@@ -7,7 +7,7 @@ if (defined('TASKFORCE_BOOTSTRAP_SECURITY_LOADED')) {
 define('TASKFORCE_BOOTSTRAP_SECURITY_LOADED', true);
 
 if (!function_exists('taskforce_apply_security_headers')) {
-    function taskforce_apply_security_headers(): void
+    function taskforce_apply_security_headers()
     {
         if (PHP_SAPI === 'cli' || headers_sent()) {
             return;
@@ -22,7 +22,7 @@ if (!function_exists('taskforce_apply_security_headers')) {
 }
 
 if (!function_exists('taskforce_security_boot')) {
-    function taskforce_security_boot(): void
+    function taskforce_security_boot()
     {
         ini_set('display_errors', app_config('debug') ? '1' : '0');
         ini_set('log_errors', '1');

@@ -8,7 +8,7 @@ if (!can_access_hr_module($pdo, $userId)) {
     exit('Acesso reservado a administradores e equipa RH.');
 }
 
-function parse_hms_to_seconds(string $value): ?int
+function parse_hms_to_seconds(string $value)
 {
     $value = trim($value);
     if (preg_match('/^(-)?(\d{1,3}):(\d{2})$/', $value, $matches)) {
@@ -80,7 +80,7 @@ function parse_csv_rows(string $filePath): array
 
     $rows = [];
     while (($row = fgetcsv($handle, 0, ',', '"', '\\')) !== false) {
-        $rows[] = array_map(static fn ($value) => trim((string) $value), $row);
+        $rows[] = array_map(static function ($value) { return trim((string) $value); }, $row);
     }
     fclose($handle);
 
@@ -192,12 +192,16 @@ function parse_uploaded_adjustment_rows(array $file): array
     $originalName = (string) ($file['name'] ?? '');
     $extension = strtolower(pathinfo($originalName, PATHINFO_EXTENSION));
 
-    return match ($extension) {
-        'csv' => parse_csv_rows($tmpPath),
-        'xlsx' => parse_xlsx_rows($tmpPath),
-        'xls', 'xml' => parse_spreadsheetml_rows($tmpPath),
-        default => throw new RuntimeException('Formato não suportado. Use .xlsx, .xls (XML 2003) ou .csv.'),
-    };
+    if ($extension === 'csv') {
+        return parse_csv_rows($tmpPath);
+    }
+    if ($extension === 'xlsx') {
+        return parse_xlsx_rows($tmpPath);
+    }
+    if ($extension === 'xls' || $extension === 'xml') {
+        return parse_spreadsheetml_rows($tmpPath);
+    }
+    throw new RuntimeException('Formato não suportado. Use .xlsx, .xls (XML 2003) ou .csv.');
 }
 
 function map_adjustment_rows(array $rawRows): array
@@ -240,7 +244,7 @@ function map_adjustment_rows(array $rawRows): array
     return $mappedRows;
 }
 
-function apply_hour_bank_adjustment(PDO $pdo, int $targetUserId, string $adjustmentType, int $signedSeconds, string $reason, string $actionDate, int $adminUserId): void
+function apply_hour_bank_adjustment(PDO $pdo, int $targetUserId, string $adjustmentType, int $signedSeconds, string $reason, string $actionDate, int $adminUserId)
 {
     $deltaMinutes = (int) round($signedSeconds / 60);
     $deltaHours = $deltaMinutes / 60;
@@ -262,7 +266,7 @@ function apply_hour_bank_adjustment(PDO $pdo, int $targetUserId, string $adjustm
     $logStmt->execute([$targetUserId, $deltaMinutes, $reason, $adminUserId, $adjustmentType, $actionDate]);
 }
 
-function output_excel_template(): void
+function output_excel_template()
 {
     $content = <<<XML
 <?xml version="1.0"?>

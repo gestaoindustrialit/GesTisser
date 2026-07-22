@@ -49,7 +49,7 @@ function parse_csv_rows(string $filePath): array
 
     $rows = [];
     while (($row = fgetcsv($handle, 0, ',', '"', '\\')) !== false) {
-        $rows[] = array_map(static fn ($value) => trim((string) $value), $row);
+        $rows[] = array_map(static function ($value) { return trim((string) $value); }, $row);
     }
     fclose($handle);
 
@@ -161,12 +161,16 @@ function parse_uploaded_reason_rows(array $file): array
     $originalName = (string) ($file['name'] ?? '');
     $extension = strtolower(pathinfo($originalName, PATHINFO_EXTENSION));
 
-    return match ($extension) {
-        'csv' => parse_csv_rows($tmpPath),
-        'xlsx' => parse_xlsx_rows($tmpPath),
-        'xls', 'xml' => parse_spreadsheetml_rows($tmpPath),
-        default => throw new RuntimeException('Formato não suportado. Use .xlsx, .xls (XML 2003) ou .csv.'),
-    };
+    if ($extension === 'csv') {
+        return parse_csv_rows($tmpPath);
+    }
+    if ($extension === 'xlsx') {
+        return parse_xlsx_rows($tmpPath);
+    }
+    if ($extension === 'xls' || $extension === 'xml') {
+        return parse_spreadsheetml_rows($tmpPath);
+    }
+    throw new RuntimeException('Formato não suportado. Use .xlsx, .xls (XML 2003) ou .csv.');
 }
 
 function map_reason_rows(array $rawRows): array
@@ -224,7 +228,7 @@ function parse_binary_flag(string $value, string $fieldName, int $rowNumber): in
     throw new RuntimeException('Linha ' . $rowNumber . ': ' . $fieldName . ' deve ser 1/0, sim/não ou true/false.');
 }
 
-function output_absence_reason_template(): void
+function output_absence_reason_template()
 {
     $content = <<<XML
 <?xml version="1.0"?>

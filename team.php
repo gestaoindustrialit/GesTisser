@@ -638,7 +638,7 @@ if ($scopeProjectId > 0) {
     }
 }
 $activeTaskCreationFieldRules = task_creation_field_rules($pdo, $teamId, $scopeProjectIdValue, $taskCreationFieldCatalog);
-$customTaskFields = array_filter($taskCreationFieldCatalog, static fn (array $meta): bool => empty($meta['is_builtin']));
+$customTaskFields = array_filter($taskCreationFieldCatalog, static function (array $meta): bool { return empty($meta['is_builtin']); });
 
 $membersStmt = $pdo->prepare('SELECT u.id, u.name, u.email, tm.role FROM team_members tm INNER JOIN users u ON u.id = tm.user_id WHERE tm.team_id = ?');
 $membersStmt->execute([$teamId]);
@@ -662,7 +662,7 @@ $checklistTemplatesStmt = $pdo->query('SELECT ct.id, ct.name, COUNT(cti.id) AS i
 $checklistTemplates = $checklistTemplatesStmt->fetchAll(PDO::FETCH_ASSOC);
 $checklistTemplateItemsByTemplateId = [];
 if ($checklistTemplates) {
-    $templateIds = array_values(array_unique(array_map(static fn (array $template): int => (int) $template['id'], $checklistTemplates)));
+    $templateIds = array_values(array_unique(array_map(static function (array $template): int { return (int) $template['id']; }, $checklistTemplates)));
     if ($templateIds) {
         $templateItemsPlaceholders = implode(',', array_fill(0, count($templateIds), '?'));
         $checklistTemplateItemsStmt = $pdo->prepare('SELECT template_id, id, content FROM checklist_template_items WHERE template_id IN (' . $templateItemsPlaceholders . ') ORDER BY template_id ASC, position ASC, id ASC');
@@ -720,7 +720,7 @@ $recurringTasks = $recurringTasksStmt->fetchAll(PDO::FETCH_ASSOC);
 $recurringCompletionsByTaskAndDate = [];
 $recurringOverridesByTaskAndDate = [];
 $recurringChecklistStateByTaskAndDate = [];
-$recurringTaskIds = array_values(array_unique(array_map(static fn (array $task): int => (int) $task['id'], $recurringTasks)));
+$recurringTaskIds = array_values(array_unique(array_map(static function (array $task): int { return (int) $task['id']; }, $recurringTasks)));
 if ($recurringTaskIds) {
     $completionParams = [$calendarPeriodStart->format('Y-m-d'), $calendarPeriodEnd->format('Y-m-d')];
     $completionParams = array_merge($completionParams, $recurringTaskIds);
