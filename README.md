@@ -1,4 +1,4 @@
-# TaskForce
+# GesTisser
 
 Aplicação de gestão de trabalho inspirada no ClickUp, desenvolvida em **PHP + SQLite + Bootstrap** (sem frameworks).
 
