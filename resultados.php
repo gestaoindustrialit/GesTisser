@@ -737,6 +737,62 @@ $stmt = $pdo->prepare($sql);
 $stmt->execute($params);
 $entries = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
+
+
+$scheduleStmt = $pdo->query('SELECT u.id AS user_id, s.id, s.name, s.start_time, s.end_time, s.second_start_time, s.second_end_time, s.weekdays_mask, s.break_minutes, s.parent_schedule_id FROM users u LEFT JOIN hr_schedules s ON s.id = u.schedule_id WHERE s.id IS NOT NULL');
+$userSchedules = [];
+$scheduleRows = $scheduleStmt ? $scheduleStmt->fetchAll(PDO::FETCH_ASSOC) : [];
+foreach ($scheduleRows as $scheduleRow) {
+    $userSchedules[(int) $scheduleRow['user_id']] = $scheduleRow;
+}
+$variantRows = $pdo->query('SELECT id, name, start_time, end_time, second_start_time, second_end_time, weekdays_mask, break_minutes, parent_schedule_id FROM hr_schedules WHERE parent_schedule_id IS NOT NULL ORDER BY id ASC')->fetchAll(PDO::FETCH_ASSOC);
+$variantsByParent = [];
+foreach ($variantRows as $variantRow) {
+    $parentId = (int) ($variantRow['parent_schedule_id'] ?? 0);
+    if ($parentId <= 0) {
+        continue;
+    }
+    if (!isset($variantsByParent[$parentId])) {
+        $variantsByParent[$parentId] = [];
+    }
+    $variantsByParent[$parentId][] = $variantRow;
+}
+$getScheduleTargetSeconds = static function (int $targetUserId, string $workDate) use ($userSchedules, $variantsByParent, $dailyObjectiveSeconds): int {
+    $schedule = $userSchedules[$targetUserId] ?? null;
+    if (!$schedule) {
+        return $dailyObjectiveSeconds;
+    }
+    $weekday = (string) (int) date('N', strtotime($workDate));
+    $baseId = (int) ($schedule['id'] ?? 0);
+    foreach (($variantsByParent[$baseId] ?? []) as $variant) {
+        $mask = array_filter(explode(',', (string) ($variant['weekdays_mask'] ?? '')));
+        if (in_array($weekday, $mask, true)) {
+            $schedule = $variant;
+            break;
+        }
+    }
+    $mask = array_filter(explode(',', (string) ($schedule['weekdays_mask'] ?? '')));
+    if ($mask !== [] && !in_array($weekday, $mask, true)) {
+        return 0;
+    }
+    $minutes = 0;
+    foreach ([['start_time', 'end_time'], ['second_start_time', 'second_end_time']] as $periodColumns) {
+        $start = trim((string) ($schedule[$periodColumns[0]] ?? ''));
+        $end = trim((string) ($schedule[$periodColumns[1]] ?? ''));
+        if (preg_match('/^\d{2}:\d{2}$/', $start) !== 1 || preg_match('/^\d{2}:\d{2}$/', $end) !== 1) {
+            continue;
+        }
+        [$sh, $sm] = array_map('intval', explode(':', $start));
+        [$eh, $em] = array_map('intval', explode(':', $end));
+        $delta = (($eh * 60) + $em) - (($sh * 60) + $sm);
+        if ($delta > 0) {
+            $minutes += $delta;
+        }
+    }
+    $minutes = max(0, $minutes - (int) ($schedule['break_minutes'] ?? 0));
+    return $minutes > 0 ? $minutes * 60 : $dailyObjectiveSeconds;
+};
+
 $daily = [];
 foreach ($entries as $entry) {
     $uid = (int) $entry['user_id'];
@@ -775,6 +831,37 @@ foreach ($entries as $entry) {
     $daily[$key]['entries_count'] = count($daily[$key]['entries']);
 }
 
+
+
+$breakParams = [$startDate . ' 00:00:00', $endDate . ' 23:59:59', $startDate . ' 00:00:00', $endDate . ' 23:59:59'];
+$breakWhere = ['((be.started_at BETWEEN ? AND ?) OR (COALESCE(be.ended_at, CURRENT_TIMESTAMP) BETWEEN ? AND ?))'];
+if (!$canViewAllResults) {
+    $breakWhere[] = 'be.user_id = ?';
+    $breakParams[] = $userId;
+}
+if ($selectedUsers) {
+    $placeholders = implode(',', array_fill(0, count($selectedUsers), '?'));
+    $breakWhere[] = 'be.user_id IN (' . $placeholders . ')';
+    foreach ($selectedUsers as $selUserId) {
+        $breakParams[] = $selUserId;
+    }
+}
+$breakSql = 'SELECT be.user_id, be.started_at, COALESCE(be.ended_at, CURRENT_TIMESTAMP) AS ended_at FROM shopfloor_break_entries be WHERE ' . implode(' AND ', $breakWhere);
+$breakStmt = $pdo->prepare($breakSql);
+$breakStmt->execute($breakParams);
+$breaksByDay = [];
+foreach ($breakStmt->fetchAll(PDO::FETCH_ASSOC) as $breakRow) {
+    $breakDate = date('Y-m-d', strtotime((string) $breakRow['started_at']));
+    $breakKey = ((int) $breakRow['user_id']) . '|' . $breakDate;
+    if (!isset($breaksByDay[$breakKey])) {
+        $breaksByDay[$breakKey] = [];
+    }
+    $breaksByDay[$breakKey][] = [
+        'start' => strtotime((string) $breakRow['started_at']),
+        'end' => strtotime((string) $breakRow['ended_at']),
+    ];
+}
+
 $overrideParams = [$startDate, $endDate];
 $overrideWhere = ['work_date BETWEEN ? AND ?'];
 if (!$canViewAllResults) {
@@ -804,20 +891,37 @@ foreach ($overrideStmt->fetchAll(PDO::FETCH_ASSOC) as $overrideRow) {
 
 foreach ($daily as &$row) {
     $openIn = null;
+    $workedIntervals = [];
     foreach ($row['entries'] as $point) {
         if ($point['type'] === 'entrada') {
             $openIn = (int) $point['timestamp'];
         } elseif ($point['type'] === 'saida' && $openIn !== null && $point['timestamp'] > $openIn) {
+            $workedIntervals[] = [$openIn, (int) $point['timestamp']];
             $row['seconds'] += ((int) $point['timestamp'] - $openIn);
             $openIn = null;
         }
     }
+    $rowKeyForBreaks = $row['user_id'] . '|' . $row['date'];
+    $breakSeconds = 0;
+    foreach (($breaksByDay[$rowKeyForBreaks] ?? []) as $breakInterval) {
+        foreach ($workedIntervals as $workedInterval) {
+            $overlapStart = max((int) $breakInterval['start'], (int) $workedInterval[0]);
+            $overlapEnd = min((int) $breakInterval['end'], (int) $workedInterval[1]);
+            if ($overlapEnd > $overlapStart) {
+                $breakSeconds += $overlapEnd - $overlapStart;
+            }
+        }
+    }
+    $row['break_seconds'] = $breakSeconds;
+    $row['seconds'] = max(0, (int) $row['seconds'] - $breakSeconds);
 
     $row['status'] = (!$row['has_pending_entries'] && $row['validated_entries_count'] === $row['entries_count'] && $row['entries_count'] > 0) ? 'Validado' : 'Em curso';
     $row['type_label'] = count($row['entries']) >= 4 ? 'Normal' : 'Parcial';
     $row['effective'] = sprintf('%02d:%02d', intdiv($row['seconds'], 3600), intdiv($row['seconds'] % 3600, 60));
-    $row['target'] = $dailyObjectiveLabel;
-    $computedBhSeconds = $row['seconds'] - ($dailyObjectiveSeconds);
+    $targetSeconds = $getScheduleTargetSeconds((int) $row['user_id'], (string) $row['date']);
+    $row['target_seconds'] = $targetSeconds;
+    $row['target'] = sprintf('%02d:%02d', intdiv($targetSeconds, 3600), intdiv($targetSeconds % 3600, 60));
+    $computedBhSeconds = $row['seconds'] - ($targetSeconds);
     $rowKey = $row['user_id'] . '|' . $row['date'];
     $override = $overrideMap[$rowKey] ?? null;
     $row['bh_seconds'] = $override ? (((int) $override['bh_minutes']) * 60) : $computedBhSeconds;
@@ -1329,7 +1433,7 @@ require __DIR__ . '/partials/header.php';
                     <?php $isPendingRow = $canValidateResults && $row['status'] !== 'Validado'; ?>
                     <?php $rowFormId = 'validate-row-' . (int) $row['user_id'] . '-' . str_replace('-', '', (string) $row['date']); ?>
                     <?php $existingEntryCount = (int) ($row['entries_count'] ?? count($row['entries'])); ?>
-                    <tr class="js-results-row" data-user-id="<?= (int) $row['user_id'] ?>" data-work-date="<?= h($row['date']) ?>" data-row-status="<?= h((string) $row['status']) ?>" data-absence-allocated-seconds="<?= (int) ($row['absence_allocated_seconds'] ?? 0) ?>" data-absence-options='<?= h((string) json_encode(array_values((array) ($row['absence_options'] ?? [])), JSON_UNESCAPED_UNICODE)) ?>' data-current-request-id="<?= (int) (($row['absence_allocation']['absence_request_id'] ?? 0)) ?>" data-current-code="<?= h((string) ($row['absence_allocation']['absence_code'] ?? '')) ?>" data-current-reason="<?= h((string) ($row['absence_allocation']['absence_reason'] ?? '')) ?>" data-current-minutes="<?= (int) (($row['absence_allocation']['allocated_minutes'] ?? 0)) ?>">
+                    <tr class="js-results-row" data-user-id="<?= (int) $row['user_id'] ?>" data-work-date="<?= h($row['date']) ?>" data-row-status="<?= h((string) $row['status']) ?>" data-break-seconds="<?= (int) ($row['break_seconds'] ?? 0) ?>" data-absence-allocated-seconds="<?= (int) ($row['absence_allocated_seconds'] ?? 0) ?>" data-absence-options='<?= h((string) json_encode(array_values((array) ($row['absence_options'] ?? [])), JSON_UNESCAPED_UNICODE)) ?>' data-current-request-id="<?= (int) (($row['absence_allocation']['absence_request_id'] ?? 0)) ?>" data-current-code="<?= h((string) ($row['absence_allocation']['absence_code'] ?? '')) ?>" data-current-reason="<?= h((string) ($row['absence_allocation']['absence_reason'] ?? '')) ?>" data-current-minutes="<?= (int) (($row['absence_allocation']['allocated_minutes'] ?? 0)) ?>">
                         <td><span class="badge <?= $row['status'] === 'Validado' ? 'text-bg-success' : 'text-bg-warning' ?>"><?= h($row['status']) ?></span></td>
                         <td><?= h($row['type_label']) ?></td>
                         <td><?= h(format_date_pt($row['date'])) ?></td>
@@ -1355,7 +1459,7 @@ require __DIR__ . '/partials/header.php';
                                 <?php endif; ?>
                             </td>
                         <?php endfor; ?>
-                        <td class="js-results-target" data-target-seconds="<?= $dailyObjectiveSeconds ?>"><?= h($row['target']) ?></td>
+                        <td class="js-results-target" data-target-seconds="<?= (int) ($row['target_seconds'] ?? $dailyObjectiveSeconds) ?>"><?= h($row['target']) ?></td>
                         <td class="js-results-effective" data-effective-seconds="<?= (int) $row['seconds'] ?>"><?= h($row['effective']) ?></td>
                         <td>
                             <?php $bhClass = $row['bh_seconds'] < 0 ? 'text-danger' : ($row['bh_seconds'] > 0 ? 'text-success' : 'text-muted'); ?>

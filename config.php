@@ -327,6 +327,9 @@ if (!in_array('second_start_time', $hrSchedulesColumns, true)) {
 if (!in_array('second_end_time', $hrSchedulesColumns, true)) {
     $pdo->exec('ALTER TABLE hr_schedules ADD COLUMN second_end_time TEXT');
 }
+if (!in_array('parent_schedule_id', $hrSchedulesColumns, true)) {
+    $pdo->exec('ALTER TABLE hr_schedules ADD COLUMN parent_schedule_id INTEGER');
+}
 
 $pdo->exec(
     'CREATE TABLE IF NOT EXISTS hr_vacation_events (
