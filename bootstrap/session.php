@@ -15,14 +15,29 @@ if (!function_exists('taskforce_start_session')) {
 
         $session = app_config('session', []);
         session_name((string) ($session['name'] ?? 'taskforce_session'));
-        session_set_cookie_params([
-            'lifetime' => (int) ($session['lifetime'] ?? 28800),
-            'path' => '/',
-            'domain' => '',
-            'secure' => (bool) ($session['secure'] ?? false),
-            'httponly' => (bool) ($session['httponly'] ?? true),
-            'samesite' => (string) ($session['samesite'] ?? 'Lax'),
-        ]);
+        $cookieLifetime = (int) ($session['lifetime'] ?? 28800);
+        $cookiePath = '/';
+        $cookieDomain = '';
+        $cookieSecure = (bool) ($session['secure'] ?? false);
+        $cookieHttpOnly = (bool) ($session['httponly'] ?? true);
+        $cookieSameSite = (string) ($session['samesite'] ?? 'Lax');
+
+        if (PHP_VERSION_ID >= 70300) {
+            session_set_cookie_params([
+                'lifetime' => $cookieLifetime,
+                'path' => $cookiePath,
+                'domain' => $cookieDomain,
+                'secure' => $cookieSecure,
+                'httponly' => $cookieHttpOnly,
+                'samesite' => $cookieSameSite,
+            ]);
+        } else {
+            $legacyPath = $cookiePath;
+            if ($cookieSameSite !== '') {
+                $legacyPath .= '; SameSite=' . $cookieSameSite;
+            }
+            session_set_cookie_params($cookieLifetime, $legacyPath, $cookieDomain, $cookieSecure, $cookieHttpOnly);
+        }
 
         session_start();
 

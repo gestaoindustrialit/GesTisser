@@ -13,7 +13,7 @@ function erp_table_exists(PDO $pdo, string $table): bool
     return (bool) $stmt->fetchColumn();
 }
 
-function erp_backup_database_once(PDO $pdo): ?string
+function erp_backup_database_once(PDO $pdo)
 {
     static $backupPath = null;
     if ($backupPath !== null) {
@@ -32,7 +32,7 @@ function erp_backup_database_once(PDO $pdo): ?string
     return $backupPath;
 }
 
-function erp_run_phase1_migrations(PDO $pdo): void
+function erp_run_phase1_migrations(PDO $pdo)
 {
     static $ran = false;
     if ($ran) {
@@ -110,7 +110,7 @@ function erp_user_can(PDO $pdo, array $user, string $permission): bool
     return (bool)$stmt->fetchColumn();
 }
 
-function erp_audit(PDO $pdo, ?int $userId, string $action, string $entity, ?int $entityId, array $oldValues = [], array $newValues = [], ?string $reason = null): void
+function erp_audit(PDO $pdo, $userId, string $action, string $entity, $entityId, array $oldValues = [], array $newValues = [], $reason = null)
 {
     $stmt = $pdo->prepare('INSERT INTO erp_audit_log(user_id, action, entity, entity_id, old_values_json, new_values_json, ip_address, reason) VALUES (?,?,?,?,?,?,?,?)');
     $stmt->execute([$userId, $action, $entity, $entityId, json_encode($oldValues, JSON_UNESCAPED_UNICODE), json_encode($newValues, JSON_UNESCAPED_UNICODE), (string)($_SERVER['REMOTE_ADDR'] ?? ''), $reason]);
