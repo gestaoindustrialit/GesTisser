@@ -52,139 +52,196 @@ if ($user && !isset($navbarClockControl)) {
     ];
 }
 
+$currentFile = basename((string) parse_url((string) ($_SERVER['REQUEST_URI'] ?? ''), PHP_URL_PATH));
+if ($currentFile === '') {
+    $currentFile = basename((string) ($_SERVER['PHP_SELF'] ?? ''));
+}
+$currentErpPage = trim((string) ($_GET['page'] ?? 'overview'));
+$hrFiles = [
+    'hr.php', 'users.php', 'hr_departments.php', 'hr_schedules.php', 'hr_calendar.php',
+    'hr_bank.php', 'hr_absences.php', 'hr_vacations.php', 'hr_alerts.php',
+    'hr_evaluations.php', 'hr_evaluation_rules.php', 'hr_evaluation_history.php',
+    'resultados.php', 'shopfloor_absence_reasons.php', 'shopfloor_break_reasons.php',
+    'shopfloor_break_dashboard.php', 'hr_raffle.php'
+];
+$adminFiles = ['company_profile.php', 'requests.php', 'checklists.php', 'app_logs.php'];
+$isCurrentFile = static function ($file) use ($currentFile) {
+    return $currentFile === $file;
+};
+$isCurrentGroup = static function (array $files) use ($currentFile) {
+    return in_array($currentFile, $files, true);
+};
+$gtHasAuthenticatedShell = !empty($user);
+$resolvedBodyClass = trim('gt-body ' . (isset($bodyClass) ? (string) $bodyClass : 'bg-light') . ($gtHasAuthenticatedShell ? ' gt-authenticated' : ' gt-guest'));
+
 header('Content-Type: text/html; charset=UTF-8');
 ?>
 <!doctype html>
-<html lang="pt">
+<html lang="pt-PT">
 <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="theme-color" content="#212124">
     <title><?= isset($pageTitle) ? h($pageTitle) . ' · ' : '' ?>gesTISSER</title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
     <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css" rel="stylesheet">
     <link href="assets/styles.css" rel="stylesheet">
+    <link href="assets/mapper-theme.css" rel="stylesheet">
 </head>
-<body class="<?= isset($bodyClass) ? h($bodyClass) : 'bg-light' ?>">
-<nav class="navbar navbar-expand-lg navbar-dark bg-dark">
-    <div class="container">
-        <a class="navbar-brand d-flex align-items-center gap-2" href="<?= h(route_url('home', 'dashboard.php')) ?>">
-            <?php if ($navbarLogo): ?>
-                <img src="<?= h($navbarLogo) ?>" alt="Logo empresa" class="brand-logo">
+<body class="<?= h($resolvedBodyClass) ?>">
+<?php if ($user): ?>
+<div class="gt-app-shell">
+    <aside class="gt-sidebar" id="gtSidebar" aria-label="Navegação principal">
+        <div class="gt-brand">
+            <a class="gt-brand-logo-shell" href="<?= h(route_url('home', 'dashboard.php')) ?>" aria-label="Abrir visão geral">
+                <?php if ($navbarLogo): ?>
+                    <img src="<?= h($navbarLogo) ?>" alt="Logótipo empresa" class="gt-brand-logo">
+                <?php else: ?>
+                    <span class="gt-brand-monogram">T</span>
+                    <strong>gesTISSER</strong>
+                <?php endif; ?>
+            </a>
+            <span class="gt-brand-product">ERP e gestão industrial</span>
+        </div>
+
+        <nav class="gt-nav">
+            <?php if ($isPinOnlyUser): ?>
+                <a class="gt-nav-link<?= $isCurrentFile('shopfloor.php') ? ' is-active' : '' ?>" href="<?= h(route_url('shopfloor', 'shopfloor.php')) ?>">
+                    <i class="bi bi-speedometer2"></i><span>Shopfloor</span>
+                </a>
+                <details class="gt-nav-group"<?= $isCurrentFile('erp.php') ? ' open' : '' ?>>
+                    <summary><span><i class="bi bi-boxes"></i>ERP</span><i class="bi bi-chevron-down gt-nav-chevron"></i></summary>
+                    <div class="gt-nav-submenu">
+                        <a class="<?= $isCurrentFile('erp.php') && $currentErpPage === 'overview' ? 'is-active' : '' ?>" href="<?= h(route_url('erp', 'erp.php')) ?>">Visão geral ERP</a>
+                        <a class="<?= $isCurrentFile('erp.php') && $currentErpPage === 'production' ? 'is-active' : '' ?>" href="erp.php?page=production">Planeamento e produção</a>
+                        <a class="<?= $isCurrentFile('erp.php') && $currentErpPage === 'warehouse' ? 'is-active' : '' ?>" href="erp.php?page=warehouse">Armazém e stock</a>
+                    </div>
+                </details>
+            <?php else: ?>
+                <a class="gt-nav-link<?= $isCurrentFile('dashboard.php') ? ' is-active' : '' ?>" href="<?= h(route_url('home', 'dashboard.php')) ?>">
+                    <i class="bi bi-grid-1x2"></i><span>Visão geral</span>
+                </a>
+                <a class="gt-nav-link<?= $isCurrentFile('shopfloor.php') ? ' is-active' : '' ?>" href="<?= h(route_url('shopfloor', 'shopfloor.php')) ?>">
+                    <i class="bi bi-speedometer2"></i><span>Shopfloor</span>
+                </a>
+
+                <details class="gt-nav-group"<?= $isCurrentFile('erp.php') ? ' open' : '' ?>>
+                    <summary><span><i class="bi bi-boxes"></i>ERP industrial</span><i class="bi bi-chevron-down gt-nav-chevron"></i></summary>
+                    <div class="gt-nav-submenu">
+                        <?php
+                        $erpMenuItems = [
+                            'overview' => 'Visão geral ERP',
+                            'sales' => 'Comercial',
+                            'purchases' => 'Compras',
+                            'production' => 'Planeamento e produção',
+                            'warehouse' => 'Armazém e stock',
+                            'quality' => 'Qualidade',
+                            'costs' => 'Custos e margens',
+                            'master' => 'Dados mestre',
+                            'settings' => 'Configuração ERP',
+                        ];
+                        ?>
+                        <?php foreach ($erpMenuItems as $erpKey => $erpLabel): ?>
+                            <a class="<?= $isCurrentFile('erp.php') && $currentErpPage === $erpKey ? 'is-active' : '' ?>" href="<?= $erpKey === 'overview' ? h(route_url('erp', 'erp.php')) : 'erp.php?page=' . h($erpKey) ?>"><?= h($erpLabel) ?></a>
+                        <?php endforeach; ?>
+                    </div>
+                </details>
+
+                <?php if ($showHrMenu): ?>
+                    <details class="gt-nav-group"<?= $isCurrentGroup($hrFiles) ? ' open' : '' ?>>
+                        <summary><span><i class="bi bi-people"></i>Recursos humanos</span><i class="bi bi-chevron-down gt-nav-chevron"></i></summary>
+                        <div class="gt-nav-submenu">
+                            <a class="<?= $isCurrentFile('hr.php') ? 'is-active' : '' ?>" href="hr.php">Visão geral RH</a>
+                            <span class="gt-nav-label">Gestão base</span>
+                            <a class="<?= $isCurrentFile('users.php') ? 'is-active' : '' ?>" href="users.php">Utilizadores</a>
+                            <a class="<?= $isCurrentFile('hr_departments.php') ? 'is-active' : '' ?>" href="hr_departments.php">Departamentos</a>
+                            <a class="<?= $isCurrentFile('hr_schedules.php') ? 'is-active' : '' ?>" href="hr_schedules.php">Horários</a>
+                            <span class="gt-nav-label">Operação diária</span>
+                            <a class="<?= $isCurrentFile('hr_calendar.php') ? 'is-active' : '' ?>" href="hr_calendar.php">Calendário</a>
+                            <a class="<?= $isCurrentFile('hr_bank.php') ? 'is-active' : '' ?>" href="hr_bank.php">Banco de horas</a>
+                            <a class="<?= $isCurrentFile('hr_absences.php') ? 'is-active' : '' ?>" href="hr_absences.php">Ausências</a>
+                            <a class="<?= $isCurrentFile('hr_vacations.php') ? 'is-active' : '' ?>" href="hr_vacations.php">Férias</a>
+                            <a class="<?= $isCurrentFile('hr_alerts.php') ? 'is-active' : '' ?>" href="hr_alerts.php">Alertas RH</a>
+                            <a class="<?= $isCurrentFile('hr_evaluations.php') ? 'is-active' : '' ?>" href="hr_evaluations.php">Avaliações</a>
+                            <a class="<?= $isCurrentFile('hr_evaluation_rules.php') ? 'is-active' : '' ?>" href="hr_evaluation_rules.php">Regras de avaliação</a>
+                            <a class="<?= $isCurrentFile('resultados.php') ? 'is-active' : '' ?>" href="resultados.php">Resultados</a>
+                            <a class="<?= $isCurrentFile('shopfloor_absence_reasons.php') ? 'is-active' : '' ?>" href="shopfloor_absence_reasons.php">Motivos de ausência</a>
+                            <a class="<?= $isCurrentFile('shopfloor_break_reasons.php') ? 'is-active' : '' ?>" href="shopfloor_break_reasons.php">Pausas e paragens</a>
+                            <a class="<?= $isCurrentFile('shopfloor_break_dashboard.php') ? 'is-active' : '' ?>" href="shopfloor_break_dashboard.php">Dashboard de pausas</a>
+                        </div>
+                    </details>
+                <?php endif; ?>
+
+                <?php if ((int) ($user['is_admin'] ?? 0) === 1): ?>
+                    <details class="gt-nav-group"<?= $isCurrentGroup($adminFiles) ? ' open' : '' ?>>
+                        <summary><span><i class="bi bi-sliders"></i>Administração</span><i class="bi bi-chevron-down gt-nav-chevron"></i></summary>
+                        <div class="gt-nav-submenu">
+                            <a class="<?= $isCurrentFile('company_profile.php') ? 'is-active' : '' ?>" href="company_profile.php">Empresa e branding</a>
+                            <a class="<?= $isCurrentFile('requests.php') ? 'is-active' : '' ?>" href="requests.php">Gerar formulários</a>
+                            <a class="<?= $isCurrentFile('checklists.php') ? 'is-active' : '' ?>" href="checklists.php">Checklists</a>
+                            <a class="<?= $isCurrentFile('app_logs.php') ? 'is-active' : '' ?>" href="app_logs.php">Logs da aplicação</a>
+                        </div>
+                    </details>
+                <?php endif; ?>
             <?php endif; ?>
-            <span>gesTISSER</span>
-        </a>
-        <?php if ($user): ?>
-            <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#mainNavbar" aria-controls="mainNavbar" aria-expanded="false" aria-label="Alternar navega&ccedil;&atilde;o">
-                <span class="navbar-toggler-icon"></span>
-            </button>
-        <?php endif; ?>
-        <?php if ($user): ?>
-            <div class="collapse navbar-collapse" id="mainNavbar">
-                <div class="navbar-nav me-auto ms-lg-4">
-                    <?php if ($isPinOnlyUser): ?>
-                        <a class="nav-link" href="<?= h(route_url('shopfloor', 'shopfloor.php')) ?>">Shopfloor</a>
-                        <div class="nav-item dropdown">
-                        <a class="nav-link dropdown-toggle" href="<?= h(route_url('erp', 'erp.php')) ?>" role="button" data-bs-toggle="dropdown" aria-expanded="false">ERP</a>
-                        <ul class="dropdown-menu">
-                            <li><a class="dropdown-item" href="<?= h(route_url('erp', 'erp.php')) ?>">Visão geral ERP</a></li>
-                            <li><hr class="dropdown-divider"></li>
-                            <li><a class="dropdown-item" href="erp.php?page=sales">Comercial</a></li>
-                            <li><a class="dropdown-item" href="erp.php?page=purchases">Compras</a></li>
-                            <li><a class="dropdown-item" href="erp.php?page=production">Planeamento e produção</a></li>
-                            <li><a class="dropdown-item" href="erp.php?page=warehouse">Armazém e stock</a></li>
-                            <li><a class="dropdown-item" href="erp.php?page=quality">Qualidade</a></li>
-                            <li><a class="dropdown-item" href="erp.php?page=costs">Custos e margens</a></li>
-                            <li><a class="dropdown-item" href="erp.php?page=master">Dados mestre</a></li>
-                            <li><a class="dropdown-item" href="erp.php?page=settings">Configuração ERP</a></li>
-                        </ul>
-                    </div>
-                    <?php else: ?>
-                    <a class="nav-link" href="dashboard.php">Vis&atilde;o geral</a>
-                    <a class="nav-link" href="<?= h(route_url('shopfloor', 'shopfloor.php')) ?>">Shopfloor</a>
-                    <div class="nav-item dropdown">
-                        <a class="nav-link dropdown-toggle" href="<?= h(route_url('erp', 'erp.php')) ?>" role="button" data-bs-toggle="dropdown" aria-expanded="false">ERP</a>
-                        <ul class="dropdown-menu">
-                            <li><a class="dropdown-item" href="<?= h(route_url('erp', 'erp.php')) ?>">Visão geral ERP</a></li>
-                            <li><hr class="dropdown-divider"></li>
-                            <li><a class="dropdown-item" href="erp.php?page=sales">Comercial</a></li>
-                            <li><a class="dropdown-item" href="erp.php?page=purchases">Compras</a></li>
-                            <li><a class="dropdown-item" href="erp.php?page=production">Planeamento e produção</a></li>
-                            <li><a class="dropdown-item" href="erp.php?page=warehouse">Armazém e stock</a></li>
-                            <li><a class="dropdown-item" href="erp.php?page=quality">Qualidade</a></li>
-                            <li><a class="dropdown-item" href="erp.php?page=costs">Custos e margens</a></li>
-                            <li><a class="dropdown-item" href="erp.php?page=master">Dados mestre</a></li>
-                            <li><a class="dropdown-item" href="erp.php?page=settings">Configuração ERP</a></li>
-                        </ul>
-                    </div>
-                    <?php if ($showHrMenu): ?>
-                        <div class="nav-item dropdown">
-                            <a class="nav-link dropdown-toggle" href="#" role="button" data-bs-toggle="dropdown" aria-expanded="false">RH</a>
-                            <ul class="dropdown-menu">
-                                <li><a class="dropdown-item" href="hr.php">M&oacute;dulo RH</a></li>
-                                <li><hr class="dropdown-divider"></li>
-                                <li><h6 class="dropdown-header">Gestão base</h6></li>
-                                <li><a class="dropdown-item" href="users.php">Utilizadores</a></li>
-                                <li><a class="dropdown-item" href="hr_departments.php">Departamentos</a></li>
-                                <li><a class="dropdown-item" href="hr_schedules.php">Hor&aacute;rios</a></li>
-                                <li><hr class="dropdown-divider"></li>
-                                <li><h6 class="dropdown-header">Operação diária</h6></li>
-                                <li><a class="dropdown-item" href="hr_calendar.php">Calend&aacute;rio</a></li>
-                                <li><a class="dropdown-item" href="hr_bank.php">Banco de horas</a></li>
-                                <li><a class="dropdown-item" href="hr_absences.php">Aus&ecirc;ncias</a></li>
-                                <li><a class="dropdown-item" href="hr_vacations.php">F&eacute;rias</a></li>
-                                <li><a class="dropdown-item" href="hr_alerts.php">Alertas RH</a></li>
-                                <li><a class="dropdown-item" href="hr_evaluations.php">Avaliações</a></li>
-                                <li><a class="dropdown-item" href="hr_evaluation_rules.php">Regras de avaliações</a></li>
-                                <li><a class="dropdown-item" href="resultados.php">Resultados</a></li>
-                                <li><a class="dropdown-item" href="shopfloor_absence_reasons.php">Motivos de ausência</a></li>
-                                <li><a class="dropdown-item" href="shopfloor_break_reasons.php">Pausas e paragens</a></li>
-                                <li><a class="dropdown-item" href="shopfloor_break_dashboard.php">Dashboard pausas/paragens</a></li>
-                            </ul>
-                        </div>
-                    <?php endif; ?>
-                    <?php if ((int) $user['is_admin'] === 1): ?>
-                        <div class="nav-item dropdown">
-                            <a class="nav-link dropdown-toggle" href="#" role="button" data-bs-toggle="dropdown" aria-expanded="false">Administra&ccedil;&atilde;o</a>
-                            <ul class="dropdown-menu dropdown-menu-end dropdown-menu-lg-start">
-                                <li><a class="dropdown-item" href="company_profile.php">Empresa &amp; Branding</a></li>
-                                <li><a class="dropdown-item" href="requests.php">Gerar formul&aacute;rios</a></li>
-                                <li><a class="dropdown-item" href="checklists.php">Checklists</a></li>
-                                <li><a class="dropdown-item" href="app_logs.php">Logs da aplica&ccedil;&atilde;o</a></li>
-                            </ul>
-                        </div>
-                    <?php endif; ?>
-                </div>
-                    <?php endif; ?>
-                </div>
-                <div class="navbar-user mt-3 mt-lg-0 ms-lg-auto d-flex flex-column flex-lg-row align-items-start align-items-lg-center gap-2 gap-lg-3 text-white">
-                    <span class="small">Ol&aacute;, <?= h($user['name']) ?><?= (int) $user['is_admin'] === 1 ? ' &middot; Admin' : '' ?></span>
-                    <?php if (isset($navbarClockControl) && is_array($navbarClockControl)): ?>
-                        <form method="post" action="<?= h((string) ($navbarClockControl['form_action'] ?? 'shopfloor.php')) ?>" class="d-flex align-items-center gap-2 mb-0">
-                            <input type="hidden" name="action" value="clock_entry">
-                            <input type="hidden" name="entry_type" value="<?= h((string) ($navbarClockControl['entry_type'] ?? 'entrada')) ?>">
-                            <button type="submit" class="btn btn-sm fw-semibold <?= h((string) ($navbarClockControl['button_class'] ?? 'btn-primary')) ?>"><?= h((string) ($navbarClockControl['button_label'] ?? 'Ponto de entrada')) ?></button>
-                            <?php if (!empty($navbarClockControl['latest_time_label'])): ?>
-                                <span class="small text-white-50"><?= h((string) $navbarClockControl['latest_time_label']) ?></span>
-                            <?php endif; ?>
-                        </form>
-                    <?php endif; ?>
-                    <?php if (isset($navbarBreakControl) && is_array($navbarBreakControl)): ?>
-                        <?php $activeBreak = $navbarBreakControl['active_break'] ?? null; ?>
-                        <button
-                            type="button"
-                            class="btn btn-sm fw-semibold <?= $activeBreak ? 'btn-danger' : 'btn-success' ?>"
-                            data-bs-toggle="modal"
-                            data-bs-target="#navbarBreakModal"
-                        >
-                            <?= $activeBreak ? 'Terminar pausa/paragem' : 'Iniciar pausa/paragem' ?>
-                        </button>
-                    <?php endif; ?>
-                    <a href="logout.php" class="btn btn-outline-light btn-sm">Sair</a>
+        </nav>
+
+        <div class="gt-sidebar-footer">
+            <div class="gt-system-state"><span class="gt-status-dot"></span><span>Sistema operacional</span></div>
+            <div class="gt-user-card">
+                <div class="gt-user-avatar"><?= h(strtoupper(substr((string) ($user['name'] ?? 'U'), 0, 1))) ?></div>
+                <div>
+                    <strong><?= h((string) ($user['name'] ?? 'Utilizador')) ?></strong>
+                    <small><?= (int) ($user['is_admin'] ?? 0) === 1 ? 'Administrador' : h((string) ($user['access_profile'] ?? 'Utilizador')) ?></small>
                 </div>
             </div>
-        <?php endif; ?>
-    </div>
-</nav>
+            <a class="gt-logout-link" href="logout.php"><i class="bi bi-box-arrow-right"></i><span>Sair</span></a>
+        </div>
+    </aside>
+    <button type="button" class="gt-sidebar-backdrop" data-gt-sidebar-close aria-label="Fechar menu"></button>
+
+    <div class="gt-main">
+        <header class="gt-topbar">
+            <button type="button" class="gt-icon-button gt-mobile-menu" data-gt-sidebar-toggle aria-controls="gtSidebar" aria-expanded="false" aria-label="Abrir menu">
+                <i class="bi bi-list"></i>
+            </button>
+            <div class="gt-page-heading">
+                <p>Centro operacional</p>
+                <h1><?= h(isset($pageTitle) ? (string) $pageTitle : 'gesTISSER') ?></h1>
+            </div>
+            <div class="gt-top-actions">
+                <?php if (isset($navbarClockControl) && is_array($navbarClockControl)): ?>
+                    <form method="post" action="<?= h((string) ($navbarClockControl['form_action'] ?? 'shopfloor.php')) ?>" class="gt-clock-form">
+                        <input type="hidden" name="action" value="clock_entry">
+                        <input type="hidden" name="entry_type" value="<?= h((string) ($navbarClockControl['entry_type'] ?? 'entrada')) ?>">
+                        <button type="submit" class="btn btn-sm fw-semibold <?= h((string) ($navbarClockControl['button_class'] ?? 'btn-primary')) ?>">
+                            <i class="bi bi-clock-history"></i>
+                            <span><?= h((string) ($navbarClockControl['button_label'] ?? 'Ponto de entrada')) ?></span>
+                        </button>
+                        <?php if (!empty($navbarClockControl['latest_time_label'])): ?>
+                            <small><?= h((string) $navbarClockControl['latest_time_label']) ?></small>
+                        <?php endif; ?>
+                    </form>
+                <?php endif; ?>
+                <?php if (isset($navbarBreakControl) && is_array($navbarBreakControl)): ?>
+                    <?php $activeBreak = $navbarBreakControl['active_break'] ?? null; ?>
+                    <button
+                        type="button"
+                        class="btn btn-sm fw-semibold <?= $activeBreak ? 'btn-danger' : 'btn-success' ?>"
+                        data-bs-toggle="modal"
+                        data-bs-target="#navbarBreakModal"
+                    >
+                        <i class="bi <?= $activeBreak ? 'bi-stop-circle' : 'bi-cup-hot' ?>"></i>
+                        <span><?= $activeBreak ? 'Terminar pausa/paragem' : 'Iniciar pausa/paragem' ?></span>
+                    </button>
+                <?php endif; ?>
+                <div class="gt-top-user">
+                    <span><?= h((string) ($user['name'] ?? 'Utilizador')) ?></span>
+                    <small><?= (int) ($user['is_admin'] ?? 0) === 1 ? 'Admin' : h((string) ($user['access_profile'] ?? 'Utilizador')) ?></small>
+                </div>
+            </div>
+        </header>
+
 <?php if (isset($navbarBreakControl) && is_array($navbarBreakControl)): ?>
     <?php $activeBreak = $navbarBreakControl['active_break'] ?? null; ?>
     <div
@@ -313,4 +370,7 @@ header('Content-Type: text/html; charset=UTF-8');
         });
     </script>
 <?php endif; ?>
-<main class="container py-4">
+        <main class="gt-content" id="gtMainContent">
+<?php else: ?>
+    <main class="gt-guest-main" id="gtMainContent">
+<?php endif; ?>
