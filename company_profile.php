@@ -24,6 +24,7 @@ $smtpTimeout = '10';
 $mailFromAddress = 'noreply@calcadacorp.ch';
 $mailFromName = 'TaskForce';
 $hrAlertsCronRunsPerDay = '1440';
+$companyDailyObjective = '08:15';
 $navbarLogo = null;
 $reportLogo = null;
 $ticketStatuses = [];
@@ -48,6 +49,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $mailFromAddress = trim((string) ($_POST['mail_from_address'] ?? ''));
         $mailFromName = trim((string) ($_POST['mail_from_name'] ?? ''));
         $hrAlertsCronRunsPerDay = (int) ($_POST['hr_alerts_inline_cron_runs_per_day'] ?? 1440);
+        $companyDailyObjective = trim((string) ($_POST['company_daily_objective'] ?? '08:15'));
 
         $statusValues = $_POST['ticket_status_value'] ?? [];
         $statusLabels = $_POST['ticket_status_label'] ?? [];
@@ -177,7 +179,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $hrAlertsCronRunsPerDay = 1440;
         }
 
-        if ($companyEmail !== '' && filter_var($companyEmail, FILTER_VALIDATE_EMAIL) === false) {
+        if (preg_match('/^(\d{1,2}):(\d{2})$/', $companyDailyObjective, $dailyObjectiveMatches) !== 1 || (int) $dailyObjectiveMatches[1] > 23 || (int) $dailyObjectiveMatches[2] > 59) {
+            $flashError = 'Indique um objetivo diário válido no formato HH:MM.';
+        } elseif ($companyEmail !== '' && filter_var($companyEmail, FILTER_VALIDATE_EMAIL) === false) {
             $flashError = 'Indique um email válido para a empresa.';
         } elseif ($smtpHost !== '' && $smtpUsername === '') {
             $flashError = 'Preencha o utilizador SMTP quando definir um servidor SMTP.';
@@ -207,6 +211,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             set_app_setting($pdo, 'mail_from_address', $mailFromAddress);
             set_app_setting($pdo, 'mail_from_name', $mailFromName);
             set_app_setting($pdo, 'hr_alerts_inline_cron_runs_per_day', (string) $hrAlertsCronRunsPerDay);
+            set_app_setting($pdo, 'company_daily_objective', sprintf('%02d:%02d', (int) $dailyObjectiveMatches[1], (int) $dailyObjectiveMatches[2]));
             set_app_setting($pdo, 'ticket_statuses_json', json_encode(array_values($ticketStatuses), JSON_UNESCAPED_UNICODE));
             set_app_setting($pdo, 'recurring_task_recurrences_json', json_encode(array_values($recurrenceCatalog), JSON_UNESCAPED_UNICODE));
             set_app_setting($pdo, 'pending_ticket_departments_json', json_encode(array_values($pendingDepartmentCatalog), JSON_UNESCAPED_UNICODE));
@@ -282,6 +287,7 @@ $smtpTimeout = (string) app_setting($pdo, 'smtp_timeout_seconds', '10');
 $mailFromAddress = (string) app_setting($pdo, 'mail_from_address', 'noreply@calcadacorp.ch');
 $mailFromName = (string) app_setting($pdo, 'mail_from_name', 'TaskForce');
 $hrAlertsCronRunsPerDay = (string) app_setting($pdo, 'hr_alerts_inline_cron_runs_per_day', '1440');
+$companyDailyObjective = format_minutes_hhmm(company_daily_objective_minutes($pdo));
 $navbarLogo = app_setting($pdo, 'logo_navbar_light');
 $reportLogo = app_setting($pdo, 'logo_report_dark');
 $ticketStatuses = ticket_statuses($pdo);
@@ -370,6 +376,11 @@ require __DIR__ . '/partials/header.php';
                 <label class="form-label">Verificações alertas RH por dia</label>
                 <input class="form-control" type="number" min="1" max="1440" name="hr_alerts_inline_cron_runs_per_day" value="<?= h((string) $hrAlertsCronRunsPerDay) ?>" <?= !$isAdmin ? 'readonly' : '' ?>>
                 <p class="small text-muted mb-0 mt-1">Define quantas vezes por dia o sistema verifica se existem envios de alertas RH por executar (1 a 1440).</p>
+            </div>
+            <div class="col-md-3">
+                <label class="form-label">Objetivo diário</label>
+                <input class="form-control" type="time" name="company_daily_objective" value="<?= h($companyDailyObjective) ?>" <?= !$isAdmin ? 'readonly' : '' ?>>
+                <p class="small text-muted mb-0 mt-1">Define o objetivo diário usado no cálculo do banco de horas.</p>
             </div>
 
             <div class="col-md-6">

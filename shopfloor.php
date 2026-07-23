@@ -628,7 +628,7 @@ if ($vacationYear < 2000 || $vacationYear > 2100) {
     $vacationYear = (int) date('Y');
 }
 
-$scheduleContextStmt = $pdo->prepare('SELECT s.name AS schedule_name, s.weekdays_mask, s.start_time, s.end_time, s.break_minutes FROM users u LEFT JOIN hr_schedules s ON s.id = u.schedule_id WHERE u.id = ? LIMIT 1');
+$scheduleContextStmt = $pdo->prepare('SELECT s.name AS schedule_name, s.weekdays_mask, s.start_time, s.end_time, s.second_start_time, s.second_end_time, s.break_minutes FROM users u LEFT JOIN hr_schedules s ON s.id = u.schedule_id WHERE u.id = ? LIMIT 1');
 $scheduleContextStmt->execute([$userId]);
 $scheduleContext = $scheduleContextStmt->fetch(PDO::FETCH_ASSOC) ?: [];
 $scheduleName = trim((string) ($scheduleContext['schedule_name'] ?? ''));
@@ -723,14 +723,24 @@ $pendingVacationDaysStmt = $pdo->prepare('SELECT COALESCE(SUM(total_days), 0) FR
 $pendingVacationDaysStmt->execute([$userId]);
 $pendingVacationDays = (float) $pendingVacationDaysStmt->fetchColumn();
 
-$targetMinutes = (8 * 60) + 15;
+$targetMinutes = company_daily_objective_minutes($pdo);
 if (!empty($scheduleContext['start_time']) && !empty($scheduleContext['end_time'])) {
-    list($startHour, $startMinute) = array_map('intval', explode(':', (string) $scheduleContext['start_time']));
-    list($endHour, $endMinute) = array_map('intval', explode(':', (string) $scheduleContext['end_time']));
-    $targetMinutes = (($endHour * 60) + $endMinute) - (($startHour * 60) + $startMinute) - (int) ($scheduleContext['break_minutes'] ?? 0);
-    if ($targetMinutes < 0) {
-        $targetMinutes = 0;
+    $scheduleTargetMinutes = 0;
+    foreach ([['start_time', 'end_time'], ['second_start_time', 'second_end_time']] as $periodColumns) {
+        $periodStart = trim((string) ($scheduleContext[$periodColumns[0]] ?? ''));
+        $periodEnd = trim((string) ($scheduleContext[$periodColumns[1]] ?? ''));
+        if (preg_match('/^\d{2}:\d{2}$/', $periodStart) !== 1 || preg_match('/^\d{2}:\d{2}$/', $periodEnd) !== 1) {
+            continue;
+        }
+
+        [$startHour, $startMinute] = array_map('intval', explode(':', $periodStart));
+        [$endHour, $endMinute] = array_map('intval', explode(':', $periodEnd));
+        $periodMinutes = (($endHour * 60) + $endMinute) - (($startHour * 60) + $startMinute);
+        if ($periodMinutes > 0) {
+            $scheduleTargetMinutes += $periodMinutes;
+        }
     }
+    $targetMinutes = max(0, $scheduleTargetMinutes - (int) ($scheduleContext['break_minutes'] ?? 0));
 }
 
 $bhAdjustmentMinutes = 0;

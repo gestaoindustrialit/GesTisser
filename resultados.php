@@ -35,6 +35,9 @@ if ($endDate === '' || !DateTimeImmutable::createFromFormat('Y-m-d', $endDate) |
 
 $flashSuccess = null;
 $flashError = null;
+$dailyObjectiveMinutes = company_daily_objective_minutes($pdo);
+$dailyObjectiveSeconds = $dailyObjectiveMinutes * 60;
+$dailyObjectiveLabel = format_minutes_hhmm($dailyObjectiveMinutes);
 
 function ensure_hour_bank_row(PDO $pdo, int $targetUserId): float
 {
@@ -536,7 +539,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $canValidateResults) {
         } else {
             $pdo->beginTransaction();
             try {
-                $targetSeconds = (8 * 3600) + (15 * 60);
+                $targetSeconds = $dailyObjectiveSeconds;
                 $effectiveSeconds = calculate_effective_seconds($entriesToReopen);
                 $absenceAllocatedSeconds = get_absence_allocated_seconds($pdo, $validateUserId, $validateDate);
                 $computedBhSeconds = ($effectiveSeconds - $targetSeconds) + $absenceAllocatedSeconds;
@@ -574,7 +577,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $canValidateResults) {
                 $allEntriesStmt->execute([$validateUserId, $validateDate]);
                 $allEntries = $allEntriesStmt->fetchAll(PDO::FETCH_ASSOC);
 
-                $targetSeconds = (8 * 3600) + (15 * 60);
+                $targetSeconds = $dailyObjectiveSeconds;
                 $effectiveSeconds = calculate_effective_seconds($allEntries);
                 $absenceAllocatedSeconds = get_absence_allocated_seconds($pdo, $validateUserId, $validateDate);
                 $computedBhSeconds = ($effectiveSeconds - $targetSeconds) + $absenceAllocatedSeconds;
@@ -652,7 +655,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $canValidateResults) {
                 array_unshift($validateParams, $userId);
                 $pdo->prepare($sqlValidate)->execute($validateParams);
 
-                $targetSeconds = (8 * 3600) + (15 * 60);
+                $targetSeconds = $dailyObjectiveSeconds;
                 foreach (array_keys($usersWithPendingEntries) as $entryUserId) {
                     $allEntriesStmt = $pdo->prepare('SELECT entry_type, occurred_at FROM shopfloor_time_entries WHERE user_id = ? AND date(occurred_at) = ? ORDER BY occurred_at ASC');
                     $allEntriesStmt->execute([(int) $entryUserId, $validateDate]);
@@ -813,8 +816,8 @@ foreach ($daily as &$row) {
     $row['status'] = (!$row['has_pending_entries'] && $row['validated_entries_count'] === $row['entries_count'] && $row['entries_count'] > 0) ? 'Validado' : 'Em curso';
     $row['type_label'] = count($row['entries']) >= 4 ? 'Normal' : 'Parcial';
     $row['effective'] = sprintf('%02d:%02d', intdiv($row['seconds'], 3600), intdiv($row['seconds'] % 3600, 60));
-    $row['target'] = '08:15';
-    $computedBhSeconds = $row['seconds'] - ((8 * 3600) + (15 * 60));
+    $row['target'] = $dailyObjectiveLabel;
+    $computedBhSeconds = $row['seconds'] - ($dailyObjectiveSeconds);
     $rowKey = $row['user_id'] . '|' . $row['date'];
     $override = $overrideMap[$rowKey] ?? null;
     $row['bh_seconds'] = $override ? (((int) $override['bh_minutes']) * 60) : $computedBhSeconds;
@@ -884,7 +887,7 @@ foreach ($approvedAbsences as $absence) {
                 'status' => 'Em curso',
                 'type_label' => 'Ausência',
                 'effective' => '00:00',
-                'target' => '08:15',
+                'target' => $dailyObjectiveLabel,
                 'bh_seconds' => 0,
                 'bh' => format_signed_hhmm(0),
                 'bh_is_override' => false,
@@ -899,7 +902,7 @@ foreach ($approvedAbsences as $absence) {
     }
 
     $absenceUserId = (int) ($absence['user_id'] ?? 0);
-    $resolvedMinutes = resolve_absence_minutes($absence, (8 * 60) + 15);
+    $resolvedMinutes = resolve_absence_minutes($absence, $dailyObjectiveMinutes);
     foreach (list_weekdays_between((string) $absence['start_date'], (string) $absence['end_date']) as $absenceDate) {
         $mapKey = $absenceUserId . '|' . $absenceDate;
         if (!isset($approvedAbsencesByDay[$mapKey])) {
@@ -985,7 +988,7 @@ foreach ($daily as &$row) {
     $row['absence_allocation'] = $allocation;
     $allocationCode = $allocation ? (string) ($allocation['absence_code'] ?? '') : '';
     $row['absence_allocated_seconds'] = ($allocation && !should_exclude_absence_from_bank_credit($allocationCode)) ? ((int) ($allocation['allocated_minutes'] ?? 0) * 60) : 0;
-    $row['computed_bh_seconds'] = ((int) $row['seconds'] - ((8 * 3600) + (15 * 60))) + (int) $row['absence_allocated_seconds'];
+    $row['computed_bh_seconds'] = ((int) $row['seconds'] - ($dailyObjectiveSeconds)) + (int) $row['absence_allocated_seconds'];
     $override = $overrideMap[$rowKey] ?? null;
     $row['bh_seconds'] = $override ? (((int) $override['bh_minutes']) * 60) : (int) $row['computed_bh_seconds'];
     $row['bh'] = format_signed_hhmm((int) $row['bh_seconds']);
@@ -1352,7 +1355,7 @@ require __DIR__ . '/partials/header.php';
                                 <?php endif; ?>
                             </td>
                         <?php endfor; ?>
-                        <td class="js-results-target" data-target-seconds="<?= (8 * 3600) + (15 * 60) ?>"><?= h($row['target']) ?></td>
+                        <td class="js-results-target" data-target-seconds="<?= $dailyObjectiveSeconds ?>"><?= h($row['target']) ?></td>
                         <td class="js-results-effective" data-effective-seconds="<?= (int) $row['seconds'] ?>"><?= h($row['effective']) ?></td>
                         <td>
                             <?php $bhClass = $row['bh_seconds'] < 0 ? 'text-danger' : ($row['bh_seconds'] > 0 ? 'text-success' : 'text-muted'); ?>
