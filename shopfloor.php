@@ -1319,8 +1319,9 @@ require __DIR__ . '/partials/header.php';
                 <ul class="list-group list-group-flush">
                     <?php if ($todayEntries): foreach ($todayEntries as $entry): ?>
                         <li class="list-group-item shopfloor-list-item">
+                            <?php $entryOccurredAt = (string) ($entry['occurred_at'] ?? ($entry['created_at'] ?? '')); ?>
                             <span class="fw-semibold"><?= $entry['entry_type'] === 'entrada' ? 'Entrada' : 'Saída' ?></span>
-                            <span class="text-secondary small ms-2"><?= h(date('H:i:s', strtotime((string) $entry['occurred_at']))) ?></span>
+                            <span class="text-secondary small ms-2"><?= $entryOccurredAt !== '' ? h(date('H:i:s', strtotime($entryOccurredAt))) : '-' ?></span>
                             <?php if (!empty($entry['note'])): ?>
                                 <div class="small text-secondary mt-1"><?= h((string) $entry['note']) ?></div>
                             <?php endif; ?>

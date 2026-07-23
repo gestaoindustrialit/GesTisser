@@ -32,7 +32,7 @@ $recurrenceCatalog = [];
 $pendingDepartmentCatalog = [];
 $greetingImages = ['birthday' => [], 'work_anniversary' => []];
 
-function save_hr_greeting_image_upload(array $file, string $type): ?array
+function save_hr_greeting_image_upload(array $file, string $type)
 {
     if (($file['error'] ?? UPLOAD_ERR_NO_FILE) !== UPLOAD_ERR_OK) {
         return null;
@@ -552,7 +552,7 @@ require __DIR__ . '/partials/header.php';
         <h2 class="h5">Imagens de parabéns por email</h2>
         <p class="small text-muted">Estas imagens são anexadas automaticamente aos emails do cron RH quando a data de nascimento ou admissão coincide com o dia.</p>
         <?php foreach ([['birthday', 'Aniversário do colaborador', 1], ['work_anniversary', 'Aniversário de empresa', 30]] as $greetingConfig): ?>
-            <?php [$greetingType, $greetingLabel, $greetingLimit] = $greetingConfig; ?>
+            <?php list($greetingType, $greetingLabel, $greetingLimit) = $greetingConfig; ?>
             <div class="border rounded p-3 mb-3">
                 <h3 class="h6 mb-2"><?= h($greetingLabel) ?> <span class="text-muted small">(<?= count($greetingImages[$greetingType] ?? []) ?>/<?= (int) $greetingLimit ?>)</span></h3>
                 <form method="post" enctype="multipart/form-data" class="row g-2 align-items-end mb-3">
