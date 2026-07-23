@@ -1,0 +1,654 @@
+{
+  "meta": {
+    "schemaVersion": 5,
+    "companyName": "TISSER",
+    "year": 2026,
+    "lastUpdated": "2026-07-22T10:15:00.000Z",
+    "note": "Dados iniciais de exemplo. Validar e substituir pelos dados reais da empresa. Inclui turnos, capacidade, cadernos de função e mapa de substituição para assegurar continuidade nas ausências."
+  },
+  "departments": [
+    {
+      "id": "dep-direction",
+      "name": "Direção",
+      "color": "#212124",
+      "description": "Orientação estratégica e administração."
+    },
+    {
+      "id": "dep-commercial",
+      "name": "Comercial",
+      "color": "#2D69A1",
+      "description": "Clientes, propostas e acompanhamento comercial."
+    },
+    {
+      "id": "dep-production",
+      "name": "Produção",
+      "color": "#5EAD41",
+      "description": "Planeamento e execução das operações produtivas."
+    },
+    {
+      "id": "dep-quality",
+      "name": "Qualidade",
+      "color": "#2D69A1",
+      "description": "Sistema de qualidade, conformidade e melhoria."
+    },
+    {
+      "id": "dep-logistics",
+      "name": "Logística",
+      "color": "#5EAD41",
+      "description": "Compras, armazém, expedição e transportes."
+    },
+    {
+      "id": "dep-finance",
+      "name": "Financeiro e RH",
+      "color": "#212124",
+      "description": "Finanças, administração e pessoas."
+    },
+    {
+      "id": "dep-tech",
+      "name": "Tecnologia",
+      "color": "#2D69A1",
+      "description": "Sistemas, dados, infraestrutura e segurança."
+    }
+  ],
+  "people": [
+    {
+      "id": "p-general",
+      "name": "Pessoa de exemplo 1",
+      "title": "Direção Geral",
+      "departmentId": "dep-direction",
+      "managerId": "",
+      "email": "",
+      "phone": "",
+      "status": "active",
+      "notes": "Confirmar responsabilidades e poderes de decisão.",
+      "shiftId": "shift-admin",
+      "capacityPercent": 100
+    },
+    {
+      "id": "p-commercial",
+      "name": "Pessoa de exemplo 2",
+      "title": "Responsável Comercial",
+      "departmentId": "dep-commercial",
+      "managerId": "p-general",
+      "email": "",
+      "phone": "",
+      "status": "active",
+      "notes": "Mapear carteira, pricing e passagem de encomenda.",
+      "shiftId": "shift-admin",
+      "capacityPercent": 100
+    },
+    {
+      "id": "p-production",
+      "name": "Pessoa de exemplo 3",
+      "title": "Responsável de Produção",
+      "departmentId": "dep-production",
+      "managerId": "p-general",
+      "email": "",
+      "phone": "",
+      "status": "active",
+      "notes": "Validar operações internas, capacidade e restrições.",
+      "shiftId": "shift-1",
+      "capacityPercent": 100
+    },
+    {
+      "id": "p-quality",
+      "name": "Pessoa de exemplo 4",
+      "title": "Responsável da Qualidade",
+      "departmentId": "dep-quality",
+      "managerId": "p-general",
+      "email": "",
+      "phone": "",
+      "status": "active",
+      "notes": "Confirmar certificações, controlos e não conformidades.",
+      "shiftId": "shift-1",
+      "capacityPercent": 100
+    },
+    {
+      "id": "p-logistics",
+      "name": "Pessoa de exemplo 5",
+      "title": "Responsável de Logística",
+      "departmentId": "dep-logistics",
+      "managerId": "p-general",
+      "email": "",
+      "phone": "",
+      "status": "active",
+      "notes": "Mapear compras, stocks, transportes e expedição.",
+      "shiftId": "shift-1",
+      "capacityPercent": 100
+    },
+    {
+      "id": "p-finance",
+      "name": "Pessoa de exemplo 6",
+      "title": "Responsável Financeiro / RH",
+      "departmentId": "dep-finance",
+      "managerId": "p-general",
+      "email": "",
+      "phone": "",
+      "status": "active",
+      "notes": "Validar custos, contratos, pessoas e obrigações.",
+      "shiftId": "shift-admin",
+      "capacityPercent": 100
+    },
+    {
+      "id": "p-tech",
+      "name": "Pessoa de exemplo 7",
+      "title": "Diretor Tecnológico",
+      "departmentId": "dep-tech",
+      "managerId": "p-general",
+      "email": "",
+      "phone": "",
+      "status": "active",
+      "notes": "Sistemas, dados, automação, segurança e transformação digital.",
+      "shiftId": "shift-admin",
+      "capacityPercent": 100
+    }
+  ],
+  "flows": [
+    {
+      "id": "flow-order",
+      "name": "Da encomenda à expedição",
+      "description": "Fluxo inicial de exemplo para validar com Comercial, Planeamento, Produção, Qualidade e Logística.",
+      "ownerId": "p-production",
+      "status": "hypothesis",
+      "version": "0.1",
+      "nodes": [
+        {
+          "id": "n1",
+          "label": "Receção da encomenda",
+          "type": "external",
+          "ownerId": "p-commercial",
+          "x": 60,
+          "y": 100,
+          "duration": "Variável",
+          "system": "Email / ERP",
+          "kpi": "Tempo de resposta",
+          "notes": "Confirmar canal e campos obrigatórios."
+        },
+        {
+          "id": "n2",
+          "label": "Validação técnica e comercial",
+          "type": "decision",
+          "ownerId": "p-commercial",
+          "x": 330,
+          "y": 100,
+          "duration": "1 dia",
+          "system": "ERP / Ficha técnica",
+          "kpi": "% encomendas completas",
+          "notes": "Preço, prazo, especificação, crédito."
+        },
+        {
+          "id": "n3",
+          "label": "Planeamento e aprovisionamento",
+          "type": "operation",
+          "ownerId": "p-production",
+          "x": 600,
+          "y": 100,
+          "duration": "1–3 dias",
+          "system": "ERP / Excel",
+          "kpi": "Cumprimento do plano",
+          "notes": "Confirmar matérias-primas, capacidade e subcontratação."
+        },
+        {
+          "id": "n4",
+          "label": "Produção",
+          "type": "operation",
+          "ownerId": "p-production",
+          "x": 870,
+          "y": 100,
+          "duration": "Conforme OF",
+          "system": "A validar",
+          "kpi": "OEE / produtividade",
+          "notes": "Decompor nas operações reais."
+        },
+        {
+          "id": "n5",
+          "label": "Controlo de qualidade",
+          "type": "control",
+          "ownerId": "p-quality",
+          "x": 1140,
+          "y": 100,
+          "duration": "Por lote",
+          "system": "Registo de qualidade",
+          "kpi": "PPM / rejeição",
+          "notes": "Critérios de libertação e amostras."
+        },
+        {
+          "id": "n6",
+          "label": "Expedição e documentação",
+          "type": "external",
+          "ownerId": "p-logistics",
+          "x": 1410,
+          "y": 100,
+          "duration": "1 dia",
+          "system": "ERP / Transportador",
+          "kpi": "OTIF",
+          "notes": "Packing list, etiquetas, CMR e faturação."
+        }
+      ],
+      "edges": [
+        {
+          "id": "e1",
+          "from": "n1",
+          "to": "n2",
+          "label": ""
+        },
+        {
+          "id": "e2",
+          "from": "n2",
+          "to": "n3",
+          "label": "Aprovada"
+        },
+        {
+          "id": "e3",
+          "from": "n3",
+          "to": "n4",
+          "label": "Plano"
+        },
+        {
+          "id": "e4",
+          "from": "n4",
+          "to": "n5",
+          "label": "Lote"
+        },
+        {
+          "id": "e5",
+          "from": "n5",
+          "to": "n6",
+          "label": "Libertado"
+        }
+      ]
+    },
+    {
+      "id": "flow-nc",
+      "name": "Tratamento de não conformidade",
+      "description": "Registo, contenção, análise de causa, ação e verificação de eficácia.",
+      "ownerId": "p-quality",
+      "status": "hypothesis",
+      "version": "0.1",
+      "nodes": [
+        {
+          "id": "q1",
+          "label": "Deteção / reclamação",
+          "type": "external",
+          "ownerId": "p-quality",
+          "x": 70,
+          "y": 150,
+          "duration": "Imediato",
+          "system": "Email / formulário",
+          "kpi": "Tempo até registo",
+          "notes": "Origem interna, fornecedor ou cliente."
+        },
+        {
+          "id": "q2",
+          "label": "Contenção e rastreabilidade",
+          "type": "control",
+          "ownerId": "p-quality",
+          "x": 370,
+          "y": 150,
+          "duration": "< 4 h",
+          "system": "ERP / qualidade",
+          "kpi": "Lotes bloqueados",
+          "notes": "Identificar produto, matéria-prima e clientes."
+        },
+        {
+          "id": "q3",
+          "label": "Análise de causa",
+          "type": "decision",
+          "ownerId": "p-quality",
+          "x": 670,
+          "y": 150,
+          "duration": "5 dias",
+          "system": "8D / 5 Porquês",
+          "kpi": "Tempo de causa raiz",
+          "notes": "Equipa multidisciplinar."
+        },
+        {
+          "id": "q4",
+          "label": "Ações corretivas",
+          "type": "operation",
+          "ownerId": "p-production",
+          "x": 970,
+          "y": 150,
+          "duration": "Conforme ação",
+          "system": "Plano de ações",
+          "kpi": "Ações em atraso",
+          "notes": "Responsável e prazo claros."
+        },
+        {
+          "id": "q5",
+          "label": "Verificação de eficácia",
+          "type": "control",
+          "ownerId": "p-quality",
+          "x": 1270,
+          "y": 150,
+          "duration": "30–90 dias",
+          "system": "Auditoria / KPI",
+          "kpi": "Recorrência",
+          "notes": "Fecho formal da NC."
+        }
+      ],
+      "edges": [
+        {
+          "id": "qe1",
+          "from": "q1",
+          "to": "q2",
+          "label": ""
+        },
+        {
+          "id": "qe2",
+          "from": "q2",
+          "to": "q3",
+          "label": ""
+        },
+        {
+          "id": "qe3",
+          "from": "q3",
+          "to": "q4",
+          "label": "Causa validada"
+        },
+        {
+          "id": "qe4",
+          "from": "q4",
+          "to": "q5",
+          "label": "Concluída"
+        }
+      ]
+    }
+  ],
+  "calendarTypes": [
+    {
+      "id": "production",
+      "name": "Produção",
+      "color": "#d4a800"
+    },
+    {
+      "id": "quality",
+      "name": "Qualidade / auditoria",
+      "color": "#2f9b4b"
+    },
+    {
+      "id": "finance",
+      "name": "Financeiro",
+      "color": "#9a5f16"
+    },
+    {
+      "id": "people",
+      "name": "Pessoas / formação",
+      "color": "#547080"
+    },
+    {
+      "id": "technology",
+      "name": "Tecnologia",
+      "color": "#16485e"
+    },
+    {
+      "id": "commercial",
+      "name": "Comercial / cliente",
+      "color": "#111111"
+    }
+  ],
+  "calendarEvents": [
+    {
+      "id": "ev-budget",
+      "title": "Preparação do orçamento anual",
+      "start": "2026-10-01",
+      "end": "2026-10-31",
+      "typeId": "finance",
+      "ownerId": "p-finance",
+      "description": "Recolha de necessidades, contratos e investimento previsto.",
+      "allDay": true
+    },
+    {
+      "id": "ev-tech-plan",
+      "title": "Plano tecnológico 2027",
+      "start": "2026-10-15",
+      "end": "2026-11-15",
+      "typeId": "technology",
+      "ownerId": "p-tech",
+      "description": "Roadmap, orçamento, riscos e projetos prioritários.",
+      "allDay": true
+    },
+    {
+      "id": "ev-inventory",
+      "title": "Inventário anual de sistemas e acessos",
+      "start": "2026-12-01",
+      "end": "2026-12-15",
+      "typeId": "technology",
+      "ownerId": "p-tech",
+      "description": "Licenças, contas, equipamentos, backups e fornecedores.",
+      "allDay": true
+    },
+    {
+      "id": "ev-quality",
+      "title": "Revisão do plano de auditorias",
+      "start": "2026-09-07",
+      "end": "2026-09-11",
+      "typeId": "quality",
+      "ownerId": "p-quality",
+      "description": "Confirmar auditorias internas, clientes e certificação.",
+      "allDay": true
+    }
+  ],
+  "systems": [
+    {
+      "id": "sys-m365",
+      "name": "Microsoft 365",
+      "category": "Produtividade e colaboração",
+      "supplier": "Microsoft / parceiro",
+      "ownerId": "p-tech",
+      "users": 5,
+      "billing": "monthly",
+      "cost": 42.47,
+      "renewal": "2027-01-01",
+      "status": "review",
+      "url": "admin.microsoft.com",
+      "notes": "Exemplo: validar plano, quantidade, faturação, MFA, domínio e caixas partilhadas."
+    },
+    {
+      "id": "sys-website",
+      "name": "Website tisser.pt",
+      "category": "Website e presença digital",
+      "supplier": "A validar",
+      "ownerId": "p-tech",
+      "users": 2,
+      "billing": "annual",
+      "cost": 0,
+      "renewal": "2026-12-31",
+      "status": "review",
+      "url": "https://tisser.pt",
+      "notes": "Identificar CMS, alojamento, domínio, DNS, backups, acessos e contrato de manutenção."
+    },
+    {
+      "id": "sys-server",
+      "name": "Servidor / infraestrutura local",
+      "category": "Infraestrutura",
+      "supplier": "A validar",
+      "ownerId": "p-tech",
+      "users": 0,
+      "billing": "annual",
+      "cost": 0,
+      "renewal": "2026-12-31",
+      "status": "risk",
+      "url": "",
+      "notes": "Levantar hardware, virtualização, UPS, garantia, manutenção, backups e recuperação."
+    },
+    {
+      "id": "sys-erp",
+      "name": "ERP / gestão industrial",
+      "category": "Gestão e produção",
+      "supplier": "A validar",
+      "ownerId": "",
+      "users": 0,
+      "billing": "annual",
+      "cost": 0,
+      "renewal": "2026-12-31",
+      "status": "review",
+      "url": "",
+      "notes": "Confirmar produto, módulos, utilizadores, integrações, suporte e dependências."
+    }
+  ],
+  "improvements": [
+    {
+      "id": "imp-process-order-data",
+      "title": "Eliminar dupla introdução de dados entre encomenda e planeamento",
+      "area": "process",
+      "description": "Identificar onde a mesma informação é registada em email, folhas Excel ou ERP e definir uma única origem de dados.",
+      "priority": "high",
+      "impact": "high",
+      "effort": "medium",
+      "status": "identified",
+      "ownerId": "p-tech",
+      "supplier": "",
+      "flowId": "flow-order",
+      "dueDate": "2026-10-15",
+      "expectedBenefit": "Menos erros de transcrição e menor tempo administrativo por encomenda.",
+      "evidence": "Exemplo inicial a validar em entrevistas com Comercial e Produção.",
+      "createdAt": "2026-07-22T08:30:00.000Z",
+      "updatedAt": "2026-07-22T08:30:00.000Z"
+    },
+    {
+      "id": "imp-production-downtime",
+      "title": "Registar paragens e causas por equipamento ou linha",
+      "area": "production",
+      "description": "Criar uma classificação simples de paragens, duração, causa e ação para encontrar perdas repetitivas.",
+      "priority": "high",
+      "impact": "high",
+      "effort": "medium",
+      "status": "analysis",
+      "ownerId": "p-production",
+      "supplier": "",
+      "flowId": "flow-order",
+      "dueDate": "2026-11-01",
+      "expectedBenefit": "Visibilidade das principais perdas e base objetiva para prioridades de manutenção.",
+      "evidence": "Exemplo inicial; confirmar que dados já são recolhidos e em que suporte.",
+      "createdAt": "2026-07-22T08:30:00.000Z",
+      "updatedAt": "2026-07-22T08:30:00.000Z"
+    },
+    {
+      "id": "imp-supplier-scorecard",
+      "title": "Criar avaliação periódica de fornecedores críticos",
+      "area": "supplier",
+      "description": "Avaliar prazo, qualidade, preço, documentação, capacidade de resposta e dependência por fornecedor.",
+      "priority": "medium",
+      "impact": "medium",
+      "effort": "low",
+      "status": "identified",
+      "ownerId": "p-logistics",
+      "supplier": "Fornecedores críticos a identificar",
+      "flowId": "",
+      "dueDate": "2026-12-15",
+      "expectedBenefit": "Melhor negociação, menor risco de rutura e decisões de compra mais consistentes.",
+      "evidence": "Exemplo inicial a validar com Compras, Qualidade e Financeiro.",
+      "createdAt": "2026-07-22T08:30:00.000Z",
+      "updatedAt": "2026-07-22T08:30:00.000Z"
+    }
+  ],
+  "company": {
+    "name": "TISSER",
+    "address": "",
+    "contact": "",
+    "email": "",
+    "website": "",
+    "footerNote": "Documento interno · Organograma",
+    "logoPath": "assets/logo-tisser-blue.png",
+    "logoDataUrl": ""
+  },
+  "shifts": [
+    {
+      "id": "shift-admin",
+      "name": "Administrativo",
+      "code": "ADM",
+      "start": "09:00",
+      "end": "18:00",
+      "hoursPerDay": 8,
+      "daysPerWeek": 5,
+      "color": "#2D69A1",
+      "status": "active",
+      "notes": "Exemplo a validar: horário administrativo com uma hora de pausa."
+    },
+    {
+      "id": "shift-1",
+      "name": "Turno 1",
+      "code": "T1",
+      "start": "06:00",
+      "end": "14:00",
+      "hoursPerDay": 8,
+      "daysPerWeek": 5,
+      "color": "#5EAD41",
+      "status": "active",
+      "notes": "Exemplo a validar com Produção e Recursos Humanos."
+    },
+    {
+      "id": "shift-2",
+      "name": "Turno 2",
+      "code": "T2",
+      "start": "14:00",
+      "end": "22:00",
+      "hoursPerDay": 8,
+      "daysPerWeek": 5,
+      "color": "#2D69A1",
+      "status": "active",
+      "notes": "Exemplo a validar com Produção e Recursos Humanos."
+    },
+    {
+      "id": "shift-3",
+      "name": "Turno 3",
+      "code": "T3",
+      "start": "22:00",
+      "end": "06:00",
+      "hoursPerDay": 8,
+      "daysPerWeek": 5,
+      "color": "#212124",
+      "status": "active",
+      "notes": "Exemplo a validar; confirmar se existe turno noturno."
+    }
+  ],
+  "dutySheets": [
+    {
+      "id": "duty-tech-director",
+      "title": "Diretor Tecnológico",
+      "departmentId": "dep-tech",
+      "responsibleId": "p-tech",
+      "backupId": "",
+      "secondaryBackupId": "",
+      "status": "draft",
+      "reviewDate": "2026-10-31",
+      "purpose": "Garantir que tecnologia, dados, infraestrutura e segurança suportam os objetivos e a continuidade operacional da TISSER.",
+      "responsibilities": "Definir e acompanhar o plano tecnológico\nGerir sistemas, fornecedores e custos recorrentes\nAssegurar backups, acessos, segurança e continuidade\nApoiar a digitalização e melhoria dos processos\nManter documentação técnica e inventário atualizado",
+      "dailyTasks": "Acompanhar incidentes críticos e prioridades operacionais\nResponder a necessidades urgentes dos utilizadores e da produção",
+      "periodicTasks": "Rever acessos, backups e alertas semanalmente\nRever custos, contratos e roadmap mensalmente\nExecutar inventário anual de sistemas e riscos",
+      "authority": "Propor investimentos tecnológicos, bloquear acessos de risco e coordenar fornecedores dentro dos limites orçamentais aprovados.",
+      "kpis": "Disponibilidade dos sistemas\nIncidentes em aberto e tempo de resolução\nSucesso dos backups e testes de recuperação\nCustos tecnológicos mensais e anuais\nProjetos concluídos no prazo",
+      "systems": "Microsoft 365\nERP / gestão industrial\nServidores, firewall, backups e website",
+      "absenceInstructions": "Definir substituto e disponibilizar contactos dos fornecedores, acessos de emergência e procedimentos para incidentes críticos.",
+      "documents": "Inventário de sistemas\nMapa de acessos\nContratos e contactos de suporte\nPlano de recuperação e cópias de segurança",
+      "notes": "Exemplo inicial a validar com a Direção. O substituto deve ser definido antes da validação do caderno.",
+      "createdAt": "2026-07-22T10:15:00.000Z",
+      "updatedAt": "2026-07-22T10:15:00.000Z"
+    },
+    {
+      "id": "duty-production-manager",
+      "title": "Responsável de Produção",
+      "departmentId": "dep-production",
+      "responsibleId": "p-production",
+      "backupId": "",
+      "secondaryBackupId": "",
+      "status": "draft",
+      "reviewDate": "2026-10-31",
+      "purpose": "Assegurar o cumprimento do plano de produção, a utilização equilibrada da capacidade e a resposta a desvios de qualidade, prazo ou disponibilidade.",
+      "responsibilities": "Validar o plano e as prioridades de produção\nDistribuir carga pelos turnos e recursos disponíveis\nAcompanhar produtividade, paragens e qualidade\nEscalar necessidades de manutenção e aprovisionamento\nAssegurar a passagem de informação entre turnos",
+      "dailyTasks": "Reunião curta de arranque e prioridades\nVerificar carga, faltas, materiais e constrangimentos\nAcompanhar desvios ao plano",
+      "periodicTasks": "Rever capacidade e indicadores semanalmente\nAnalisar perdas e ações de melhoria mensalmente",
+      "authority": "Reorganizar prioridades e recursos dentro do plano aprovado e escalar alterações com impacto em prazo, custo ou cliente.",
+      "kpis": "Cumprimento do plano\nProdutividade por turno\nHoras de paragem\nRejeição e retrabalho\nOTIF",
+      "systems": "ERP / planeamento\nRegistos de produção\nQuadros de turno e manutenção",
+      "absenceInstructions": "Definir quem lidera cada turno, onde consultar prioridades e quais os temas que exigem contacto imediato com a Direção.",
+      "documents": "Plano de produção\nLista de prioridades\nContactos de manutenção e qualidade\nProcedimento de escalada",
+      "notes": "Exemplo inicial. Validar operações reais, limites de decisão e substituição.",
+      "createdAt": "2026-07-22T10:15:00.000Z",
+      "updatedAt": "2026-07-22T10:15:00.000Z"
+    }
+  ],
+  "machines": [],
+  "competencies": []
+}

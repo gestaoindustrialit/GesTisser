@@ -1,0 +1,399 @@
+<!-- READ-ONLY REFERENCE. Do not deploy as a GesTISSER page. -->
+<!doctype html>
+<html lang="pt-PT">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="Mapa de processos, organograma, calendário anual e sistemas da TISSER.">
+  <title>TISSER · Company Mapper</title>
+  <link rel="stylesheet" href="styles.reference.css">
+</head>
+<body>
+  <div class="app-shell">
+    <aside class="sidebar" id="sidebar">
+      <div class="brand">
+        <div class="brand-logo-shell"><img id="sidebarLogo" src="assets/logo-tisser-blue.png" alt="Logótipo TISSER"></div>
+        <span class="brand-product">Company Mapper</span>
+      </div>
+
+      <nav class="nav" aria-label="Navegação principal">
+        <button class="nav-item active" data-view="dashboard"><span>◫</span> Visão geral</button>
+        <button class="nav-item" data-view="org"><span>⌘</span> Organograma</button>
+        <button class="nav-item" data-view="duties"><span>✓</span> Cadernos de funções</button>
+        <button class="nav-item" data-view="flows"><span>⇢</span> Fluxos de produção</button>
+        <button class="nav-item" data-view="calendar"><span>▦</span> Calendário anual</button>
+        <button class="nav-item" data-view="systems"><span>▤</span> Sistemas e aplicações</button>
+        <button class="nav-item" data-view="machines"><span>⚙</span> Máquinas</button>
+        <button class="nav-item" data-view="competencies"><span>◆</span> Matriz de competências</button>
+        <button class="nav-item" data-view="improvements"><span>↗</span> Melhorias identificadas</button>
+        <button class="nav-item" data-view="data"><span>{ }</span> Dados e cópias</button>
+      </nav>
+
+      <div class="sidebar-footer">
+        <div class="save-state"><span class="status-dot"></span><span id="saveStateText">A ligar ao servidor…</span></div>
+        <div class="access-profile"><strong>Utilizador de referência</strong><small>Administrador</small></div>
+        <div class="access-links"><span>Referência visual sem autenticação</span></div>
+      </div>
+    </aside>
+
+    <main class="main">
+      <header class="topbar">
+        <button class="icon-button mobile-only" id="menuButton" aria-label="Abrir menu">☰</button>
+        <div class="page-heading">
+          <p id="pageKicker">CENTRO DE CONHECIMENTO</p>
+          <h1 id="pageTitle">Visão geral</h1>
+        </div>
+        <div class="top-actions">
+          <label class="search-box">
+            <span>⌕</span>
+            <input id="globalSearch" type="search" placeholder="Pesquisar pessoas, processos, sistemas…">
+          </label>
+          <button class="button ghost" id="quickExportButton">Exportar JSON</button>
+          <button class="button primary" id="quickAddButton">+ Adicionar</button>
+        </div>
+      </header>
+
+      <section class="view active" id="view-dashboard">
+        <div class="hero-panel">
+          <div>
+            <span class="eyebrow">MAPA VIVO DA EMPRESA</span>
+            <h2>Conhecer, ligar e melhorar a operação.</h2>
+            <p>Centraliza a estrutura da empresa, as etapas produtivas, os momentos críticos do ano e o ecossistema tecnológico.</p>
+          </div>
+          <div class="hero-meta">
+            <span>Última alteração</span>
+            <strong id="lastUpdated">—</strong>
+          </div>
+        </div>
+
+        <div class="stats-grid">
+          <article class="stat-card"><span>Pessoas</span><strong id="statPeople">0</strong><small id="statDepartments">0 departamentos</small></article>
+          <article class="stat-card"><span>Fluxos</span><strong id="statFlows">0</strong><small id="statFlowNodes">0 etapas mapeadas</small></article>
+          <article class="stat-card"><span>Eventos anuais</span><strong id="statEvents">0</strong><small id="statNextEvent">Sem próximos eventos</small></article>
+          <article class="stat-card"><span>Sistemas</span><strong id="statSystems">0</strong><small id="statSystemCost">0 € / mês</small></article>
+          <article class="stat-card"><span>Melhorias abertas</span><strong id="statImprovements">0</strong><small id="statPriorityImprovements">0 de prioridade alta</small></article>
+          <article class="stat-card"><span>Turnos ativos</span><strong id="statShifts">0</strong><small id="statShiftCapacity">0 h disponíveis / dia</small></article>
+          <article class="stat-card"><span>Cadernos de função</span><strong id="statDutySheets">0</strong><small id="statDutyCoverage">0% com substituto</small></article>
+        </div>
+
+        <div class="dashboard-grid">
+          <article class="panel span-2">
+            <div class="panel-header"><div><span class="eyebrow">PROCESSOS</span><h3>Fluxos de produção</h3></div><button class="text-button" data-jump="flows">Abrir mapa →</button></div>
+            <div id="dashboardFlows" class="flow-summary-list"></div>
+          </article>
+          <article class="panel">
+            <div class="panel-header"><div><span class="eyebrow">CALENDÁRIO</span><h3>Próximos marcos</h3></div><button class="text-button" data-jump="calendar">Ver ano →</button></div>
+            <div id="dashboardEvents" class="timeline-list"></div>
+          </article>
+          <article class="panel">
+            <div class="panel-header"><div><span class="eyebrow">TECNOLOGIA</span><h3>Custos recorrentes</h3></div><button class="text-button" data-jump="systems">Inventário →</button></div>
+            <div id="dashboardCosts" class="cost-list"></div>
+          </article>
+          <article class="panel span-2">
+            <div class="panel-header"><div><span class="eyebrow">ORGANIZAÇÃO</span><h3>Responsáveis por área</h3></div><button class="text-button" data-jump="org">Organograma →</button></div>
+            <div id="dashboardLeaders" class="people-strip"></div>
+          </article>
+          <article class="panel span-3 dashboard-duties-panel">
+            <div class="panel-header"><div><span class="eyebrow">CONTINUIDADE OPERACIONAL</span><h3>Responsabilidades e substituições</h3></div><button class="text-button" data-jump="duties">Abrir cadernos →</button></div>
+            <div id="dashboardDutySheets" class="duty-summary-grid"></div>
+          </article>
+          <article class="panel span-3 dashboard-shifts-panel">
+            <div class="panel-header"><div><span class="eyebrow">CAPACIDADE HUMANA</span><h3>Capacidade disponível por turno</h3></div><button class="text-button" data-jump="org">Gerir turnos →</button></div>
+            <div id="dashboardShiftCapacity" class="shift-capacity-grid dashboard-shift-grid"></div>
+          </article>
+          <article class="panel span-3 dashboard-improvements-panel">
+            <div class="panel-header"><div><span class="eyebrow">MELHORIA CONTÍNUA</span><h3>Melhorias prioritárias identificadas</h3></div><button class="text-button" data-jump="improvements">Abrir registo →</button></div>
+            <div id="dashboardImprovements" class="improvement-summary-list"></div>
+          </article>
+        </div>
+      </section>
+
+      <section class="view" id="view-org">
+        <div class="toolbar panel compact">
+          <div class="toolbar-group">
+            <select id="orgDepartmentFilter" aria-label="Filtrar departamento"><option value="">Todos os departamentos</option></select>
+            <select id="orgShiftFilter" aria-label="Filtrar turno"><option value="">Todos os turnos</option></select>
+            <label class="inline-toggle"><input type="checkbox" id="orgShowInactive"> Mostrar inativos</label>
+          </div>
+          <div class="toolbar-group">
+            <button class="button ghost" id="exportOrgPdfButton">Exportar organograma PDF</button>
+            <button class="button ghost" id="addShiftButton">+ Turno</button>
+            <button class="button ghost" id="addDepartmentButton">+ Departamento</button>
+            <button class="button primary" id="addPersonButton">+ Pessoa / função</button>
+          </div>
+        </div>
+        <div class="panel shift-capacity-panel">
+          <div class="panel-header"><div><span class="eyebrow">TURNOS E CARGA</span><h3>Capacidade disponível por turno</h3></div><span class="muted">Calculada a partir das pessoas ativas, horário do turno e percentagem de capacidade</span></div>
+          <div id="shiftCapacityCards" class="shift-capacity-grid"></div>
+        </div>
+        <div class="org-layout">
+          <div class="panel org-canvas-panel">
+            <div class="panel-header"><div><span class="eyebrow">ESTRUTURA</span><h3>Organograma funcional</h3></div><span class="muted" id="orgHint">Clique numa pessoa para editar</span></div>
+            <div id="orgChart" class="org-chart"></div>
+          </div>
+          <aside class="panel side-inspector" id="orgInspector">
+            <div class="empty-state"><div class="empty-icon">⌘</div><h3>Selecione uma pessoa</h3><p>Consulte funções, contacto, reporte e notas.</p></div>
+          </aside>
+        </div>
+      </section>
+
+
+      <section class="view" id="view-duties">
+        <div class="toolbar panel compact">
+          <div class="toolbar-group grow">
+            <input id="dutySearch" class="control" type="search" placeholder="Pesquisar função, responsabilidade, pessoa ou sistema…">
+            <select id="dutyDepartmentFilter"><option value="">Todos os departamentos</option></select>
+            <select id="dutyCoverageFilter">
+              <option value="">Toda a cobertura</option>
+              <option value="covered">Com substituto</option>
+              <option value="uncovered">Sem substituto</option>
+            </select>
+            <select id="dutyStatusFilter"><option value="">Todos os estados</option></select>
+          </div>
+          <button class="button primary" id="addDutySheetButton">+ Caderno de função</button>
+        </div>
+
+        <div class="stats-grid duty-stats">
+          <article class="stat-card"><span>Total de cadernos</span><strong id="dutyTotalCount">0</strong><small>Funções documentadas</small></article>
+          <article class="stat-card"><span>Validados</span><strong id="dutyValidatedCount">0</strong><small>Aprovados internamente</small></article>
+          <article class="stat-card"><span>Sem substituto</span><strong id="dutyUncoveredCount">0</strong><small>Risco na ausência do responsável</small></article>
+          <article class="stat-card"><span>Revisão vencida</span><strong id="dutyReviewDueCount">0</strong><small>Atualização necessária</small></article>
+        </div>
+
+        <div class="panel duty-guidance-panel">
+          <div class="panel-header"><div><span class="eyebrow">CLAREZA E CONTINUIDADE</span><h3>Cadernos de encargos e mapa de substituição</h3></div><span class="muted">Documente o que a função faz, como decide e quem assegura a continuidade na ausência do responsável.</span></div>
+        </div>
+        <div id="dutySheetsGrid" class="duty-sheets-grid"></div>
+      </section>
+
+      <section class="view" id="view-flows">
+        <div class="toolbar panel compact">
+          <div class="toolbar-group grow">
+            <select id="flowSelector" aria-label="Selecionar fluxo"></select>
+            <button class="button ghost" id="addFlowButton">+ Novo fluxo</button>
+            <button class="button ghost" id="editFlowButton">Editar fluxo</button>
+          </div>
+          <div class="toolbar-group">
+            <button class="button ghost" id="connectNodesButton">Ligar etapas</button>
+            <button class="button primary" id="addNodeButton">+ Etapa</button>
+          </div>
+        </div>
+        <div class="flow-workspace">
+          <div class="panel flow-board-panel">
+            <div class="flow-board-header">
+              <div><span class="eyebrow" id="flowStatusText">FLUXO</span><h3 id="flowTitle">—</h3><p id="flowDescription">—</p></div>
+              <div class="legend"><span><i class="legend-dot operation"></i>Operação</span><span><i class="legend-dot decision"></i>Decisão</span><span><i class="legend-dot control"></i>Controlo</span><span><i class="legend-dot external"></i>Externo</span></div>
+            </div>
+            <div class="flow-board" id="flowBoard">
+              <svg id="flowEdges" class="flow-edges" aria-hidden="true"></svg>
+              <div id="flowNodes" class="flow-nodes"></div>
+              <div id="connectBanner" class="connect-banner hidden">Selecione a etapa de origem e depois a etapa de destino. <button id="cancelConnectButton">Cancelar</button></div>
+            </div>
+          </div>
+          <aside class="panel side-inspector" id="flowInspector">
+            <div class="empty-state"><div class="empty-icon">⇢</div><h3>Selecione uma etapa</h3><p>Edite responsável, duração, sistema, KPI e observações.</p></div>
+          </aside>
+        </div>
+      </section>
+
+      <section class="view" id="view-calendar">
+        <div class="toolbar panel compact">
+          <div class="toolbar-group">
+            <button class="icon-button" id="prevYearButton" aria-label="Ano anterior">←</button>
+            <strong class="year-label" id="calendarYear">2026</strong>
+            <button class="icon-button" id="nextYearButton" aria-label="Ano seguinte">→</button>
+            <button class="button ghost" id="todayYearButton">Ano atual</button>
+          </div>
+          <div class="toolbar-group">
+            <select id="calendarTypeFilter"><option value="">Todos os tipos</option></select>
+            <button class="button primary" id="addCalendarEventButton">+ Evento</button>
+          </div>
+        </div>
+        <div class="calendar-layout">
+          <div class="year-grid" id="yearGrid"></div>
+          <aside class="panel calendar-sidebar">
+            <div class="panel-header"><div><span class="eyebrow">AGENDA</span><h3>Eventos do ano</h3></div></div>
+            <div id="calendarEventList" class="event-list"></div>
+          </aside>
+        </div>
+      </section>
+
+      <section class="view" id="view-systems">
+        <div class="toolbar panel compact">
+          <div class="toolbar-group grow">
+            <input id="systemSearch" class="control" type="search" placeholder="Pesquisar sistema, fornecedor ou responsável…">
+            <select id="systemCategoryFilter"><option value="">Todas as categorias</option></select>
+          </div>
+          <button class="button primary" id="addSystemButton">+ Sistema / aplicação</button>
+        </div>
+        <div class="stats-grid system-stats">
+          <article class="stat-card"><span>Custo mensal</span><strong id="monthlySystemCost">0 €</strong><small>Sem IVA, conforme registo</small></article>
+          <article class="stat-card"><span>Custo anual</span><strong id="annualSystemCost">0 €</strong><small>Mensal × 12 + custos anuais</small></article>
+          <article class="stat-card"><span>Contratos a rever</span><strong id="renewalsCount">0</strong><small>Nos próximos 90 dias</small></article>
+          <article class="stat-card"><span>Sem responsável</span><strong id="systemsWithoutOwner">0</strong><small>Risco de dependência</small></article>
+        </div>
+        <div class="panel table-panel">
+          <div class="table-scroll">
+            <table>
+              <thead><tr><th>Sistema</th><th>Categoria</th><th>Fornecedor</th><th>Responsável</th><th>Utilizadores</th><th>Custo</th><th>Renovação</th><th>Estado</th><th></th></tr></thead>
+              <tbody id="systemsTableBody"></tbody>
+            </table>
+          </div>
+        </div>
+      </section>
+
+
+      <section class="view" id="view-machines">
+        <div class="toolbar panel compact">
+          <div class="toolbar-group grow">
+            <input id="machineSearch" class="control" type="search" placeholder="Pesquisar máquina, marca, modelo, setor ou fornecedor…">
+            <select id="machineStatusFilter"><option value="">Todos os estados</option></select>
+            <select id="machineDepartmentFilter"><option value="">Todos os departamentos</option></select>
+          </div>
+          <button class="button primary" id="addMachineButton">+ Máquina</button>
+        </div>
+        <div class="stats-grid machine-stats">
+          <article class="stat-card"><span>Máquinas</span><strong id="machineTotalCount">0</strong><small>Equipamentos registados</small></article>
+          <article class="stat-card"><span>Operacionais</span><strong id="machineActiveCount">0</strong><small>Disponíveis para produção</small></article>
+          <article class="stat-card"><span>Críticas</span><strong id="machineCriticalCount">0</strong><small>Criticidade alta</small></article>
+          <article class="stat-card"><span>Sem responsável</span><strong id="machineNoOwnerCount">0</strong><small>Atribuição pendente</small></article>
+        </div>
+        <div id="machinesGrid" class="machines-grid"></div>
+      </section>
+
+      <section class="view" id="view-competencies">
+        <div class="toolbar panel compact">
+          <div class="toolbar-group grow">
+            <input id="competencySearch" class="control" type="search" placeholder="Pesquisar colaborador, máquina ou competência…">
+            <select id="competencyShiftFilter"><option value="">Todos os turnos</option></select>
+            <select id="competencyDepartmentFilter"><option value="">Todos os departamentos</option></select>
+            <select id="competencyMachineFilter"><option value="">Todas as máquinas</option></select>
+          </div>
+          <button class="button primary" id="addCompetencyButton">+ Competência</button>
+        </div>
+        <div class="panel competency-legend">
+          <strong>Níveis:</strong>
+          <span class="level-pill level-0">0 · Sem conhecimento</span>
+          <span class="level-pill level-1">1 · Em formação</span>
+          <span class="level-pill level-2">2 · Com supervisão</span>
+          <span class="level-pill level-3">3 · Autónomo</span>
+          <span class="level-pill level-4">4 · Formador / especialista</span>
+        </div>
+        <div class="stats-grid competency-stats">
+          <article class="stat-card"><span>Registos</span><strong id="competencyTotalCount">0</strong><small>Competências atribuídas</small></article>
+          <article class="stat-card"><span>Autónomos</span><strong id="competencyAutonomousCount">0</strong><small>Nível 3 ou superior</small></article>
+          <article class="stat-card"><span>Máquinas sem cobertura</span><strong id="competencyUncoveredMachines">0</strong><small>Sem operador autónomo</small></article>
+          <article class="stat-card"><span>Em formação</span><strong id="competencyTrainingCount">0</strong><small>Níveis 1 e 2</small></article>
+        </div>
+        <div class="panel table-panel competency-table-panel">
+          <div class="table-scroll"><table class="competency-table"><thead><tr><th>Colaborador</th><th>Turno</th><th>Máquina</th><th>Nível</th><th>Última avaliação</th><th>Validade</th><th>Notas</th><th></th></tr></thead><tbody id="competencyTableBody"></tbody></table></div>
+        </div>
+      </section>
+
+      <section class="view" id="view-improvements">
+        <div class="toolbar panel compact">
+          <div class="toolbar-group grow">
+            <input id="improvementSearch" class="control" type="search" placeholder="Pesquisar melhoria, fornecedor, benefício ou evidência…">
+            <select id="improvementAreaFilter"><option value="">Todas as áreas</option></select>
+            <select id="improvementStatusFilter"><option value="">Todos os estados</option></select>
+            <select id="improvementPriorityFilter"><option value="">Todas as prioridades</option></select>
+          </div>
+          <button class="button primary" id="addImprovementButton">+ Melhoria identificada</button>
+        </div>
+
+        <div class="improvement-area-grid">
+          <button class="improvement-area-card" data-improvement-area="production">
+            <span class="area-icon production">P</span><div><strong>Produção</strong><small>Equipamentos, tempos, qualidade, desperdício e capacidade</small></div><b id="productionImprovementCount">0</b>
+          </button>
+          <button class="improvement-area-card" data-improvement-area="process">
+            <span class="area-icon process">F</span><div><strong>Processos</strong><small>Fluxos, aprovações, dados, responsabilidades e documentação</small></div><b id="processImprovementCount">0</b>
+          </button>
+          <button class="improvement-area-card" data-improvement-area="supplier">
+            <span class="area-icon supplier">S</span><div><strong>Fornecedores</strong><small>Preço, prazo, qualidade, risco, contrato e dependência</small></div><b id="supplierImprovementCount">0</b>
+          </button>
+        </div>
+
+        <div class="stats-grid improvement-stats">
+          <article class="stat-card"><span>Abertas</span><strong id="openImprovementsCount">0</strong><small>Por analisar ou executar</small></article>
+          <article class="stat-card"><span>Prioridade alta/crítica</span><strong id="highImprovementsCount">0</strong><small>Exigem decisão rápida</small></article>
+          <article class="stat-card"><span>Em execução</span><strong id="doingImprovementsCount">0</strong><small>Com ação em curso</small></article>
+          <article class="stat-card"><span>Implementadas</span><strong id="implementedImprovementsCount">0</strong><small>A medir ou concluídas</small></article>
+        </div>
+
+        <div class="panel table-panel improvements-table-panel">
+          <div class="table-scroll">
+            <table class="improvements-table">
+              <thead><tr><th>Melhoria</th><th>Área</th><th>Prioridade</th><th>Impacto / esforço</th><th>Responsável</th><th>Fornecedor / fluxo</th><th>Prazo</th><th>Estado</th><th></th></tr></thead>
+              <tbody id="improvementsTableBody"></tbody>
+            </table>
+          </div>
+        </div>
+      </section>
+
+      <section class="view" id="view-data">
+        <div class="panel company-settings-panel">
+          <div class="panel-header"><div><span class="eyebrow">IDENTIDADE CORPORATIVA</span><h3>Logótipo e dados da empresa</h3></div><span class="muted">Usados no cabeçalho e no rodapé do PDF</span></div>
+          <div class="company-settings-grid">
+            <div class="logo-settings">
+              <div class="company-logo-preview"><img id="companyLogoPreview" src="assets/logo-tisser-blue.png" alt="Pré-visualização do logótipo"></div>
+              <label class="button primary file-button">Adicionar logótipo<input type="file" id="companyLogoInput" accept="image/png,image/jpeg,image/webp,image/svg+xml"></label>
+              <div class="logo-presets">
+                <button class="logo-preset active" type="button" data-logo-preset="assets/logo-tisser-blue.png"><img src="assets/logo-tisser-blue.png" alt="Versão azul"></button>
+                <button class="logo-preset" type="button" data-logo-preset="assets/logo-tisser-green.png"><img src="assets/logo-tisser-green.png" alt="Versão verde"></button>
+              </div>
+              <small>O ficheiro é redimensionado e guardado localmente. PNG transparente recomendado.</small>
+            </div>
+            <div class="company-form-grid">
+              <label class="field"><span>Nome da empresa</span><input id="companyNameInput" type="text" placeholder="TISSER"></label>
+              <label class="field"><span>Contacto</span><input id="companyContactInput" type="text" placeholder="+351 ..."></label>
+              <label class="field full"><span>Morada</span><input id="companyAddressInput" type="text" placeholder="Morada completa"></label>
+              <label class="field"><span>Email</span><input id="companyEmailInput" type="email" placeholder="geral@tisser.pt"></label>
+              <label class="field"><span>Website</span><input id="companyWebsiteInput" type="url" placeholder="https://tisser.pt"></label>
+              <label class="field full"><span>Nota do rodapé</span><input id="companyFooterNoteInput" type="text" placeholder="Documento interno · Organograma"></label>
+              <div class="company-form-actions"><button class="button primary" id="saveCompanyDetailsButton" type="button">Guardar identidade</button></div>
+            </div>
+          </div>
+        </div>
+        <div class="data-grid">
+          <article class="panel action-card"><div class="action-icon">⇩</div><h3>Exportar cópia</h3><p>Descarrega toda a informação num ficheiro JSON portátil.</p><button class="button primary" id="exportDataButton">Exportar JSON</button></article>
+          <article class="panel action-card"><div class="action-icon">⇧</div><h3>Importar cópia</h3><p>Substitui o estado local por um JSON anteriormente exportado.</p><label class="button primary file-button">Escolher JSON<input type="file" id="importDataInput" accept="application/json,.json"></label></article>
+          <article class="panel action-card"><div class="action-icon">↺</div><h3>Repor exemplo</h3><p>Apaga as alterações locais e volta ao ficheiro inicial.</p><button class="button danger" id="resetDataButton">Repor dados</button></article>
+          <article class="panel action-card"><div class="action-icon">⎘</div><h3>Copiar JSON</h3><p>Copia os dados atuais para a área de transferência.</p><button class="button ghost" id="copyJsonButton">Copiar dados</button></article>
+        </div>
+        <div class="panel json-panel">
+          <div class="panel-header"><div><span class="eyebrow">ESTADO ATUAL</span><h3>Pré-visualização JSON</h3></div><button class="text-button" id="refreshJsonButton">Atualizar</button></div>
+          <pre id="jsonPreview"></pre>
+        </div>
+      </section>
+    </main>
+  </div>
+
+  <div class="search-overlay hidden" id="searchOverlay">
+    <div class="search-results-panel">
+      <div class="search-results-header"><strong>Resultados</strong><button class="icon-button" id="closeSearchButton">×</button></div>
+      <div id="searchResults"></div>
+    </div>
+  </div>
+
+  <dialog id="formDialog" class="modal">
+    <form method="dialog" id="dynamicForm">
+      <div class="modal-header"><div><span class="eyebrow" id="dialogKicker">EDITAR</span><h2 id="dialogTitle">Registo</h2></div><button type="button" class="icon-button dialog-close" aria-label="Fechar">×</button></div>
+      <div class="modal-body" id="dialogFields"></div>
+      <div class="modal-footer"><button type="button" class="button ghost dialog-close">Cancelar</button><button type="submit" class="button primary" id="dialogSaveButton">Guardar</button></div>
+    </form>
+  </dialog>
+
+  <dialog id="confirmDialog" class="modal confirm-modal">
+    <form method="dialog">
+      <div class="modal-header"><div><span class="eyebrow">CONFIRMAÇÃO</span><h2 id="confirmTitle">Confirmar ação</h2></div></div>
+      <div class="modal-body"><p id="confirmMessage"></p></div>
+      <div class="modal-footer"><button type="button" class="button ghost confirm-close">Cancelar</button><button type="submit" class="button danger" id="confirmActionButton">Confirmar</button></div>
+    </form>
+  </dialog>
+
+  <div class="toast" id="toast" role="status"></div>
+  <script>window.TISSER_ACCESS = {role:"admin",canEdit:true,apiUrl:"",csrfToken:""};</script>
+  <script src="initial-data.example.js"></script>
+  <script src="script.reference.js"></script>
+</body>
+</html>
