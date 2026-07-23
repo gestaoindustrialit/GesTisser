@@ -8,6 +8,8 @@ define('TASKFORCE_BOOTSTRAP_APP_LOADED', true);
 
 define('TASKFORCE_LEGACY_MODE', true);
 
+require_once __DIR__ . '/php70_polyfills.php';
+
 require_once __DIR__ . '/error_handler.php';
 require_once __DIR__ . '/config.php';
 
