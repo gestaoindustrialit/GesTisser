@@ -565,12 +565,15 @@ function initResultsPage() {
         });
 
         const rowWorkDate = row.dataset.workDate || '';
+        const registeredBreakSeconds = Number(row.dataset.breakSeconds || '0');
         if (openSeconds !== null && rowWorkDate === getTodayLocalDate()) {
             const currentLocalSeconds = getCurrentLocalSeconds();
             if (currentLocalSeconds > openSeconds) {
                 effectiveSeconds += currentLocalSeconds - openSeconds;
             }
         }
+
+        effectiveSeconds = Math.max(0, effectiveSeconds - registeredBreakSeconds);
 
         effectiveCell.dataset.effectiveSeconds = String(effectiveSeconds);
         effectiveCell.textContent = formatHHMM(effectiveSeconds);
