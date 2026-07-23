@@ -1,0 +1,33 @@
+<?php
+class CompanyMapperService
+{
+    private $pdo;
+    private $enums = array(
+        'machine_status'=>array('operational','limited','maintenance','stopped','inactive'), 'criticality'=>array('high','medium','low'),
+        'duty_status'=>array('draft','validated','review','inactive'), 'billing_period'=>array('monthly','annual','one_time','none'),
+        'system_status'=>array('active','review','risk','inactive'), 'flow_status'=>array('draft','hypothesis','validated','archived'),
+        'node_type'=>array('operation','decision','control','external'), 'improvement_area'=>array('production','process','supplier','technology','people','quality','other'),
+        'improvement_priority'=>array('critical','high','medium','low'), 'improvement_status'=>array('identified','analysis','planned','in_progress','blocked','implemented','measured','cancelled')
+    );
+    public function __construct(PDO $pdo) { $this->pdo=$pdo; $this->pdo->exec('PRAGMA foreign_keys = ON'); }
+    private function all($sql,$params=array()) { $s=$this->pdo->prepare($sql); $s->execute($params); return $s->fetchAll(PDO::FETCH_ASSOC); }
+    private function one($sql,$params=array()) { $s=$this->pdo->prepare($sql); $s->execute($params); $r=$s->fetch(PDO::FETCH_ASSOC); return $r ? $r : null; }
+    private function assertEnum($key,$value) { if (!in_array($value,$this->enums[$key],true)) throw new InvalidArgumentException('Valor inválido: '.$key); }
+    private function assertRef($table,$id,$nullable) { if ($id===null || $id==='') { if ($nullable) return null; throw new InvalidArgumentException('Referência obrigatória.'); } $s=$this->pdo->prepare('SELECT 1 FROM '.$table.' WHERE id=? LIMIT 1'); $s->execute(array((int)$id)); if (!$s->fetchColumn()) throw new InvalidArgumentException('Referência inexistente: '.$table); return (int)$id; }
+    private function audit($action,$entity,$id,$old=array(),$new=array()) { if (function_exists('erp_audit')) erp_audit($this->pdo, isset($_SESSION['user_id'])?$_SESSION['user_id']:null, $action, $entity, $id, $old, $new, null); }
+
+    public function getOrganizationChart() { return $this->all('SELECT u.*, d.name AS department_name, s.name AS schedule_name FROM users u LEFT JOIN hr_departments d ON d.name=u.department LEFT JOIN hr_schedules s ON s.id=u.schedule_id ORDER BY COALESCE(s.name,""), COALESCE(u.title,u.profession,""), u.org_sort_order, u.name'); }
+    public function getShiftsAndSchedules() { return array('hr_schedules'=>$this->all('SELECT * FROM hr_schedules ORDER BY is_active DESC, name'), 'erp_shift_templates'=>$this->all('SELECT * FROM erp_shift_templates ORDER BY is_active DESC, name')); }
+    public function getAnnualCalendar($year) { return $this->all('SELECT * FROM hr_calendar_events WHERE substr(start_date,1,4)=? OR substr(end_date,1,4)=? ORDER BY start_date', array((string)$year,(string)$year)); }
+    public function getMachines($filters=array()) { return $this->all('SELECT m.*, d.name department_name, w.name work_center_name, u.name owner_name, s.name supplier_name FROM erp_machines m LEFT JOIN hr_departments d ON d.id=m.department_id LEFT JOIN erp_work_centers w ON w.id=m.work_center_id LEFT JOIN users u ON u.id=m.owner_user_id LEFT JOIN erp_suppliers s ON s.id=m.supplier_id ORDER BY m.is_active DESC, m.code'); }
+    public function getCompetencies($machineId=null) { return $this->all('SELECT c.*, u.name user_name, m.code machine_code, m.name machine_name FROM hr_machine_competencies c JOIN users u ON u.id=c.user_id JOIN erp_machines m ON m.id=c.machine_id WHERE (? IS NULL OR c.machine_id=?) ORDER BY u.name,m.code', array($machineId,$machineId)); }
+    public function getDutySheets() { return $this->all('SELECT ds.*, d.name department_name FROM company_duty_sheets ds LEFT JOIN hr_departments d ON d.id=ds.department_id ORDER BY ds.status, ds.title'); }
+    public function getSystems() { return $this->all('SELECT s.*, u.name owner_name, es.name supplier_resolved_name FROM company_systems s LEFT JOIN users u ON u.id=s.owner_user_id LEFT JOIN erp_suppliers es ON es.id=s.supplier_id ORDER BY s.is_active DESC,s.name'); }
+    public function getFlows() { return $this->all('SELECT * FROM company_process_flows ORDER BY is_active DESC,name'); }
+    public function getFlow($flowId) { return array('flow'=>$this->one('SELECT * FROM company_process_flows WHERE id=?',array((int)$flowId)), 'nodes'=>$this->all('SELECT * FROM company_process_nodes WHERE flow_id=? ORDER BY sort_order,id',array((int)$flowId)), 'edges'=>$this->all('SELECT * FROM company_process_edges WHERE flow_id=? ORDER BY sort_order,id',array((int)$flowId))); }
+    public function getImprovements() { return $this->all('SELECT * FROM company_improvements ORDER BY created_at DESC'); }
+
+    public function saveMachine(array $data) { $status=isset($data['status'])?$data['status']:'operational'; $crit=isset($data['criticality'])?$data['criticality']:'medium'; $this->assertEnum('machine_status',$status); $this->assertEnum('criticality',$crit); $id=isset($data['id'])?(int)$data['id']:0; $params=array(trim($data['code']),trim($data['name']),$status,$crit,date('Y-m-d H:i:s')); if ($id>0) { $params[]=$id; $this->pdo->prepare('UPDATE erp_machines SET code=?, name=?, status=?, criticality=?, updated_at=? WHERE id=?')->execute($params); $this->audit('update','erp_machines',$id,array(),$data); return $id; } $this->pdo->prepare('INSERT INTO erp_machines(code,name,status,criticality,updated_at) VALUES (?,?,?,?,?)')->execute($params); $id=(int)$this->pdo->lastInsertId(); $this->audit('create','erp_machines',$id,array(),$data); return $id; }
+    public function saveCompetency($userId,$machineId,$level,$notes=null) { if ($level<0 || $level>4) throw new InvalidArgumentException('Nível inválido.'); $this->assertRef('users',$userId,false); $this->assertRef('erp_machines',$machineId,false); $update=$this->pdo->prepare('UPDATE hr_machine_competencies SET level=?, notes=?, updated_at=CURRENT_TIMESTAMP WHERE user_id=? AND machine_id=?'); $update->execute(array((int)$level,$notes,(int)$userId,(int)$machineId)); if ($update->rowCount()===0) { $this->pdo->prepare('INSERT INTO hr_machine_competencies(user_id,machine_id,level,notes,updated_at) VALUES (?,?,?,?,CURRENT_TIMESTAMP)')->execute(array((int)$userId,(int)$machineId,(int)$level,$notes)); } $this->audit('upsert','hr_machine_competencies',$machineId,array(),array('user_id'=>$userId,'level'=>$level)); }
+    public function deleteMachine($id) { $old=$this->one('SELECT * FROM erp_machines WHERE id=?',array((int)$id)); $this->pdo->prepare('DELETE FROM erp_machines WHERE id=?')->execute(array((int)$id)); $this->audit('delete','erp_machines',(int)$id,$old?$old:array(),array()); }
+}

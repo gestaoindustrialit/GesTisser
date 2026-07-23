@@ -894,6 +894,8 @@ foreach ([['BR','Branco','000'],['AZLA','Azul Laminado',''],['TRLA','Transparent
 foreach ([['GERAL','Turno geral','08:00','17:00',60],['MANHA','Manhã','06:00','14:00',30],['TARDE','Tarde','14:00','22:00',30],['NOITE','Noite','22:00','06:00',30]] as $s) { $pdo->prepare('INSERT OR IGNORE INTO erp_shift_templates(code,name,start_time,end_time,break_minutes) VALUES (?,?,?,?,?)')->execute($s); }
 foreach ([['IMP','Impressora',45],['COR','Corte e Cose',45],['RET','Retratador',35]] as $wc) { $pdo->prepare('INSERT OR IGNORE INTO erp_work_centers(code,name,hourly_rate) VALUES (?,?,?)')->execute($wc); }
 erp_run_phase1_migrations($pdo);
+require_once __DIR__ . '/company_mapper_migrations.php';
+company_mapper_run_migrations($pdo);
 
 $pdo->exec('CREATE UNIQUE INDEX IF NOT EXISTS idx_users_username_unique ON users(username)');
 
