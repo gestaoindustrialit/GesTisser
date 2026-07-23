@@ -733,8 +733,12 @@ if (!empty($scheduleContext['start_time']) && !empty($scheduleContext['end_time'
             continue;
         }
 
-        [$startHour, $startMinute] = array_map('intval', explode(':', $periodStart));
-        [$endHour, $endMinute] = array_map('intval', explode(':', $periodEnd));
+        $periodStartParts = array_map('intval', explode(':', $periodStart));
+        $periodEndParts = array_map('intval', explode(':', $periodEnd));
+        $startHour = $periodStartParts[0];
+        $startMinute = $periodStartParts[1];
+        $endHour = $periodEndParts[0];
+        $endMinute = $periodEndParts[1];
         $periodMinutes = (($endHour * 60) + $endMinute) - (($startHour * 60) + $startMinute);
         if ($periodMinutes > 0) {
             $scheduleTargetMinutes += $periodMinutes;

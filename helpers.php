@@ -1464,8 +1464,12 @@ function taskforce_generate_monthly_attendance_report(PDO $pdo, array $user, Dat
                     continue;
                 }
 
-                [$startHour, $startMinute] = array_map('intval', explode(':', $periodStart));
-                [$endHour, $endMinute] = array_map('intval', explode(':', $periodEnd));
+                $periodStartParts = array_map('intval', explode(':', $periodStart));
+                $periodEndParts = array_map('intval', explode(':', $periodEnd));
+                $startHour = $periodStartParts[0];
+                $startMinute = $periodStartParts[1];
+                $endHour = $periodEndParts[0];
+                $endMinute = $periodEndParts[1];
                 $periodMinutes = (($endHour * 60) + $endMinute) - (($startHour * 60) + $startMinute);
                 if ($periodMinutes > 0) {
                     $targetMinutes += $periodMinutes;

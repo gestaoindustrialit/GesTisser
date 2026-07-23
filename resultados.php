@@ -782,8 +782,12 @@ $getScheduleTargetSeconds = static function (int $targetUserId, string $workDate
         if (preg_match('/^\d{2}:\d{2}$/', $start) !== 1 || preg_match('/^\d{2}:\d{2}$/', $end) !== 1) {
             continue;
         }
-        [$sh, $sm] = array_map('intval', explode(':', $start));
-        [$eh, $em] = array_map('intval', explode(':', $end));
+        $startParts = array_map('intval', explode(':', $start));
+        $endParts = array_map('intval', explode(':', $end));
+        $sh = $startParts[0];
+        $sm = $startParts[1];
+        $eh = $endParts[0];
+        $em = $endParts[1];
         $delta = (($eh * 60) + $em) - (($sh * 60) + $sm);
         if ($delta > 0) {
             $minutes += $delta;
