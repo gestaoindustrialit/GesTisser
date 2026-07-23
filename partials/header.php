@@ -79,17 +79,6 @@ header('Content-Type: text/html; charset=UTF-8');
             </button>
         <?php endif; ?>
         <?php if ($user): ?>
-            <?php
-            $navTeamsStmt = $pdo->prepare(
-                'SELECT t.id, t.name
-                 FROM teams t
-                 INNER JOIN team_members tm ON tm.team_id = t.id
-                 WHERE tm.user_id = ?
-                 ORDER BY t.name COLLATE NOCASE ASC'
-            );
-            $navTeamsStmt->execute([(int) $user['id']]);
-            $navTeams = $navTeamsStmt->fetchAll(PDO::FETCH_ASSOC);
-            ?>
             <div class="collapse navbar-collapse" id="mainNavbar">
                 <div class="navbar-nav me-auto ms-lg-4">
                     <?php if ($isPinOnlyUser): ?>
@@ -153,18 +142,6 @@ header('Content-Type: text/html; charset=UTF-8');
                             </ul>
                         </div>
                     <?php endif; ?>
-                    <div class="nav-item dropdown">
-                        <a class="nav-link dropdown-toggle" href="#" role="button" data-bs-toggle="dropdown" aria-expanded="false">Equipas</a>
-                        <ul class="dropdown-menu">
-                            <?php if ($navTeams): ?>
-                                <?php foreach ($navTeams as $navTeam): ?>
-                                    <li><a class="dropdown-item" href="team.php?id=<?= (int) $navTeam['id'] ?>"><?= h($navTeam['name']) ?></a></li>
-                                <?php endforeach; ?>
-                            <?php else: ?>
-                                <li><span class="dropdown-item-text text-muted">Sem equipas dispon&iacute;veis</span></li>
-                            <?php endif; ?>
-                        </ul>
-                    </div>
                     <?php if ((int) $user['is_admin'] === 1): ?>
                         <div class="nav-item dropdown">
                             <a class="nav-link dropdown-toggle" href="#" role="button" data-bs-toggle="dropdown" aria-expanded="false">Administra&ccedil;&atilde;o</a>
