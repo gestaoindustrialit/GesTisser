@@ -22,7 +22,7 @@ $smtpUsername = '';
 $smtpPassword = '';
 $smtpTimeout = '10';
 $mailFromAddress = 'noreply@calcadacorp.ch';
-$mailFromName = 'TaskForce';
+$mailFromName = 'GesTisser';
 $hrAlertsCronRunsPerDay = '1440';
 $companyDailyObjective = '08:15';
 $navbarLogo = null;
@@ -30,6 +30,32 @@ $reportLogo = null;
 $ticketStatuses = [];
 $recurrenceCatalog = [];
 $pendingDepartmentCatalog = [];
+$greetingImages = ['birthday' => [], 'work_anniversary' => []];
+
+function save_hr_greeting_image_upload(array $file, string $type): ?array
+{
+    if (($file['error'] ?? UPLOAD_ERR_NO_FILE) !== UPLOAD_ERR_OK) {
+        return null;
+    }
+    if (!isset($file['tmp_name']) || !is_string($file['tmp_name']) || !is_file($file['tmp_name'])) {
+        return null;
+    }
+    $allowed = ['png' => 'image/png', 'jpg' => 'image/jpeg', 'jpeg' => 'image/jpeg', 'webp' => 'image/webp'];
+    $extension = strtolower((string) pathinfo((string) ($file['name'] ?? ''), PATHINFO_EXTENSION));
+    if (!isset($allowed[$extension])) {
+        return null;
+    }
+    $uploadDir = __DIR__ . '/assets/uploads/hr_greetings';
+    if (!is_dir($uploadDir)) {
+        mkdir($uploadDir, 0775, true);
+    }
+    $filename = $type . '_' . date('Ymd_His') . '_' . bin2hex(random_bytes(4)) . '.' . ($extension === 'jpeg' ? 'jpg' : $extension);
+    $targetPath = $uploadDir . '/' . $filename;
+    if (!move_uploaded_file((string) $file['tmp_name'], $targetPath)) {
+        return null;
+    }
+    return ['path' => 'assets/uploads/hr_greetings/' . $filename, 'mime' => $allowed[$extension], 'name' => (string) ($file['name'] ?? $filename)];
+}
 
 try {
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
@@ -233,6 +259,42 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 ? 'Dados da empresa e logotipos atualizados com sucesso.'
                 : 'Dados da empresa atualizados com sucesso.';
         }
+    } elseif (($_POST['action'] ?? '') === 'upload_hr_greeting_image') {
+        $type = (string) ($_POST['greeting_type'] ?? '');
+        $title = trim((string) ($_POST['greeting_title'] ?? ''));
+        if (!in_array($type, ['birthday', 'work_anniversary'], true)) {
+            $flashError = 'Tipo de imagem inválido.';
+        } elseif ($title === '') {
+            $flashError = 'Indique um título para a imagem.';
+        } else {
+            $countStmt = $pdo->prepare('SELECT COUNT(*) FROM hr_greeting_images WHERE greeting_type = ?');
+            $countStmt->execute([$type]);
+            $limit = $type === 'work_anniversary' ? 30 : 1;
+            if ((int) $countStmt->fetchColumn() >= $limit) {
+                $flashError = $type === 'work_anniversary' ? 'Só pode configurar até 30 imagens de aniversário de empresa.' : 'Só pode configurar uma imagem de parabéns.';
+            } else {
+                $upload = save_hr_greeting_image_upload($_FILES['greeting_image'] ?? [], $type);
+                if ($upload === null) {
+                    $flashError = 'Envie uma imagem válida (PNG, JPG ou WebP).';
+                } else {
+                    $sortOrderStmt = $pdo->prepare('SELECT COALESCE(MAX(sort_order), 0) + 10 FROM hr_greeting_images WHERE greeting_type = ?');
+                    $sortOrderStmt->execute([$type]);
+                    $stmt = $pdo->prepare('INSERT INTO hr_greeting_images(greeting_type, title, file_path, original_name, mime_type, sort_order, uploaded_by) VALUES (?, ?, ?, ?, ?, ?, ?)');
+                    $stmt->execute([$type, $title, $upload['path'], $upload['name'], $upload['mime'], (int) $sortOrderStmt->fetchColumn(), $userId]);
+                    $flashSuccess = 'Imagem guardada com sucesso.';
+                }
+            }
+        }
+    } elseif (($_POST['action'] ?? '') === 'delete_hr_greeting_image') {
+        $imageId = (int) ($_POST['image_id'] ?? 0);
+        $stmt = $pdo->prepare('SELECT file_path FROM hr_greeting_images WHERE id = ? LIMIT 1');
+        $stmt->execute([$imageId]);
+        $path = (string) ($stmt->fetchColumn() ?: '');
+        $pdo->prepare('DELETE FROM hr_greeting_images WHERE id = ?')->execute([$imageId]);
+        if ($path !== '' && str_starts_with($path, 'assets/uploads/hr_greetings/')) {
+            @unlink(__DIR__ . '/' . $path);
+        }
+        $flashSuccess = 'Imagem eliminada.';
     } elseif (($_POST['action'] ?? '') === 'reset_hr_operational_data') {
         $confirmation = trim((string) ($_POST['reset_confirmation'] ?? ''));
         if (mb_strtoupper($confirmation, 'UTF-8') !== 'RESET') {
@@ -285,7 +347,7 @@ $smtpUsername = (string) app_setting($pdo, 'smtp_username', '');
 $smtpPassword = (string) app_setting($pdo, 'smtp_password', '');
 $smtpTimeout = (string) app_setting($pdo, 'smtp_timeout_seconds', '10');
 $mailFromAddress = (string) app_setting($pdo, 'mail_from_address', 'noreply@calcadacorp.ch');
-$mailFromName = (string) app_setting($pdo, 'mail_from_name', 'TaskForce');
+$mailFromName = (string) app_setting($pdo, 'mail_from_name', 'GesTisser');
 $hrAlertsCronRunsPerDay = (string) app_setting($pdo, 'hr_alerts_inline_cron_runs_per_day', '1440');
 $companyDailyObjective = format_minutes_hhmm(company_daily_objective_minutes($pdo));
 $navbarLogo = app_setting($pdo, 'logo_navbar_light');
@@ -295,10 +357,14 @@ $recurrenceCatalog = recurring_task_recurrence_catalog($pdo);
 $pendingDepartmentCatalog = function_exists('pending_ticket_department_catalog')
     ? pending_ticket_department_catalog($pdo)
     : default_pending_ticket_department_options($pdo);
+$greetingStmt = $pdo->query('SELECT id, greeting_type, title, file_path, sort_order, is_active, created_at FROM hr_greeting_images ORDER BY greeting_type ASC, sort_order ASC, id ASC');
+foreach ($greetingStmt->fetchAll(PDO::FETCH_ASSOC) as $greetingImage) {
+    $greetingImages[(string) $greetingImage['greeting_type']][] = $greetingImage;
+}
 } catch (Throwable $exception) {
     $flashError = 'Não foi possível carregar as definições da página. Verifique a configuração e tente novamente.';
     if (function_exists('taskforce_log_bootstrap_error')) {
-        taskforce_log_bootstrap_error('[TaskForce][company_profile] ' . $exception->getMessage());
+        taskforce_log_bootstrap_error('[GesTisser][company_profile] ' . $exception->getMessage());
     }
 }
 
@@ -478,6 +544,34 @@ require __DIR__ . '/partials/header.php';
         <?php endif; ?>
     </div>
 </form>
+
+
+<?php if ($isAdmin): ?>
+<div class="card shadow-sm soft-card mt-3">
+    <div class="card-body p-4">
+        <h2 class="h5">Imagens de parabéns por email</h2>
+        <p class="small text-muted">Estas imagens são anexadas automaticamente aos emails do cron RH quando a data de nascimento ou admissão coincide com o dia.</p>
+        <?php foreach ([['birthday', 'Aniversário do colaborador', 1], ['work_anniversary', 'Aniversário de empresa', 30]] as $greetingConfig): ?>
+            <?php [$greetingType, $greetingLabel, $greetingLimit] = $greetingConfig; ?>
+            <div class="border rounded p-3 mb-3">
+                <h3 class="h6 mb-2"><?= h($greetingLabel) ?> <span class="text-muted small">(<?= count($greetingImages[$greetingType] ?? []) ?>/<?= (int) $greetingLimit ?>)</span></h3>
+                <form method="post" enctype="multipart/form-data" class="row g-2 align-items-end mb-3">
+                    <input type="hidden" name="action" value="upload_hr_greeting_image">
+                    <input type="hidden" name="greeting_type" value="<?= h($greetingType) ?>">
+                    <div class="col-md-4"><label class="form-label">Título</label><input class="form-control" name="greeting_title" required></div>
+                    <div class="col-md-5"><label class="form-label">Imagem</label><input class="form-control" type="file" name="greeting_image" accept="image/png,image/jpeg,image/webp" required></div>
+                    <div class="col-md-3"><button class="btn btn-outline-primary w-100" <?= count($greetingImages[$greetingType] ?? []) >= $greetingLimit ? 'disabled' : '' ?>>Adicionar imagem</button></div>
+                </form>
+                <div class="row g-2">
+                    <?php foreach (($greetingImages[$greetingType] ?? []) as $image): ?>
+                        <div class="col-md-3"><div class="border rounded p-2 h-100"><img src="<?= h((string) $image['file_path']) ?>" alt="<?= h((string) $image['title']) ?>" class="img-fluid rounded mb-2"><div class="small fw-semibold"><?= h((string) $image['title']) ?></div><form method="post" class="mt-2"><input type="hidden" name="action" value="delete_hr_greeting_image"><input type="hidden" name="image_id" value="<?= (int) $image['id'] ?>"><button class="btn btn-sm btn-outline-danger" onclick="return confirm('Eliminar esta imagem?');">Eliminar</button></form></div></div>
+                    <?php endforeach; ?>
+                </div>
+            </div>
+        <?php endforeach; ?>
+    </div>
+</div>
+<?php endif; ?>
 
 <?php if ($isAdmin): ?>
 <form method="post" class="card shadow-sm border-danger-subtle mt-3">

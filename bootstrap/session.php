@@ -14,7 +14,7 @@ if (!function_exists('taskforce_start_session')) {
         }
 
         $session = app_config('session', []);
-        session_name((string) ($session['name'] ?? 'taskforce_session'));
+        session_name((string) ($session['name'] ?? 'gestisser_session'));
         $cookieLifetime = (int) ($session['lifetime'] ?? 28800);
         $cookiePath = '/';
         $cookieDomain = '';

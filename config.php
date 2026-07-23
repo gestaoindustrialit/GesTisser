@@ -41,7 +41,7 @@ if (!function_exists('taskforce_render_internal_error')) {
             http_response_code($forceVisibleError ? 200 : 500);
             header('Content-Type: text/html; charset=UTF-8');
             if ($forceVisibleError) {
-                header('X-TaskForce-Debug-Error: ' . $errorId);
+                header('X-GesTisser-Debug-Error: ' . $errorId);
             }
         }
 
@@ -71,7 +71,7 @@ if (!defined('TASKFORCE_ERROR_HANDLERS_REGISTERED')) {
     set_exception_handler(static function (Throwable $exception) {
         try {
             $errorId = taskforce_error_id();
-            taskforce_log_bootstrap_error('[TaskForce][' . $errorId . '] Exceção não tratada: ' . $exception->getMessage() . ' em ' . $exception->getFile() . ':' . $exception->getLine());
+            taskforce_log_bootstrap_error('[GesTisser][' . $errorId . '] Exceção não tratada: ' . $exception->getMessage() . ' em ' . $exception->getFile() . ':' . $exception->getLine());
             taskforce_render_internal_error($errorId);
         } catch (Throwable $handlerException) {
             if (!headers_sent()) {
@@ -100,7 +100,7 @@ if (!defined('TASKFORCE_ERROR_HANDLERS_REGISTERED')) {
             $file = $lastError['file'] ?? 'ficheiro desconhecido';
             $line = (int) ($lastError['line'] ?? 0);
 
-            taskforce_log_bootstrap_error('[TaskForce][' . $errorId . '] Erro fatal: ' . $message . ' em ' . $file . ':' . $line);
+            taskforce_log_bootstrap_error('[GesTisser][' . $errorId . '] Erro fatal: ' . $message . ' em ' . $file . ':' . $line);
             taskforce_render_internal_error($errorId);
         } catch (Throwable $handlerException) {
             if (!headers_sent()) {
@@ -130,7 +130,7 @@ try {
     $pdo->exec('PRAGMA busy_timeout = 5000');
     $pdo->exec('PRAGMA journal_mode = WAL');
 } catch (Throwable $exception) {
-    error_log('[TaskForce] Falha ao iniciar base de dados SQLite: ' . $exception->getMessage());
+    error_log('[GesTisser] Falha ao iniciar base de dados SQLite: ' . $exception->getMessage());
     http_response_code(500);
     header('Content-Type: text/html; charset=UTF-8');
     echo '<h1>Erro de configuração</h1>';
@@ -210,6 +210,9 @@ if (!in_array('department', $userColumns, true)) {
 if (!in_array('hire_date', $userColumns, true)) {
     $pdo->exec('ALTER TABLE users ADD COLUMN hire_date TEXT');
 }
+if (!in_array('birth_date', $userColumns, true)) {
+    $pdo->exec('ALTER TABLE users ADD COLUMN birth_date TEXT');
+}
 if (!in_array('termination_date', $userColumns, true)) {
     $pdo->exec('ALTER TABLE users ADD COLUMN termination_date TEXT');
 }
@@ -263,29 +266,37 @@ $pdo->exec('UPDATE users SET pin_only_login = 0 WHERE pin_only_login IS NULL');
 $pdo->exec('UPDATE users SET award_profile = "operador" WHERE award_profile IS NULL OR TRIM(award_profile) = ""');
 $pdo->exec('UPDATE users SET award_eligible = 1 WHERE award_eligible IS NULL');
 
-$shopfloorEmail = 'shopfloor@calcadacorp.ch';
-$shopfloorLookupStmt = $pdo->prepare('SELECT id FROM users WHERE LOWER(TRIM(email)) = LOWER(TRIM(?)) OR LOWER(TRIM(username)) = LOWER(TRIM(?)) LIMIT 1');
-$shopfloorLookupStmt->execute([$shopfloorEmail, $shopfloorEmail]);
-$shopfloorUserId = (int) $shopfloorLookupStmt->fetchColumn();
-if ($shopfloorUserId <= 0) {
-    $shopfloorInsert = $pdo->prepare('INSERT INTO users(name, username, email, password, is_admin, access_profile, is_active, pin_code_hash, pin_only_login) VALUES (?, ?, ?, ?, 0, "Utilizador", 1, ?, 1)');
-    $shopfloorInsert->execute([
-        'Shopfloor',
-        $shopfloorEmail,
-        $shopfloorEmail,
-        password_hash(bin2hex(random_bytes(12)), PASSWORD_DEFAULT),
-        password_hash('123456', PASSWORD_DEFAULT),
-    ]);
-} else {
-    $shopfloorUpdate = $pdo->prepare('UPDATE users SET name = COALESCE(NULLIF(TRIM(name), ""), ?), username = ?, email = ?, access_profile = "Utilizador", is_active = 1, pin_only_login = 1, pin_code_hash = COALESCE(pin_code_hash, ?) WHERE id = ?');
-    $shopfloorUpdate->execute([
-        'Shopfloor',
-        $shopfloorEmail,
-        $shopfloorEmail,
-        password_hash('123456', PASSWORD_DEFAULT),
-        $shopfloorUserId,
-    ]);
-}
+
+$pdo->exec(
+    'CREATE TABLE IF NOT EXISTS hr_greeting_images (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        greeting_type TEXT NOT NULL CHECK(greeting_type IN ("birthday", "work_anniversary")),
+        title TEXT NOT NULL,
+        file_path TEXT NOT NULL,
+        original_name TEXT,
+        mime_type TEXT,
+        sort_order INTEGER NOT NULL DEFAULT 0,
+        is_active INTEGER NOT NULL DEFAULT 1,
+        uploaded_by INTEGER,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY(uploaded_by) REFERENCES users(id) ON DELETE SET NULL
+    )'
+);
+$pdo->exec('CREATE INDEX IF NOT EXISTS idx_hr_greeting_images_type_active ON hr_greeting_images(greeting_type, is_active, sort_order)');
+$pdo->exec(
+    'CREATE TABLE IF NOT EXISTS hr_greeting_email_log (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        user_id INTEGER NOT NULL,
+        greeting_type TEXT NOT NULL,
+        event_date TEXT NOT NULL,
+        greeting_image_id INTEGER,
+        recipient_email TEXT NOT NULL,
+        sent_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE,
+        FOREIGN KEY(greeting_image_id) REFERENCES hr_greeting_images(id) ON DELETE SET NULL,
+        UNIQUE(user_id, greeting_type, event_date)
+    )'
+);
 
 $pdo->exec(
     'CREATE TABLE IF NOT EXISTS hr_department_groups (

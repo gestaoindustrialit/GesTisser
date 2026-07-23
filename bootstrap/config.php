@@ -15,13 +15,13 @@ if (!function_exists('app_config')) {
             $root = dirname(__DIR__);
             $isProduction = (string) getenv('APP_ENV') === 'production';
             $config = [
-                'app_name' => getenv('APP_NAME') ?: 'TaskForce',
+                'app_name' => getenv('APP_NAME') ?: 'GesTisser',
                 'env' => getenv('APP_ENV') ?: 'production',
                 'debug' => (bool) ((int) (getenv('APP_DEBUG') ?: 0)),
                 'timezone' => getenv('APP_TIMEZONE') ?: 'Europe/Lisbon',
                 'db_path' => $root . '/database.sqlite',
                 'session' => [
-                    'name' => 'taskforce_session',
+                    'name' => 'gestisser_session',
                     'lifetime' => 60 * 60 * 8,
                     'inactivity_timeout' => 60 * 30,
                     'secure' => (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off'),

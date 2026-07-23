@@ -261,6 +261,52 @@ function send_standard_alert_to_users(array $users, string $subject, string $bod
     return $deliveredToAtLeastOneRecipient;
 }
 
+function fetch_active_greeting_images(PDO $pdo, string $type): array
+{
+    $stmt = $pdo->prepare('SELECT id, title, file_path, original_name, mime_type FROM hr_greeting_images WHERE greeting_type = ? AND is_active = 1 ORDER BY sort_order ASC, id ASC');
+    $stmt->execute([$type]);
+    return $stmt->fetchAll(PDO::FETCH_ASSOC) ?: [];
+}
+
+function send_due_greeting_emails(PDO $pdo, DateTimeImmutable $now): int
+{
+    $todayMonthDay = $now->format('m-d');
+    $today = $now->format('Y-m-d');
+    $processed = 0;
+    $types = [
+        'birthday' => ['column' => 'birth_date', 'subject' => 'Parabéns pelo seu aniversário!', 'body' => 'Muitos parabéns, {name}! A equipa deseja-lhe um excelente dia.'],
+        'work_anniversary' => ['column' => 'hire_date', 'subject' => 'Parabéns pelo aniversário de empresa!', 'body' => 'Parabéns, {name}! Obrigado por mais um ano connosco.'],
+    ];
+
+    foreach ($types as $type => $config) {
+        $images = fetch_active_greeting_images($pdo, $type);
+        if (!$images) {
+            continue;
+        }
+        $column = $config['column'];
+        $stmt = $pdo->prepare('SELECT id, name, email FROM users WHERE is_active = 1 AND email_notifications_active = 1 AND TRIM(email) <> "" AND ' . $column . ' IS NOT NULL AND TRIM(' . $column . ') <> "" AND substr(' . $column . ', 6, 5) = ? AND NOT EXISTS (SELECT 1 FROM hr_greeting_email_log l WHERE l.user_id = users.id AND l.greeting_type = ? AND l.event_date = ?)');
+        $stmt->execute([$todayMonthDay, $type, $today]);
+        foreach (($stmt->fetchAll(PDO::FETCH_ASSOC) ?: []) as $user) {
+            $userId = (int) $user['id'];
+            $image = $images[$type === 'work_anniversary' ? ($userId % count($images)) : 0];
+            $path = __DIR__ . '/' . (string) $image['file_path'];
+            $attachments = is_file($path) ? [[
+                'name' => (string) ($image['original_name'] ?: basename($path)),
+                'mime' => (string) ($image['mime_type'] ?: 'image/png'),
+                'content' => (string) file_get_contents($path),
+            ]] : [];
+            $body = str_replace('{name}', (string) $user['name'], (string) $config['body']);
+            if (deliver_report((string) $user['email'], (string) $config['subject'], $body, nl2br(h($body)), $attachments)) {
+                $logStmt = $pdo->prepare('INSERT OR IGNORE INTO hr_greeting_email_log(user_id, greeting_type, event_date, greeting_image_id, recipient_email) VALUES (?, ?, ?, ?, ?)');
+                $logStmt->execute([$userId, $type, $today, (int) $image['id'], (string) $user['email']]);
+                $processed++;
+                cron_log_line('GREETING ' . $type . ' enviado para ' . (string) $user['email']);
+            }
+        }
+    }
+    return $processed;
+}
+
 function send_attendance_monthly_map_alert(array $users, PDO $pdo, DateTimeImmutable $now, int $alertId): bool
 {
     $deliveredToAtLeastOneRecipient = false;
@@ -281,7 +327,7 @@ function send_attendance_monthly_map_alert(array $users, PDO $pdo, DateTimeImmut
             continue;
         }
 
-        $subject = (string) ($report['subject'] ?? '[TaskForce RH] Mapa mensal de picagens');
+        $subject = (string) ($report['subject'] ?? '[GesTisser RH] Mapa mensal de picagens');
         $body = (string) ($report['body'] ?? '');
         $htmlBody = (string) ($report['html_body'] ?? '');
         $attachments = [];
@@ -331,6 +377,7 @@ try {
         ['time' => $currentTime, 'criteria' => 'all active alerts', 'active_alerts' => is_array($alerts) ? count($alerts) : 0]
     );
     cron_log_line('CRON RH START time=' . $currentTime . ' active_alerts=' . (is_array($alerts) ? count($alerts) : 0));
+    $processedGreetings = send_due_greeting_emails($pdo, $now);
 
     if (!is_array($alerts)) {
         $alerts = [];
@@ -405,7 +452,7 @@ try {
         if ($alertType === 'attendance_monthly_map') {
             $deliveredToAtLeastOneRecipient = send_attendance_monthly_map_alert($users, $pdo, $now, $alertId);
         } else {
-            $subject = '[TaskForce RH] ' . ((string) ($alert['name'] ?? 'Alerta RH'));
+            $subject = '[GesTisser RH] ' . ((string) ($alert['name'] ?? 'Alerta RH'));
             $body = $alertType === 'absences_daily'
                 ? build_absences_daily_body($pdo, $alert, $now)
                 : build_generic_alert_body($alert, $now);
@@ -438,12 +485,13 @@ try {
         $pdo,
         'hr.alerts.cron.finished',
         'Execução do cron de alertas RH concluída.',
-        ['processed_alerts' => $processedAlerts]
+        ['processed_alerts' => $processedAlerts, 'processed_greetings' => $processedGreetings]
     );
-    cron_log_line('CRON RH FINISH processed_alerts=' . $processedAlerts);
+    cron_log_line('CRON RH FINISH processed_alerts=' . $processedAlerts . ' processed_greetings=' . $processedGreetings);
 
     if (PHP_SAPI === 'cli') {
         echo 'Alertas RH processados: ' . $processedAlerts . PHP_EOL;
+        echo 'Emails de parabéns processados: ' . $processedGreetings . PHP_EOL;
     }
 } catch (Throwable $exception) {
     cron_log_line('Erro fatal no cron_hr_alerts.php: ' . $exception->getMessage());

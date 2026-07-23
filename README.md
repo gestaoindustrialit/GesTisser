@@ -61,7 +61,7 @@ php cron_hr_alerts.php
 Recomendado em produção (execução automática a cada minuto):
 
 ```bash
-* * * * * php /caminho/TaskForce/cron_hr_alerts.php >/dev/null 2>&1
+* * * * * php /caminho/GesTisser/cron_hr_alerts.php >/dev/null 2>&1
 ```
 
 Se `mail()` não estiver configurado no ambiente, os relatórios/alertas ficam registados em `reports_sent.log`.
@@ -71,18 +71,18 @@ Se `mail()` não estiver configurado no ambiente, os relatórios/alertas ficam r
 Quando o servidor não tem `sendmail`/`mail()` ativo, pode configurar SMTP com variáveis de ambiente:
 
 ```bash
-export TASKFORCE_SMTP_HOST="smtp.seudominio.com"
-export TASKFORCE_SMTP_PORT="587"
-export TASKFORCE_SMTP_SECURE="tls"   # tls | ssl | vazio
-export TASKFORCE_SMTP_USER="noreply@calcadacorp.ch"
-export TASKFORCE_SMTP_PASS="***"
+export GESTISSER_SMTP_HOST="smtp.seudominio.com"
+export GESTISSER_SMTP_PORT="587"
+export GESTISSER_SMTP_SECURE="tls"   # tls | ssl | vazio
+export GESTISSER_SMTP_USER="noreply@calcadacorp.ch"
+export GESTISSER_SMTP_PASS="***"
 ```
 
 Opcionalmente:
 
 ```bash
-export TASKFORCE_MAIL_FROM_ADDRESS="noreply@calcadacorp.ch"
-export TASKFORCE_MAIL_FROM_NAME="TaskForce"
+export GESTISSER_MAIL_FROM_ADDRESS="noreply@calcadacorp.ch"
+export GESTISSER_MAIL_FROM_NAME="GesTisser"
 ```
 
 Todas as tentativas de entrega (sucesso/falha) ficam registadas em `reports_sent.log`.
@@ -91,10 +91,10 @@ Todas as tentativas de entrega (sucesso/falha) ficam registadas em `reports_sent
 
 1. Copiar os ficheiros do projeto e garantir permissões de escrita na pasta da aplicação (incluindo `database.sqlite` quando já existir).
 2. Confirmar PHP 8.1+ com `pdo_sqlite` ativo.
-3. Configurar as variáveis SMTP (`TASKFORCE_SMTP_*`) no novo ambiente, se necessário.
+3. Configurar as variáveis SMTP (`GESTISSER_SMTP_*`) no novo ambiente, se necessário.
 4. Recriar os cron jobs:
-   - `* * * * * php /caminho/TaskForce/cron_hr_alerts.php >/dev/null 2>&1`
-   - `*/5 * * * * php /caminho/TaskForce/cron_daily_reports.php >/dev/null 2>&1`
+   - `* * * * * php /caminho/GesTisser/cron_hr_alerts.php >/dev/null 2>&1`
+   - `*/5 * * * * php /caminho/GesTisser/cron_daily_reports.php >/dev/null 2>&1`
 5. Validar no browser:
    - `install.php` (apenas se for instalação nova),
    - `login.php`,

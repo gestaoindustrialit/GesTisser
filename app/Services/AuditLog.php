@@ -10,7 +10,7 @@ final class AuditLog
             $stmt = $pdo->prepare('INSERT INTO audit_logs(user_id, action, details_json) VALUES (?, ?, ?)');
             $stmt->execute([$userId, $action, $json]);
         } catch (Throwable $exception) {
-            error_log('[TaskForce] AuditLog write failed: ' . $exception->getMessage());
+            error_log('[GesTisser] AuditLog write failed: ' . $exception->getMessage());
         }
     }
 }
