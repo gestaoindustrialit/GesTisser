@@ -1457,12 +1457,21 @@ function taskforce_generate_monthly_attendance_report(PDO $pdo, array $user, Dat
         $scheduleApplies = $schedule !== null && in_array((string) $weekday, array_filter(explode(',', (string) ($schedule['weekdays_mask'] ?? ''))), true);
         $targetMinutes = 0;
         if ($scheduleApplies) {
-            list($startHour, $startMinute) = array_map('intval', explode(':', (string) $schedule['start_time']));
-            list($endHour, $endMinute) = array_map('intval', explode(':', (string) $schedule['end_time']));
-            $targetMinutes = (($endHour * 60) + $endMinute) - (($startHour * 60) + $startMinute) - (int) ($schedule['break_minutes'] ?? 0);
-            if ($targetMinutes < 0) {
-                $targetMinutes = 0;
+            foreach ([['start_time', 'end_time'], ['second_start_time', 'second_end_time']] as $periodColumns) {
+                $periodStart = trim((string) ($schedule[$periodColumns[0]] ?? ''));
+                $periodEnd = trim((string) ($schedule[$periodColumns[1]] ?? ''));
+                if (preg_match('/^\d{2}:\d{2}$/', $periodStart) !== 1 || preg_match('/^\d{2}:\d{2}$/', $periodEnd) !== 1) {
+                    continue;
+                }
+
+                [$startHour, $startMinute] = array_map('intval', explode(':', $periodStart));
+                [$endHour, $endMinute] = array_map('intval', explode(':', $periodEnd));
+                $periodMinutes = (($endHour * 60) + $endMinute) - (($startHour * 60) + $startMinute);
+                if ($periodMinutes > 0) {
+                    $targetMinutes += $periodMinutes;
+                }
             }
+            $targetMinutes = max(0, $targetMinutes - (int) ($schedule['break_minutes'] ?? 0));
         }
 
         $justification = '';
@@ -1819,6 +1828,47 @@ function taskforce_generate_monthly_attendance_report(PDO $pdo, array $user, Dat
         'period_end' => $periodEndDate,
         'report_month_label' => $reportMonthLabel,
     ];
+}
+
+
+function format_schedule_periods(array $schedule): string
+{
+    $periods = [];
+    $start = trim((string) ($schedule['start_time'] ?? ''));
+    $end = trim((string) ($schedule['end_time'] ?? ''));
+    $secondStart = trim((string) ($schedule['second_start_time'] ?? ''));
+    $secondEnd = trim((string) ($schedule['second_end_time'] ?? ''));
+
+    if ($start !== '' && $end !== '') {
+        $periods[] = $start . ' - ' . $end;
+    }
+    if ($secondStart !== '' && $secondEnd !== '') {
+        $periods[] = $secondStart . ' - ' . $secondEnd;
+    }
+
+    return $periods !== [] ? implode(' · ', $periods) : 'Sem horário';
+}
+
+function company_daily_objective_minutes(PDO $pdo): int
+{
+    $value = trim((string) app_setting($pdo, 'company_daily_objective', '08:15'));
+    if (preg_match('/^(\d{1,2}):(\d{2})$/', $value, $matches) !== 1) {
+        return (8 * 60) + 15;
+    }
+
+    $hours = (int) $matches[1];
+    $minutes = (int) $matches[2];
+    if ($minutes > 59 || $hours > 23) {
+        return (8 * 60) + 15;
+    }
+
+    return ($hours * 60) + $minutes;
+}
+
+function format_minutes_hhmm(int $minutes): string
+{
+    $minutes = max(0, $minutes);
+    return sprintf('%02d:%02d', intdiv($minutes, 60), $minutes % 60);
 }
 
 function app_setting(PDO $pdo, string $settingKey, $default = null)

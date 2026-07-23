@@ -11,9 +11,15 @@ if (!can_access_hr_module($pdo, $userId)) {
 $flashSuccess = null;
 $flashError = null;
 
-function valid_schedule_time( $value): bool
+function valid_schedule_time($value): bool
 {
     return $value !== null && preg_match('/^\d{2}:\d{2}$/', $value) === 1;
+}
+
+function nullable_schedule_time(string $value)
+{
+    $value = trim($value);
+    return $value === '' ? null : $value;
 }
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
@@ -24,15 +30,19 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $name = trim((string) ($_POST['name'] ?? ''));
         $startTime = trim((string) ($_POST['start_time'] ?? ''));
         $endTime = trim((string) ($_POST['end_time'] ?? ''));
-        $secondStartTime = trim((string) ($_POST['second_start_time'] ?? ''));
-        $secondEndTime = trim((string) ($_POST['second_end_time'] ?? ''));
+        $secondStartTime = nullable_schedule_time((string) ($_POST['second_start_time'] ?? ''));
+        $secondEndTime = nullable_schedule_time((string) ($_POST['second_end_time'] ?? ''));
         $weekdays = $_POST['weekdays'] ?? [];
         $weekdays = is_array($weekdays) ? array_values(array_intersect(['1', '2', '3', '4', '5', '6', '7'], array_map('strval', $weekdays))) : [];
         $weekdaysMask = count($weekdays) > 0 ? implode(',', $weekdays) : '1,2,3,4,5';
 
-        if ($name === '' || !valid_schedule_time($startTime) || !valid_schedule_time($endTime) || !valid_schedule_time($secondStartTime) || !valid_schedule_time($secondEndTime)) {
-            $flashError = 'Preencha os 4 campos do horário com horas válidas (HH:MM).';
-        } elseif (!($startTime < $endTime && $endTime <= $secondStartTime && $secondStartTime < $secondEndTime)) {
+        $hasSecondPeriod = $secondStartTime !== null || $secondEndTime !== null;
+
+        if ($name === '' || !valid_schedule_time($startTime) || !valid_schedule_time($endTime) || ($hasSecondPeriod && (!valid_schedule_time($secondStartTime) || !valid_schedule_time($secondEndTime)))) {
+            $flashError = 'Preencha Entrada 1 e Saída 1 com horas válidas (HH:MM). Se usar Entrada 2, preencha também Saída 2.';
+        } elseif (!$hasSecondPeriod && !($startTime < $endTime)) {
+            $flashError = 'A sequência do horário deve ser Entrada 1 < Saída 1.';
+        } elseif ($hasSecondPeriod && !($startTime < $endTime && $endTime <= $secondStartTime && $secondStartTime < $secondEndTime)) {
             $flashError = 'A sequência do horário deve ser Entrada 1 < Saída 1 <= Entrada 2 < Saída 2.';
         } else {
             try {
@@ -90,8 +100,8 @@ require __DIR__ . '/partials/header.php';
             <div class="col-md-3"><label class="form-label">Nome</label><input class="form-control" name="name" placeholder="Ex.: Turno Geral" required></div>
             <div class="col-md-2"><label class="form-label">Entrada 1</label><input class="form-control" type="time" name="start_time" required></div>
             <div class="col-md-2"><label class="form-label">Saída 1</label><input class="form-control" type="time" name="end_time" required></div>
-            <div class="col-md-2"><label class="form-label">Entrada 2</label><input class="form-control" type="time" name="second_start_time" required></div>
-            <div class="col-md-2"><label class="form-label">Saída 2</label><input class="form-control" type="time" name="second_end_time" required></div>
+            <div class="col-md-2"><label class="form-label">Entrada 2</label><input class="form-control" type="time" name="second_start_time"></div>
+            <div class="col-md-2"><label class="form-label">Saída 2</label><input class="form-control" type="time" name="second_end_time"></div>
             <div class="col-md-12">
                 <label class="form-label d-block">Dias</label>
                 <?php foreach ($weekdayLabels as $value => $label): ?>
@@ -114,7 +124,7 @@ require __DIR__ . '/partials/header.php';
                     <?php $mask = array_filter(explode(',', (string) $schedule['weekdays_mask'])); ?>
                     <tr>
                         <td><?= h($schedule['name']) ?></td>
-                        <td><?= h((string) $schedule['start_time']) ?> - <?= h((string) $schedule['end_time']) ?> · <?= h((string) ($schedule['second_start_time'] ?? '')) ?> - <?= h((string) ($schedule['second_end_time'] ?? '')) ?></td>
+                        <td><?= h(format_schedule_periods($schedule)) ?></td>
                         <td><?= h(implode(', ', array_map(static function ($d) use ($weekdayLabels) { return $weekdayLabels[$d] ?? $d; }, $mask))) ?></td>
                         <td>
                             <form method="post" class="row g-1">
