@@ -205,7 +205,7 @@ function run_hr_alerts_inline_if_due(PDO $pdo, int $triggerUserId = 0)
         }
     } catch (Throwable $outerException) {
         if (function_exists('error_log')) {
-            @error_log('[TaskForce] run_hr_alerts_inline_if_due fallback: ' . $outerException->getMessage());
+            @error_log('[GesTisser] run_hr_alerts_inline_if_due fallback: ' . $outerException->getMessage());
         }
     }
 }
@@ -466,7 +466,7 @@ function taskforce_mail_from_address(): string
         $value = trim((string) app_setting($pdo, 'mail_from_address', ''));
     }
     if ($value === '') {
-        $value = trim((string) getenv('TASKFORCE_MAIL_FROM_ADDRESS'));
+        $value = trim((string) (getenv('GESTISSER_MAIL_FROM_ADDRESS') ?: getenv('TASKFORCE_MAIL_FROM_ADDRESS')));
     }
 
     return $value !== '' ? $value : 'noreply@calcadacorp.ch';
@@ -481,10 +481,10 @@ function taskforce_mail_from_name(): string
         $value = trim((string) app_setting($pdo, 'mail_from_name', ''));
     }
     if ($value === '') {
-        $value = trim((string) getenv('TASKFORCE_MAIL_FROM_NAME'));
+        $value = trim((string) (getenv('GESTISSER_MAIL_FROM_NAME') ?: getenv('TASKFORCE_MAIL_FROM_NAME')));
     }
 
-    return $value !== '' ? $value : 'TaskForce';
+    return $value !== '' ? $value : 'GesTisser';
 }
 
 function taskforce_default_mail_headers(): string
@@ -516,22 +516,22 @@ function taskforce_smtp_config(): array
     $timeoutRaw = $settingValue('smtp_timeout_seconds');
 
     if ($host === '') {
-        $host = trim((string) getenv('TASKFORCE_SMTP_HOST'));
+        $host = trim((string) (getenv('GESTISSER_SMTP_HOST') ?: getenv('TASKFORCE_SMTP_HOST')));
     }
     if ($portRaw === '') {
-        $portRaw = (string) getenv('TASKFORCE_SMTP_PORT');
+        $portRaw = (string) (getenv('GESTISSER_SMTP_PORT') ?: getenv('TASKFORCE_SMTP_PORT'));
     }
     if ($secure === '') {
-        $secure = strtolower(trim((string) getenv('TASKFORCE_SMTP_SECURE')));
+        $secure = strtolower(trim((string) (getenv('GESTISSER_SMTP_SECURE') ?: getenv('TASKFORCE_SMTP_SECURE'))));
     }
     if ($username === '') {
-        $username = trim((string) getenv('TASKFORCE_SMTP_USER'));
+        $username = trim((string) (getenv('GESTISSER_SMTP_USER') ?: getenv('TASKFORCE_SMTP_USER')));
     }
     if ($password === '') {
-        $password = (string) getenv('TASKFORCE_SMTP_PASS');
+        $password = (string) (getenv('GESTISSER_SMTP_PASS') ?: getenv('TASKFORCE_SMTP_PASS'));
     }
     if ($timeoutRaw === '') {
-        $timeoutRaw = (string) getenv('TASKFORCE_SMTP_TIMEOUT');
+        $timeoutRaw = (string) (getenv('GESTISSER_SMTP_TIMEOUT') ?: getenv('TASKFORCE_SMTP_TIMEOUT'));
     }
 
     return [
@@ -577,7 +577,7 @@ function taskforce_smtp_send_mail(string $recipient, string $subject, string $bo
 {
     $config = taskforce_smtp_config();
     if ($config['host'] === '' || $config['username'] === '' || $config['password'] === '') {
-        return ['sent' => false, 'error' => 'SMTP não configurado (TASKFORCE_SMTP_HOST/USER/PASS em falta).'];
+        return ['sent' => false, 'error' => 'SMTP não configurado (GESTISSER_SMTP_HOST/USER/PASS em falta).'];
     }
 
     $transport = $config['host'];
@@ -601,7 +601,7 @@ function taskforce_smtp_send_mail(string $recipient, string $subject, string $bo
 
     try {
         taskforce_smtp_expect($socket, [220]);
-        taskforce_smtp_write($socket, 'EHLO taskforce.local');
+        taskforce_smtp_write($socket, 'EHLO gestisser.local');
         taskforce_smtp_expect($socket, [250]);
 
         if ($config['secure'] === 'tls' || ($config['secure'] === '' && $config['port'] === 587)) {
@@ -612,7 +612,7 @@ function taskforce_smtp_send_mail(string $recipient, string $subject, string $bo
                 throw new RuntimeException('Não foi possível iniciar STARTTLS.');
             }
 
-            taskforce_smtp_write($socket, 'EHLO taskforce.local');
+            taskforce_smtp_write($socket, 'EHLO gestisser.local');
             taskforce_smtp_expect($socket, [250]);
         }
 
@@ -1081,7 +1081,7 @@ function taskforce_generate_monthly_attendance_fpdf_pdf(array $reportData)
     $pdf->SetFillColor(245, 247, 250);
     $pdf->SetTextColor(31, 41, 55);
 
-    $companyName = (string) ($reportData['company_name'] ?? 'TaskForce');
+    $companyName = (string) ($reportData['company_name'] ?? 'GesTisser');
     $companyContacts = (array) ($reportData['company_contacts'] ?? []);
     $companyLine = trim(implode(' · ', array_filter(array_map('strval', $companyContacts))));
     $logoPath = trim((string) ($reportData['logo_path'] ?? ''));
@@ -1540,7 +1540,7 @@ function taskforce_generate_monthly_attendance_report(PDO $pdo, array $user, Dat
     $usedVacationDays = $approvedVacationDays;
     $vacationBalance = max(0, $assignedVacationDays - $usedVacationDays);
 
-    $companyName = app_setting($pdo, 'company_name', 'TaskForce');
+    $companyName = app_setting($pdo, 'company_name', 'GesTisser');
     $companyAddress = app_setting($pdo, 'company_address', '');
     $companyPhone = app_setting($pdo, 'company_phone', '');
     $companyEmail = app_setting($pdo, 'company_email', '');
@@ -1587,7 +1587,7 @@ function taskforce_generate_monthly_attendance_report(PDO $pdo, array $user, Dat
     $lines[] = '- Saldos Férias: ' . number_format($vacationBalance, 1, ',', '') . ' dias';
     $lines[] = '';
     $lines[] = 'Notas:';
-    $lines[] = '- Este relatório é informativo e reflete os registos validados/guardados no TaskForce.';
+    $lines[] = '- Este relatório é informativo e reflete os registos validados/guardados no GesTisser.';
     $lines[] = '- Caso identifique alguma divergência, contacte RH para análise/retificação.';
 
     $logoPath = app_setting($pdo, 'logo_report_dark', '');
@@ -1812,7 +1812,7 @@ function taskforce_generate_monthly_attendance_report(PDO $pdo, array $user, Dat
     }
 
     return [
-        'subject' => '[TaskForce RH] Mapa mensal de picagens - ' . (string) ($user['name'] ?? '') . ' - ' . $periodStart->format('m/Y'),
+        'subject' => '[GesTisser RH] Mapa mensal de picagens - ' . (string) ($user['name'] ?? '') . ' - ' . $periodStart->format('m/Y'),
         'body' => implode(PHP_EOL, $lines),
         'html_body' => $htmlBody,
         'pdf_filename' => $pdfFileName,

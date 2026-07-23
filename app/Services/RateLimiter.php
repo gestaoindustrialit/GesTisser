@@ -11,7 +11,7 @@ final class RateLimiter
 
             return (int) $stmt->fetchColumn() >= $maxAttempts;
         } catch (Throwable $exception) {
-            error_log('[TaskForce] RateLimiter read failed: ' . $exception->getMessage());
+            error_log('[GesTisser] RateLimiter read failed: ' . $exception->getMessage());
             return false;
         }
     }
@@ -22,7 +22,7 @@ final class RateLimiter
             $stmt = $pdo->prepare('INSERT INTO login_attempts(identifier, ip_address, was_success) VALUES (?, ?, ?)');
             $stmt->execute([$identifier, $ipAddress, $success ? 1 : 0]);
         } catch (Throwable $exception) {
-            error_log('[TaskForce] RateLimiter write failed: ' . $exception->getMessage());
+            error_log('[GesTisser] RateLimiter write failed: ' . $exception->getMessage());
         }
     }
 }

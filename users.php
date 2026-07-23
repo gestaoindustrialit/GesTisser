@@ -308,6 +308,7 @@ function output_users_template()
     <Cell><Data ss:Type="String">category</Data></Cell>
     <Cell><Data ss:Type="String">manager_name</Data></Cell>
     <Cell><Data ss:Type="String">hire_date</Data></Cell>
+    <Cell><Data ss:Type="String">birth_date</Data></Cell>
     <Cell><Data ss:Type="String">termination_date</Data></Cell>
     <Cell><Data ss:Type="String">timezone</Data></Cell>
     <Cell><Data ss:Type="String">phone</Data></Cell>
@@ -394,6 +395,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $departmentId = (int) ($_POST['department_id'] ?? 0);
         $scheduleId = (int) ($_POST['schedule_id'] ?? 0);
         $hireDate = trim((string) ($_POST['hire_date'] ?? ''));
+        $birthDate = trim((string) ($_POST['birth_date'] ?? ''));
         $terminationDate = trim((string) ($_POST['termination_date'] ?? ''));
         $timezone = trim((string) ($_POST['timezone'] ?? 'Europe/Lisbon'));
         $phone = trim((string) ($_POST['phone'] ?? ''));
@@ -427,7 +429,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             }
 
             try {
-                $stmt = $pdo->prepare('INSERT INTO users(name, username, email, password, is_admin, access_profile, is_active, must_change_password, pin_code_hash, pin_code, pin_only_login, user_type, user_number, title, short_name, initials, email_notifications_active, sms_notifications_active, profession, category, manager_name, department, department_id, schedule_id, hire_date, termination_date, timezone, phone, mobile, notes, send_access_email) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)');
+                $stmt = $pdo->prepare('INSERT INTO users(name, username, email, password, is_admin, access_profile, is_active, must_change_password, pin_code_hash, pin_code, pin_only_login, user_type, user_number, title, short_name, initials, email_notifications_active, sms_notifications_active, profession, category, manager_name, department, department_id, schedule_id, hire_date, birth_date, termination_date, timezone, phone, mobile, notes, send_access_email) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)');
                 $stmt->execute([
                     $name,
                     $username,
@@ -454,6 +456,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     $departmentId > 0 ? $departmentId : null,
                     $scheduleId > 0 ? $scheduleId : null,
                     $hireDate,
+                    $birthDate,
                     $terminationDate,
                     $timezone,
                     $phone,
@@ -468,7 +471,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 } elseif (stripos($e->getMessage(), 'users.username') !== false) {
                     $flashError = build_user_conflict_message('username', $username, find_user_conflict($pdo, 'username', $username));
                 } else {
-                    error_log('[TaskForce][users.php] Erro ao criar utilizador: ' . $e->getMessage());
+                    error_log('[GesTisser][users.php] Erro ao criar utilizador: ' . $e->getMessage());
                     $flashError = 'Não foi possível criar utilizador. Verifique os dados e tente novamente.';
                 }
             }
@@ -506,6 +509,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $departmentId = (int) ($_POST['department_id'] ?? 0);
         $scheduleId = (int) ($_POST['schedule_id'] ?? 0);
         $hireDate = trim((string) ($_POST['hire_date'] ?? ''));
+        $birthDate = trim((string) ($_POST['birth_date'] ?? ''));
         $terminationDate = trim((string) ($_POST['termination_date'] ?? ''));
         $timezone = trim((string) ($_POST['timezone'] ?? 'Europe/Lisbon'));
         $phone = trim((string) ($_POST['phone'] ?? ''));
@@ -556,12 +560,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             try {
                 $passwordWasUpdated = false;
                 if ($password !== '') {
-                    $stmt = $pdo->prepare('UPDATE users SET name = ?, username = ?, email = ?, password = ?, is_admin = ?, access_profile = ?, is_active = ?, must_change_password = ?, pin_code_hash = COALESCE(?, pin_code_hash), pin_code = COALESCE(?, pin_code), pin_only_login = ?, user_type = ?, user_number = ?, title = ?, short_name = ?, initials = ?, email_notifications_active = ?, sms_notifications_active = ?, profession = ?, category = ?, manager_name = ?, department = ?, department_id = ?, schedule_id = ?, hire_date = ?, termination_date = ?, timezone = ?, phone = ?, mobile = ?, notes = ?, send_access_email = ? WHERE id = ?');
-                    $stmt->execute([$name, $username, $email, password_hash($password, PASSWORD_DEFAULT), $isTargetAdmin, $accessProfile, $isActive, $mustChangePassword, $pinCodeHash, $pinCodeHash, $pinOnlyLogin, $userType, $userNumber, $title, $shortName, $initials, $emailNotificationsActive, $smsNotificationsActive, $profession, $category, $managerName, $department, $departmentId > 0 ? $departmentId : null, $scheduleId > 0 ? $scheduleId : null, $hireDate, $terminationDate, $timezone, $phone, $mobile, $notes, $sendAccessEmail, $targetUserId]);
+                    $stmt = $pdo->prepare('UPDATE users SET name = ?, username = ?, email = ?, password = ?, is_admin = ?, access_profile = ?, is_active = ?, must_change_password = ?, pin_code_hash = COALESCE(?, pin_code_hash), pin_code = COALESCE(?, pin_code), pin_only_login = ?, user_type = ?, user_number = ?, title = ?, short_name = ?, initials = ?, email_notifications_active = ?, sms_notifications_active = ?, profession = ?, category = ?, manager_name = ?, department = ?, department_id = ?, schedule_id = ?, hire_date = ?, birth_date = ?, termination_date = ?, timezone = ?, phone = ?, mobile = ?, notes = ?, send_access_email = ? WHERE id = ?');
+                    $stmt->execute([$name, $username, $email, password_hash($password, PASSWORD_DEFAULT), $isTargetAdmin, $accessProfile, $isActive, $mustChangePassword, $pinCodeHash, $pinCodeHash, $pinOnlyLogin, $userType, $userNumber, $title, $shortName, $initials, $emailNotificationsActive, $smsNotificationsActive, $profession, $category, $managerName, $department, $departmentId > 0 ? $departmentId : null, $scheduleId > 0 ? $scheduleId : null, $hireDate, $birthDate, $terminationDate, $timezone, $phone, $mobile, $notes, $sendAccessEmail, $targetUserId]);
                     $passwordWasUpdated = true;
                 } else {
-                    $stmt = $pdo->prepare('UPDATE users SET name = ?, username = ?, email = ?, is_admin = ?, access_profile = ?, is_active = ?, must_change_password = ?, pin_code_hash = COALESCE(?, pin_code_hash), pin_code = COALESCE(?, pin_code), pin_only_login = ?, user_type = ?, user_number = ?, title = ?, short_name = ?, initials = ?, email_notifications_active = ?, sms_notifications_active = ?, profession = ?, category = ?, manager_name = ?, department = ?, department_id = ?, schedule_id = ?, hire_date = ?, termination_date = ?, timezone = ?, phone = ?, mobile = ?, notes = ?, send_access_email = ? WHERE id = ?');
-                    $stmt->execute([$name, $username, $email, $isTargetAdmin, $accessProfile, $isActive, $mustChangePassword, $pinCodeHash, $pinCodeHash, $pinOnlyLogin, $userType, $userNumber, $title, $shortName, $initials, $emailNotificationsActive, $smsNotificationsActive, $profession, $category, $managerName, $department, $departmentId > 0 ? $departmentId : null, $scheduleId > 0 ? $scheduleId : null, $hireDate, $terminationDate, $timezone, $phone, $mobile, $notes, $sendAccessEmail, $targetUserId]);
+                    $stmt = $pdo->prepare('UPDATE users SET name = ?, username = ?, email = ?, is_admin = ?, access_profile = ?, is_active = ?, must_change_password = ?, pin_code_hash = COALESCE(?, pin_code_hash), pin_code = COALESCE(?, pin_code), pin_only_login = ?, user_type = ?, user_number = ?, title = ?, short_name = ?, initials = ?, email_notifications_active = ?, sms_notifications_active = ?, profession = ?, category = ?, manager_name = ?, department = ?, department_id = ?, schedule_id = ?, hire_date = ?, birth_date = ?, termination_date = ?, timezone = ?, phone = ?, mobile = ?, notes = ?, send_access_email = ? WHERE id = ?');
+                    $stmt->execute([$name, $username, $email, $isTargetAdmin, $accessProfile, $isActive, $mustChangePassword, $pinCodeHash, $pinCodeHash, $pinOnlyLogin, $userType, $userNumber, $title, $shortName, $initials, $emailNotificationsActive, $smsNotificationsActive, $profession, $category, $managerName, $department, $departmentId > 0 ? $departmentId : null, $scheduleId > 0 ? $scheduleId : null, $hireDate, $birthDate, $terminationDate, $timezone, $phone, $mobile, $notes, $sendAccessEmail, $targetUserId]);
                 }
 
                 if ($passwordWasUpdated) {
@@ -583,7 +587,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 } elseif (stripos($e->getMessage(), 'users.username') !== false) {
                     $flashError = build_user_conflict_message('username', $username, find_user_conflict($pdo, 'username', $username, $targetUserId));
                 } else {
-                    error_log('[TaskForce][users.php] Erro ao atualizar utilizador #' . $targetUserId . ': ' . $e->getMessage());
+                    error_log('[GesTisser][users.php] Erro ao atualizar utilizador #' . $targetUserId . ': ' . $e->getMessage());
                     $flashError = 'Não foi possível atualizar utilizador. Verifique os dados e tente novamente.';
                 }
             }
@@ -791,6 +795,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     $departmentId > 0 ? $departmentId : null,
                     $scheduleId > 0 ? $scheduleId : null,
                     $hireDate,
+                    $birthDate,
                     $terminationDate,
                     $timezone,
                     get_bulk_value($rowData, ['phone', 'telefone'], ''),
@@ -821,9 +826,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             if ($errors !== []) {
                 $flashError = 'A importação foi cancelada porque existem erros no ficheiro.';
             } else {
-                $insertStmt = $pdo->prepare('INSERT INTO users(name, username, email, password, is_admin, access_profile, is_active, must_change_password, pin_code_hash, pin_code, pin_only_login, user_type, user_number, title, short_name, initials, email_notifications_active, sms_notifications_active, profession, category, manager_name, department, department_id, schedule_id, hire_date, termination_date, timezone, phone, mobile, notes, send_access_email) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)');
-                $updateStmt = $pdo->prepare('UPDATE users SET name = ?, username = ?, email = ?, is_admin = ?, access_profile = ?, is_active = ?, must_change_password = ?, pin_code_hash = COALESCE(?, pin_code_hash), pin_code = COALESCE(?, pin_code), pin_only_login = ?, user_type = ?, user_number = ?, title = ?, short_name = ?, initials = ?, email_notifications_active = ?, sms_notifications_active = ?, profession = ?, category = ?, manager_name = ?, department = ?, department_id = ?, schedule_id = ?, hire_date = ?, termination_date = ?, timezone = ?, phone = ?, mobile = ?, notes = ?, send_access_email = ? WHERE id = ?');
-                $updateWithPasswordStmt = $pdo->prepare('UPDATE users SET name = ?, username = ?, email = ?, password = ?, is_admin = ?, access_profile = ?, is_active = ?, must_change_password = ?, pin_code_hash = COALESCE(?, pin_code_hash), pin_code = COALESCE(?, pin_code), pin_only_login = ?, user_type = ?, user_number = ?, title = ?, short_name = ?, initials = ?, email_notifications_active = ?, sms_notifications_active = ?, profession = ?, category = ?, manager_name = ?, department = ?, department_id = ?, schedule_id = ?, hire_date = ?, termination_date = ?, timezone = ?, phone = ?, mobile = ?, notes = ?, send_access_email = ? WHERE id = ?');
+                $insertStmt = $pdo->prepare('INSERT INTO users(name, username, email, password, is_admin, access_profile, is_active, must_change_password, pin_code_hash, pin_code, pin_only_login, user_type, user_number, title, short_name, initials, email_notifications_active, sms_notifications_active, profession, category, manager_name, department, department_id, schedule_id, hire_date, birth_date, termination_date, timezone, phone, mobile, notes, send_access_email) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)');
+                $updateStmt = $pdo->prepare('UPDATE users SET name = ?, username = ?, email = ?, is_admin = ?, access_profile = ?, is_active = ?, must_change_password = ?, pin_code_hash = COALESCE(?, pin_code_hash), pin_code = COALESCE(?, pin_code), pin_only_login = ?, user_type = ?, user_number = ?, title = ?, short_name = ?, initials = ?, email_notifications_active = ?, sms_notifications_active = ?, profession = ?, category = ?, manager_name = ?, department = ?, department_id = ?, schedule_id = ?, hire_date = ?, birth_date = ?, termination_date = ?, timezone = ?, phone = ?, mobile = ?, notes = ?, send_access_email = ? WHERE id = ?');
+                $updateWithPasswordStmt = $pdo->prepare('UPDATE users SET name = ?, username = ?, email = ?, password = ?, is_admin = ?, access_profile = ?, is_active = ?, must_change_password = ?, pin_code_hash = COALESCE(?, pin_code_hash), pin_code = COALESCE(?, pin_code), pin_only_login = ?, user_type = ?, user_number = ?, title = ?, short_name = ?, initials = ?, email_notifications_active = ?, sms_notifications_active = ?, profession = ?, category = ?, manager_name = ?, department = ?, department_id = ?, schedule_id = ?, hire_date = ?, birth_date = ?, termination_date = ?, timezone = ?, phone = ?, mobile = ?, notes = ?, send_access_email = ? WHERE id = ?');
                 $pdo->beginTransaction();
                 foreach ($rowsToUpsert as $rowToUpsert) {
                     $base = $rowToUpsert['base'];
@@ -873,12 +878,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                         $base[20], // department_id
                         $base[21], // schedule_id
                         $base[22], // hire_date
-                        $base[23], // termination_date
-                        $base[24], // timezone
-                        $base[25], // phone
-                        $base[26], // mobile
-                        $base[27], // notes
-                        $base[28], // send_access_email
+                        $base[23], // birth_date
+                        $base[24], // termination_date
+                        $base[25], // timezone
+                        $base[26], // phone
+                        $base[27], // mobile
+                        $base[28], // notes
+                        $base[29], // send_access_email
                     ]);
                 }
                 $pdo->commit();
@@ -924,7 +930,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $deleteStmt->execute([$targetUserId]);
                 $flashSuccess = 'Utilizador eliminado com sucesso.';
             } catch (PDOException $e) {
-                error_log('[TaskForce][users.php] Erro ao eliminar utilizador #' . $targetUserId . ': ' . $e->getMessage());
+                error_log('[GesTisser][users.php] Erro ao eliminar utilizador #' . $targetUserId . ': ' . $e->getMessage());
                 $flashError = 'Não foi possível eliminar o utilizador porque existem registos associados.';
             }
         }
@@ -1014,7 +1020,7 @@ if ($isAllPerPage) {
     $offset = ($page - 1) * $perPageLimit;
 }
 
-$usersBaseSql = 'SELECT id, name, username, email, is_admin, access_profile, is_active, must_change_password, pin_only_login, created_at, user_type, user_number, title, short_name, initials, email_notifications_active, sms_notifications_active, profession, category, manager_name, department, department_id, schedule_id, hire_date, termination_date, timezone, phone, mobile, notes, send_access_email FROM users'
+$usersBaseSql = 'SELECT id, name, username, email, is_admin, access_profile, is_active, must_change_password, pin_only_login, created_at, user_type, user_number, title, short_name, initials, email_notifications_active, sms_notifications_active, profession, category, manager_name, department, department_id, schedule_id, hire_date, birth_date, termination_date, timezone, phone, mobile, notes, send_access_email FROM users'
     . $filtersWhereSql
     . ' ORDER BY created_at DESC';
 if ($isAllPerPage) {
@@ -1306,6 +1312,7 @@ require __DIR__ . '/partials/header.php';
                         </select>
                     </div>
                     <div class="col-md-4"><label class="form-label">Data de admissão</label><input class="form-control" type="date" name="hire_date"></div>
+                    <div class="col-md-4"><label class="form-label">Data de nascimento</label><input class="form-control" type="date" name="birth_date"></div>
                     <div class="col-md-4"><label class="form-label">Data saída</label><input class="form-control" type="date" name="termination_date"></div>
                     <div class="col-md-4">
                         <label class="form-label">Fuso horário</label>
@@ -1392,6 +1399,7 @@ require __DIR__ . '/partials/header.php';
                         </select>
                     </div>
                     <div class="col-md-4"><label class="form-label">Data de admissão</label><input class="form-control" type="date" name="hire_date" value="<?= h((string) ($user['hire_date'] ?? '')) ?>"></div>
+                    <div class="col-md-4"><label class="form-label">Data de nascimento</label><input class="form-control" type="date" name="birth_date" value="<?= h((string) ($user['birth_date'] ?? '')) ?>"></div>
                     <div class="col-md-4"><label class="form-label">Data saída</label><input class="form-control" type="date" name="termination_date" value="<?= h((string) ($user['termination_date'] ?? '')) ?>"></div>
                     <div class="col-md-4">
                         <label class="form-label">Fuso horário</label>

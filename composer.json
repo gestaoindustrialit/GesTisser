@@ -1,6 +1,6 @@
 {
-  "name": "calcada/taskforce",
-  "description": "TaskForce internal HR and operations app",
+  "name": "calcada/gestisser",
+  "description": "GesTisser internal HR and operations app",
   "type": "project",
   "require": {
     "setasign/fpdf": "^1.8",

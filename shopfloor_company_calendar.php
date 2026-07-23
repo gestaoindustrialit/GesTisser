@@ -16,9 +16,9 @@ if ($year !== null) {
 }
 $events = $eventsStmt->fetchAll(PDO::FETCH_ASSOC);
 
-$companyName = trim((string) app_setting($pdo, 'company_name', 'TaskForce'));
+$companyName = trim((string) app_setting($pdo, 'company_name', 'GesTisser'));
 if ($companyName === '') {
-    $companyName = 'TaskForce';
+    $companyName = 'GesTisser';
 }
 $calendarName = 'Calendário da empresa - ' . $companyName;
 
@@ -33,7 +33,7 @@ $icsEscape = static function (string $value): string {
 $lines = [
     'BEGIN:VCALENDAR',
     'VERSION:2.0',
-    'PRODID:-//TaskForce//Calendario Empresa//PT',
+    'PRODID:-//GesTisser//Calendario Empresa//PT',
     'CALSCALE:GREGORIAN',
     'METHOD:PUBLISH',
     'X-WR-CALNAME:' . $icsEscape($calendarName),
@@ -41,7 +41,7 @@ $lines = [
 ];
 
 $dtStamp = gmdate('Ymd\\THis\\Z');
-$baseDomain = parse_url(app_base_url(), PHP_URL_HOST) ?: 'taskforce.local';
+$baseDomain = parse_url(app_base_url(), PHP_URL_HOST) ?: 'gestisser.local';
 
 foreach ($events as $event) {
     $title = trim((string) ($event['title'] ?? 'Evento'));

@@ -21,7 +21,7 @@ function safe_log_app_event(PDO $pdo, $userId, string $eventType, string $descri
     try {
         log_app_event($pdo, $userId, $eventType, $description, $context);
     } catch (Throwable $exception) {
-        error_log('[TaskForce] Não foi possível registar evento de login: ' . $exception->getMessage());
+        error_log('[GesTisser] Não foi possível registar evento de login: ' . $exception->getMessage());
     }
 }
 
@@ -128,7 +128,7 @@ require __DIR__ . '/partials/header.php';
                         <img src="<?= h($logoLight) ?>" alt="Logótipo empresa" class="auth-logo mb-3">
                     <?php endif; ?>
                     <h1 class="h4 mb-1">Entrar</h1>
-                    <p class="text-secondary small mb-0">Bem-vindo de volta ao TaskForce.</p>
+                    <p class="text-secondary small mb-0">Bem-vindo de volta ao GesTisser.</p>
                 </div>
 
                 <?php if ($error): ?><div class="alert alert-danger"><?= h($error) ?></div><?php endif; ?>
