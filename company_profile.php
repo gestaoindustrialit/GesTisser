@@ -32,7 +32,7 @@ $recurrenceCatalog = [];
 $pendingDepartmentCatalog = [];
 $greetingImages = ['birthday' => [], 'work_anniversary' => []];
 
-function save_hr_greeting_image_upload(array $file, string $type): ?array
+function save_hr_greeting_image_upload(array $file, string $type)
 {
     if (($file['error'] ?? UPLOAD_ERR_NO_FILE) !== UPLOAD_ERR_OK) {
         return null;
