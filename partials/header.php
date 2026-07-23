@@ -94,11 +94,39 @@ header('Content-Type: text/html; charset=UTF-8');
                 <div class="navbar-nav me-auto ms-lg-4">
                     <?php if ($isPinOnlyUser): ?>
                         <a class="nav-link" href="<?= h(route_url('shopfloor', 'shopfloor.php')) ?>">Shopfloor</a>
-                        <a class="nav-link" href="<?= h(route_url('erp', 'erp.php')) ?>">ERP</a>
+                        <div class="nav-item dropdown">
+                        <a class="nav-link dropdown-toggle" href="<?= h(route_url('erp', 'erp.php')) ?>" role="button" data-bs-toggle="dropdown" aria-expanded="false">ERP</a>
+                        <ul class="dropdown-menu">
+                            <li><a class="dropdown-item" href="<?= h(route_url('erp', 'erp.php')) ?>">Visão geral ERP</a></li>
+                            <li><hr class="dropdown-divider"></li>
+                            <li><a class="dropdown-item" href="erp.php?page=sales">Comercial</a></li>
+                            <li><a class="dropdown-item" href="erp.php?page=purchases">Compras</a></li>
+                            <li><a class="dropdown-item" href="erp.php?page=production">Planeamento e produção</a></li>
+                            <li><a class="dropdown-item" href="erp.php?page=warehouse">Armazém e stock</a></li>
+                            <li><a class="dropdown-item" href="erp.php?page=quality">Qualidade</a></li>
+                            <li><a class="dropdown-item" href="erp.php?page=costs">Custos e margens</a></li>
+                            <li><a class="dropdown-item" href="erp.php?page=master">Dados mestre</a></li>
+                            <li><a class="dropdown-item" href="erp.php?page=settings">Configuração ERP</a></li>
+                        </ul>
+                    </div>
                     <?php else: ?>
                     <a class="nav-link" href="dashboard.php">Vis&atilde;o geral</a>
                     <a class="nav-link" href="<?= h(route_url('shopfloor', 'shopfloor.php')) ?>">Shopfloor</a>
-                    <a class="nav-link" href="<?= h(route_url('erp', 'erp.php')) ?>">ERP</a>
+                    <div class="nav-item dropdown">
+                        <a class="nav-link dropdown-toggle" href="<?= h(route_url('erp', 'erp.php')) ?>" role="button" data-bs-toggle="dropdown" aria-expanded="false">ERP</a>
+                        <ul class="dropdown-menu">
+                            <li><a class="dropdown-item" href="<?= h(route_url('erp', 'erp.php')) ?>">Visão geral ERP</a></li>
+                            <li><hr class="dropdown-divider"></li>
+                            <li><a class="dropdown-item" href="erp.php?page=sales">Comercial</a></li>
+                            <li><a class="dropdown-item" href="erp.php?page=purchases">Compras</a></li>
+                            <li><a class="dropdown-item" href="erp.php?page=production">Planeamento e produção</a></li>
+                            <li><a class="dropdown-item" href="erp.php?page=warehouse">Armazém e stock</a></li>
+                            <li><a class="dropdown-item" href="erp.php?page=quality">Qualidade</a></li>
+                            <li><a class="dropdown-item" href="erp.php?page=costs">Custos e margens</a></li>
+                            <li><a class="dropdown-item" href="erp.php?page=master">Dados mestre</a></li>
+                            <li><a class="dropdown-item" href="erp.php?page=settings">Configuração ERP</a></li>
+                        </ul>
+                    </div>
                     <?php if ($showHrMenu): ?>
                         <div class="nav-item dropdown">
                             <a class="nav-link dropdown-toggle" href="#" role="button" data-bs-toggle="dropdown" aria-expanded="false">RH</a>

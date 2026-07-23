@@ -1,6 +1,8 @@
 <?php
 require_once __DIR__ . '/helpers.php';
+require_once __DIR__ . '/erp_migrations.php';
 require_login();
+erp_run_phase1_migrations($pdo);
 
 $userId = (int) $_SESSION['user_id'];
 $user = current_user($pdo);
@@ -481,6 +483,18 @@ $statsStmt = $pdo->prepare('SELECT (SELECT COUNT(*) FROM team_members WHERE user
 $statsStmt->execute([$userId, $userId]);
 $stats = $statsStmt->fetch(PDO::FETCH_ASSOC);
 $users = $isAdmin ? $pdo->query('SELECT id, name, email, is_admin FROM users ORDER BY created_at DESC')->fetchAll(PDO::FETCH_ASSOC) : [];
+
+$erpDashboardMetrics = [
+    'orders_planned' => (int) $pdo->query("SELECT COUNT(*) FROM erp_production_orders WHERE status = 'Planeada'")->fetchColumn(),
+    'orders_active' => (int) $pdo->query("SELECT COUNT(*) FROM erp_production_orders WHERE status IN ('Em curso','Em produção')")->fetchColumn(),
+    'orders_late' => (int) $pdo->query("SELECT COUNT(*) FROM erp_production_orders WHERE due_date IS NOT NULL AND due_date < date('now') AND status NOT IN ('Concluída','Fechada','Cancelada')")->fetchColumn(),
+    'raw_materials' => (int) $pdo->query('SELECT COUNT(*) FROM erp_raw_materials')->fetchColumn(),
+    'finished_products' => (int) $pdo->query('SELECT COUNT(*) FROM erp_finished_products')->fetchColumn(),
+    'stock_movements' => (int) $pdo->query('SELECT COUNT(*) FROM erp_stock_movements')->fetchColumn(),
+];
+$erpRecentOrders = $pdo->query('SELECT o.order_number, o.status, o.planned_quantity, o.due_date, p.code AS product_code FROM erp_production_orders o LEFT JOIN erp_products p ON p.id = o.product_id ORDER BY o.id DESC LIMIT 5')->fetchAll(PDO::FETCH_ASSOC);
+$erpRecentMovements = $pdo->query('SELECT movement_number, movement_type, quantity, total_cost, movement_date FROM erp_stock_movements ORDER BY id DESC LIMIT 5')->fetchAll(PDO::FETCH_ASSOC);
+
 
 $todayDate = date('Y-m-d');
 
@@ -969,6 +983,27 @@ require __DIR__ . '/partials/header.php';
 
 <?php if ($flashSuccess): ?><div class="alert alert-success"><?= h($flashSuccess) ?></div><?php endif; ?>
 <?php if ($flashError): ?><div class="alert alert-danger"><?= h($flashError) ?></div><?php endif; ?>
+
+<div class="card shadow-sm mb-4 border-0">
+    <div class="card-body">
+        <div class="d-flex flex-wrap justify-content-between align-items-start gap-2 mb-3">
+            <div><h2 class="h5 mb-1">Dados ERP em tempo real</h2><p class="text-muted mb-0">Resumo operacional de produção, dados mestre e ledger de stock.</p></div>
+            <a class="btn btn-outline-primary btn-sm" href="erp.php">Abrir ERP</a>
+        </div>
+        <div class="row g-2 text-center mb-3">
+            <div class="col-6 col-lg-2"><div class="stat-pill bg-light text-dark"><strong><?= (int) $erpDashboardMetrics['orders_planned'] ?></strong><span>OF planeadas</span></div></div>
+            <div class="col-6 col-lg-2"><div class="stat-pill bg-light text-dark"><strong><?= (int) $erpDashboardMetrics['orders_active'] ?></strong><span>OF em curso</span></div></div>
+            <div class="col-6 col-lg-2"><div class="stat-pill bg-light text-dark"><strong><?= (int) $erpDashboardMetrics['orders_late'] ?></strong><span>OF atrasadas</span></div></div>
+            <div class="col-6 col-lg-2"><div class="stat-pill bg-light text-dark"><strong><?= (int) $erpDashboardMetrics['raw_materials'] ?></strong><span>Matérias-primas</span></div></div>
+            <div class="col-6 col-lg-2"><div class="stat-pill bg-light text-dark"><strong><?= (int) $erpDashboardMetrics['finished_products'] ?></strong><span>Produtos</span></div></div>
+            <div class="col-6 col-lg-2"><div class="stat-pill bg-light text-dark"><strong><?= (int) $erpDashboardMetrics['stock_movements'] ?></strong><span>Movimentos stock</span></div></div>
+        </div>
+        <div class="row g-3">
+            <div class="col-lg-6"><h3 class="h6">Últimas OF</h3><?php if($erpRecentOrders): ?><div class="table-responsive"><table class="table table-sm mb-0"><tr><th>OF</th><th>Artigo</th><th>Qtd.</th><th>Prazo</th><th>Estado</th></tr><?php foreach($erpRecentOrders as $order): ?><tr><td><?= h((string) $order['order_number']) ?></td><td><?= h((string) $order['product_code']) ?></td><td><?= h((string) $order['planned_quantity']) ?></td><td><?= h($order['due_date'] ? date('d/m/Y', strtotime((string) $order['due_date'])) : '—') ?></td><td><span class="badge text-bg-secondary"><?= h((string) $order['status']) ?></span></td></tr><?php endforeach; ?></table></div><?php else: ?><p class="text-muted mb-0">Sem ordens de fabrico registadas.</p><?php endif; ?></div>
+            <div class="col-lg-6"><h3 class="h6">Últimos movimentos</h3><?php if($erpRecentMovements): ?><div class="table-responsive"><table class="table table-sm mb-0"><tr><th>Movimento</th><th>Tipo</th><th>Qtd.</th><th>Custo</th></tr><?php foreach($erpRecentMovements as $movement): ?><tr><td><?= h((string) $movement['movement_number']) ?></td><td><?= h((string) $movement['movement_type']) ?></td><td><?= h((string) $movement['quantity']) ?></td><td><?= number_format((float) $movement['total_cost'], 2, ',', '.') ?> €</td></tr><?php endforeach; ?></table></div><?php else: ?><p class="text-muted mb-0">Sem movimentos de stock.</p><?php endif; ?></div>
+        </div>
+    </div>
+</div>
 
 <?php if ($pendingAbsenceApprovals || $pendingVacationApprovals): ?>
 <div class="card shadow-sm mb-4">
