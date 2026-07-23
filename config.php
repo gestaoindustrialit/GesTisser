@@ -864,6 +864,8 @@ foreach (['Produção', 'Controlo', 'Administrativos'] as $defaultGroupName) {
 }
 
 
+require_once __DIR__ . '/erp_migrations.php';
+
 // Módulo ERP: produção, armazém, turnos e tabelas auxiliares.
 $pdo->exec('CREATE TABLE IF NOT EXISTS erp_work_centers (id INTEGER PRIMARY KEY AUTOINCREMENT, code TEXT NOT NULL UNIQUE, name TEXT NOT NULL, hourly_rate REAL NOT NULL DEFAULT 0, is_active INTEGER NOT NULL DEFAULT 1, created_at DATETIME DEFAULT CURRENT_TIMESTAMP)');
 $pdo->exec('CREATE TABLE IF NOT EXISTS erp_operations (id INTEGER PRIMARY KEY AUTOINCREMENT, code TEXT NOT NULL UNIQUE, name TEXT NOT NULL, default_work_center_id INTEGER, standard_minutes INTEGER NOT NULL DEFAULT 0, hourly_rate REAL NOT NULL DEFAULT 0, is_active INTEGER NOT NULL DEFAULT 1, FOREIGN KEY(default_work_center_id) REFERENCES erp_work_centers(id) ON DELETE SET NULL)');
@@ -891,6 +893,7 @@ foreach ([['RF','Ráfia'],['PL','Plástico'],['SP','Saco de Papel'],['BP','BOPP'
 foreach ([['BR','Branco','000'],['AZLA','Azul Laminado',''],['TRLA','Transparente Laminado',''],['VMLA','Vermelho Laminado','']] as $c) { $pdo->prepare('INSERT OR IGNORE INTO erp_colors(code,name,pantone) VALUES (?,?,?)')->execute($c); }
 foreach ([['GERAL','Turno geral','08:00','17:00',60],['MANHA','Manhã','06:00','14:00',30],['TARDE','Tarde','14:00','22:00',30],['NOITE','Noite','22:00','06:00',30]] as $s) { $pdo->prepare('INSERT OR IGNORE INTO erp_shift_templates(code,name,start_time,end_time,break_minutes) VALUES (?,?,?,?,?)')->execute($s); }
 foreach ([['IMP','Impressora',45],['COR','Corte e Cose',45],['RET','Retratador',35]] as $wc) { $pdo->prepare('INSERT OR IGNORE INTO erp_work_centers(code,name,hourly_rate) VALUES (?,?,?)')->execute($wc); }
+erp_run_phase1_migrations($pdo);
 
 $pdo->exec('CREATE UNIQUE INDEX IF NOT EXISTS idx_users_username_unique ON users(username)');
 
