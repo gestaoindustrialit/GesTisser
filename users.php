@@ -84,6 +84,44 @@ function build_initials(string $name): string
 
 
 
+function save_user_document_upload(array $file, int $targetUserId, int $uploadedBy, string $documentType, string $notes): void
+{
+    if ($targetUserId <= 0) {
+        throw new RuntimeException('Utilizador inválido para anexar documento.');
+    }
+
+    if (($file['error'] ?? UPLOAD_ERR_NO_FILE) !== UPLOAD_ERR_OK) {
+        throw new RuntimeException('Selecione um documento válido para carregar.');
+    }
+
+    $maxBytes = 10 * 1024 * 1024;
+    if ((int) ($file['size'] ?? 0) > $maxBytes) {
+        throw new RuntimeException('O documento não pode exceder 10 MB.');
+    }
+
+    $originalName = trim((string) ($file['name'] ?? 'documento'));
+    $extension = strtolower(pathinfo($originalName, PATHINFO_EXTENSION));
+    $allowedExtensions = ['pdf', 'doc', 'docx', 'xls', 'xlsx', 'png', 'jpg', 'jpeg'];
+    if (!in_array($extension, $allowedExtensions, true)) {
+        throw new RuntimeException('Formato não suportado. Use PDF, Word, Excel ou imagem.');
+    }
+
+    $uploadDir = __DIR__ . '/uploads/user_documents/' . $targetUserId;
+    if (!is_dir($uploadDir) && !mkdir($uploadDir, 0775, true) && !is_dir($uploadDir)) {
+        throw new RuntimeException('Não foi possível preparar a pasta de documentos.');
+    }
+
+    $safeBase = preg_replace('/[^a-zA-Z0-9._-]+/', '-', pathinfo($originalName, PATHINFO_FILENAME)) ?: 'documento';
+    $safeName = date('YmdHis') . '-' . bin2hex(random_bytes(4)) . '-' . $safeBase . '.' . $extension;
+    $targetPath = $uploadDir . '/' . $safeName;
+    if (!move_uploaded_file((string) ($file['tmp_name'] ?? ''), $targetPath)) {
+        throw new RuntimeException('Não foi possível guardar o documento.');
+    }
+
+    $GLOBALS['pdo']->prepare('INSERT INTO user_documents(user_id, original_name, file_path, document_type, notes, uploaded_by) VALUES (?, ?, ?, ?, ?, ?)')
+        ->execute([$targetUserId, $originalName, 'uploads/user_documents/' . $targetUserId . '/' . $safeName, $documentType, $notes, $uploadedBy]);
+}
+
 function normalize_bulk_header(string $value): string
 {
     $value = trim(mb_strtolower($value, 'UTF-8'));
@@ -364,6 +402,22 @@ if (isset($_GET['download']) && $_GET['download'] === 'bulk-template') {
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $action = (string) ($_POST['action'] ?? '');
+
+    if ($action === 'upload_user_document') {
+        $targetUserId = (int) ($_POST['user_id'] ?? 0);
+        try {
+            save_user_document_upload(
+                $_FILES['document'] ?? [],
+                $targetUserId,
+                $userId,
+                trim((string) ($_POST['document_type'] ?? '')),
+                trim((string) ($_POST['document_notes'] ?? ''))
+            );
+            $flashSuccess = 'Documento adicionado ao perfil do colaborador.';
+        } catch (Throwable $e) {
+            $flashError = $e->getMessage();
+        }
+    }
 
     if ($action === 'create_user') {
         $name = trim((string) ($_POST['name'] ?? ''));
@@ -1039,6 +1093,16 @@ if ($isAllPerPage) {
     $usersStmt->execute();
 }
 $users = $usersStmt ? $usersStmt->fetchAll(PDO::FETCH_ASSOC) : [];
+$userDocumentsByUserId = [];
+$userIdsForDocuments = array_values(array_filter(array_map(static fn($user) => (int) ($user['id'] ?? 0), $users)));
+if ($userIdsForDocuments) {
+    $placeholders = implode(',', array_fill(0, count($userIdsForDocuments), '?'));
+    $documentsStmt = $pdo->prepare('SELECT ud.*, u.name AS uploaded_by_name FROM user_documents ud LEFT JOIN users u ON u.id = ud.uploaded_by WHERE ud.user_id IN (' . $placeholders . ') ORDER BY ud.created_at DESC, ud.id DESC');
+    $documentsStmt->execute($userIdsForDocuments);
+    foreach ($documentsStmt->fetchAll(PDO::FETCH_ASSOC) as $documentRow) {
+        $userDocumentsByUserId[(int) $documentRow['user_id']][] = $documentRow;
+    }
+}
 
 $filterQueryParams = [
     'search' => $searchTerm,
@@ -1223,10 +1287,17 @@ require __DIR__ . '/partials/header.php';
 </div>
 
 <style>
-    .user-form-compact .form-label { margin-bottom: .25rem; font-size: .85rem; }
+    .user-form-compact .modal-body { background: #f8fafc; }
+    .user-form-section { background: #fff; border: 1px solid #e5e7eb; border-radius: 1rem; padding: 1rem; box-shadow: 0 1px 2px rgba(15, 23, 42, .04); }
+    .user-form-section + .user-form-section { margin-top: 1rem; }
+    .user-form-section-title { display: flex; align-items: center; gap: .5rem; margin-bottom: .85rem; font-size: .78rem; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; color: #64748b; }
+    .user-form-compact .form-label { margin-bottom: .25rem; font-size: .8rem; font-weight: 700; color: #64748b; }
     .user-form-compact .form-control,
-    .user-form-compact .form-select { font-size: .9rem; padding: .35rem .6rem; min-height: calc(1.5em + .7rem + 2px); }
+    .user-form-compact .form-select { font-size: .9rem; padding: .45rem .65rem; border-color: #dbe3ef; border-radius: .6rem; min-height: calc(1.5em + .9rem + 2px); }
+    .user-form-compact textarea.form-control { min-height: 5rem; }
+    .user-form-compact .form-check { padding-left: 2rem; }
     .user-form-compact .form-check-label { font-size: .9rem; }
+    .user-document-list { max-height: 10rem; overflow: auto; }
 </style>
 
 <datalist id="managerOptions">
@@ -1262,11 +1333,13 @@ require __DIR__ . '/partials/header.php';
 
 <div class="modal fade" id="userModal" tabindex="-1" aria-hidden="true">
     <div class="modal-dialog modal-lg">
-        <form class="modal-content user-form-compact" method="post">
+        <form class="modal-content user-form-compact" method="post" enctype="multipart/form-data">
             <input type="hidden" name="action" value="create_user">
             <div class="modal-header"><h5 class="modal-title">Novo utilizador</h5><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div>
             <div class="modal-body">
-                <div class="row g-2">
+                <div class="user-form-section">
+                    <div class="user-form-section-title"><i class="bi bi-person-badge"></i> Dados do colaborador</div>
+                    <div class="row g-3">
                     <div class="col-md-6"><label class="form-label">Nome</label><input class="form-control js-initials-source" name="name" placeholder="Nome" required></div>
                     <div class="col-md-3"><label class="form-label">Número</label><input class="form-control" name="user_number" placeholder="Número"></div>
                     <div class="col-md-3"><label class="form-label">Sigla (automático)</label><input class="form-control js-initials-target" name="initials" placeholder="Sigla" readonly></div>
@@ -1326,11 +1399,17 @@ require __DIR__ . '/partials/header.php';
                     <div class="col-md-4"><label class="form-label">Telemóvel</label><input class="form-control" name="mobile" placeholder="Telemóvel"></div>
                     <div class="col-md-4"></div>
                     <div class="col-12"><label class="form-label">Observações</label><textarea class="form-control" name="notes" rows="3" placeholder="Observações"></textarea></div>
+                    </div>
                 </div>
 
-                <hr>
+                <div class="user-form-section">
+                    <div class="user-form-section-title"><i class="bi bi-paperclip"></i> Documentos do perfil</div>
+                    <div class="alert alert-light border mb-0 small text-muted">Depois de criar o utilizador, abra a ficha em modo de edição para anexar documentos ao perfil do colaborador.</div>
+                </div>
 
-                <div class="row g-2">
+                <div class="user-form-section">
+                    <div class="user-form-section-title"><i class="bi bi-shield-check"></i> Acessos e notificações</div>
+                    <div class="row g-3">
                     <div class="col-md-6 form-check"><input class="form-check-input" type="checkbox" name="is_admin" value="1" id="isAdmin"><label class="form-check-label" for="isAdmin">Administrador</label></div>
                     <div class="col-md-6 form-check form-switch"><input class="form-check-input" type="checkbox" name="is_active" value="1" id="isActive" checked><label class="form-check-label" for="isActive">Ativo</label></div>
                     <div class="col-md-6 form-check form-switch"><input class="form-check-input" type="checkbox" name="email_notifications_active" value="1" id="emailNotificationsActive" checked><label class="form-check-label" for="emailNotificationsActive">Ativo para email</label></div>
@@ -1338,6 +1417,7 @@ require __DIR__ . '/partials/header.php';
                     <div class="col-md-6 form-check"><input class="form-check-input" type="checkbox" name="send_access_email" value="1" id="sendAccessEmail"><label class="form-check-label" for="sendAccessEmail">Enviar dados de acesso</label></div>
                     <div class="col-md-6 form-check form-switch"><input class="form-check-input" type="checkbox" name="must_change_password" value="1" id="mustChangePassword"><label class="form-check-label" for="mustChangePassword">Obrigar alteração da senha no próximo login</label></div>
                     <div class="col-md-6 form-check form-switch"><input class="form-check-input" type="checkbox" name="pin_only_login" value="1" id="pinOnlyLogin"><label class="form-check-label" for="pinOnlyLogin">Login apenas com PIN (Shopfloor)</label></div>
+                    </div>
                 </div>
             </div>
             <div class="modal-footer"><button class="btn btn-primary">Criar utilizador</button></div>
@@ -1348,12 +1428,14 @@ require __DIR__ . '/partials/header.php';
 <?php foreach ($users as $user): ?>
 <div class="modal fade" id="editUserModal<?= (int) $user['id'] ?>" tabindex="-1" aria-hidden="true">
     <div class="modal-dialog modal-lg">
-        <form class="modal-content user-form-compact" method="post">
+        <form class="modal-content user-form-compact" method="post" enctype="multipart/form-data">
             <input type="hidden" name="user_id" value="<?= (int) $user['id'] ?>">
             <input type="hidden" name="action" value="update_user">
             <div class="modal-header"><h5 class="modal-title">Editar utilizador</h5><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div>
             <div class="modal-body">
-                <div class="row g-2">
+                <div class="user-form-section">
+                    <div class="user-form-section-title"><i class="bi bi-person-badge"></i> Dados do colaborador</div>
+                    <div class="row g-3">
                     <div class="col-md-6"><label class="form-label">Nome</label><input class="form-control js-initials-source" name="name" value="<?= h($user['name']) ?>" required></div>
                     <div class="col-md-3"><label class="form-label">Número</label><input class="form-control" name="user_number" value="<?= h((string) ($user['user_number'] ?? '')) ?>" placeholder="Número"></div>
                     <div class="col-md-3"><label class="form-label">Sigla (automático)</label><input class="form-control js-initials-target" name="initials" value="<?= h((string) ($user['initials'] ?? '')) ?>" placeholder="Sigla" readonly></div>
@@ -1413,11 +1495,40 @@ require __DIR__ . '/partials/header.php';
                     <div class="col-md-4"><label class="form-label">Telemóvel</label><input class="form-control" name="mobile" value="<?= h((string) ($user['mobile'] ?? '')) ?>" placeholder="Telemóvel"></div>
                     <div class="col-md-4"></div>
                     <div class="col-12"><label class="form-label">Observações</label><textarea class="form-control" name="notes" rows="3" placeholder="Observações"><?= h((string) ($user['notes'] ?? '')) ?></textarea></div>
+                    </div>
                 </div>
 
-                <hr>
+                <div class="user-form-section">
+                    <div class="user-form-section-title"><i class="bi bi-paperclip"></i> Documentos do perfil</div>
+                    <?php $userDocuments = $userDocumentsByUserId[(int) $user['id']] ?? []; ?>
+                    <div class="row g-3 align-items-end">
+                        <div class="col-md-4"><label class="form-label">Tipo de documento</label><input class="form-control" name="document_type" placeholder="Contrato, identificação..."></div>
+                        <div class="col-md-5"><label class="form-label">Documento</label><input class="form-control" type="file" name="document" accept=".pdf,.doc,.docx,.xls,.xlsx,.png,.jpg,.jpeg"></div>
+                        <div class="col-md-3"><label class="form-label">Notas</label><input class="form-control" name="document_notes" placeholder="Notas"></div>
+                    </div>
+                    <div class="user-document-list list-group list-group-flush mt-3">
+                        <?php if (!$userDocuments): ?>
+                            <div class="list-group-item px-0 text-muted small">Sem documentos anexados.</div>
+                        <?php endif; ?>
+                        <?php foreach ($userDocuments as $document): ?>
+                            <div class="list-group-item px-0 d-flex justify-content-between gap-3 align-items-start">
+                                <div>
+                                    <a class="fw-semibold" href="<?= h((string) $document['file_path']) ?>" target="_blank" rel="noopener"><?= h((string) $document['original_name']) ?></a>
+                                    <div class="small text-muted">
+                                        <?= h((string) ($document['document_type'] ?: 'Documento')) ?> · <?= h(date('d/m/Y H:i', strtotime((string) $document['created_at']))) ?>
+                                        <?php if (!empty($document['uploaded_by_name'])): ?> · <?= h((string) $document['uploaded_by_name']) ?><?php endif; ?>
+                                    </div>
+                                    <?php if (!empty($document['notes'])): ?><div class="small"><?= h((string) $document['notes']) ?></div><?php endif; ?>
+                                </div>
+                                <i class="bi bi-file-earmark-text text-secondary"></i>
+                            </div>
+                        <?php endforeach; ?>
+                    </div>
+                </div>
 
-                <div class="row g-2">
+                <div class="user-form-section">
+                    <div class="user-form-section-title"><i class="bi bi-shield-check"></i> Acessos e notificações</div>
+                    <div class="row g-3">
                     <div class="col-md-6 form-check"><input class="form-check-input" type="checkbox" name="is_admin" value="1" id="isAdminEdit<?= (int) $user['id'] ?>" <?= (int) $user['is_admin'] === 1 ? 'checked' : '' ?>><label class="form-check-label" for="isAdminEdit<?= (int) $user['id'] ?>">Administrador</label></div>
                     <div class="col-md-6 form-check form-switch"><input class="form-check-input" type="checkbox" name="is_active" value="1" id="isActiveEdit<?= (int) $user['id'] ?>" <?= (int) ($user['is_active'] ?? 1) === 1 ? 'checked' : '' ?>><label class="form-check-label" for="isActiveEdit<?= (int) $user['id'] ?>">Ativo</label></div>
                     <div class="col-md-6 form-check form-switch"><input class="form-check-input" type="checkbox" name="email_notifications_active" value="1" id="emailNotificationsActiveEdit<?= (int) $user['id'] ?>" <?= (int) ($user['email_notifications_active'] ?? 1) === 1 ? 'checked' : '' ?>><label class="form-check-label" for="emailNotificationsActiveEdit<?= (int) $user['id'] ?>">Ativo para email</label></div>
@@ -1425,6 +1536,7 @@ require __DIR__ . '/partials/header.php';
                     <div class="col-md-6 form-check"><input class="form-check-input" type="checkbox" name="send_access_email" value="1" id="sendAccessEmailEdit<?= (int) $user['id'] ?>" <?= (int) ($user['send_access_email'] ?? 0) === 1 ? 'checked' : '' ?>><label class="form-check-label" for="sendAccessEmailEdit<?= (int) $user['id'] ?>">Enviar dados de acesso</label></div>
                     <div class="col-md-6 form-check form-switch"><input class="form-check-input" type="checkbox" name="must_change_password" value="1" id="mustChangePasswordEdit<?= (int) $user['id'] ?>" <?= (int) ($user['must_change_password'] ?? 0) === 1 ? 'checked' : '' ?>><label class="form-check-label" for="mustChangePasswordEdit<?= (int) $user['id'] ?>">Obrigar alteração da senha no próximo login</label></div>
                     <div class="col-md-6 form-check form-switch"><input class="form-check-input" type="checkbox" name="pin_only_login" value="1" id="pinOnlyLoginEdit<?= (int) $user['id'] ?>" <?= (int) ($user['pin_only_login'] ?? 0) === 1 ? 'checked' : '' ?>><label class="form-check-label" for="pinOnlyLoginEdit<?= (int) $user['id'] ?>">Login apenas com PIN (Shopfloor)</label></div>
+                    </div>
                 </div>
             </div>
             <div class="modal-footer d-flex justify-content-between">
@@ -1436,7 +1548,10 @@ require __DIR__ . '/partials/header.php';
                     formnovalidate
                     onclick="return confirm('Tem a certeza que deseja eliminar este utilizador? Esta ação não pode ser anulada.');"
                 >Eliminar utilizador</button>
-                <button type="submit" class="btn btn-primary">Guardar utilizador</button>
+                <div class="d-flex gap-2">
+                    <button type="submit" class="btn btn-outline-primary" name="action" value="upload_user_document" formnovalidate><i class="bi bi-upload"></i> Adicionar documento</button>
+                    <button type="submit" class="btn btn-primary">Guardar utilizador</button>
+                </div>
             </div>
         </form>
     </div>
