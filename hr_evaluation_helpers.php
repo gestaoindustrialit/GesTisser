@@ -540,7 +540,9 @@ function taskforce_generate_single_evaluation_fpdf_pdf(array $reportData)
         ['Pontualidade', $metrics['punctuality'] ?? '—'],
         ['Absentismo', $metrics['absence'] ?? '—'],
         ['Total período', $metrics['period_total'] ?? '—'],
-    ] as [$label, $value]) {
+    ] as $metricRow) {
+        $label = $metricRow[0];
+        $value = $metricRow[1];
         $pdf->SetFont('Arial', 'B', 10);
         $pdf->Cell(55, 9, $toPdfText((string) $label), 1, 0, 'L', true);
         $pdf->SetFont('Arial', '', 10);

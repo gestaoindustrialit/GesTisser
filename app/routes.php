@@ -11,6 +11,10 @@ if (!function_exists('taskforce_routes')) {
             'shopfloor' => 'shopfloor.php',
             'users' => 'users.php',
             'hr' => 'hr.php',
+            'hr.organogram' => 'hr_organogram.php',
+            'hr.job_descriptions' => 'hr_job_descriptions.php',
+            'hr.skills' => 'hr_skills.php',
+            'erp.machines' => 'erp_machines.php',
         );
     }
 }
