@@ -266,6 +266,8 @@ $pdo->exec('UPDATE users SET pin_only_login = 0 WHERE pin_only_login IS NULL');
 $pdo->exec('UPDATE users SET award_profile = "operador" WHERE award_profile IS NULL OR TRIM(award_profile) = ""');
 $pdo->exec('UPDATE users SET award_eligible = 1 WHERE award_eligible IS NULL');
 
+$pdo->exec('CREATE TABLE IF NOT EXISTS user_documents (id INTEGER PRIMARY KEY AUTOINCREMENT, user_id INTEGER NOT NULL, original_name TEXT NOT NULL, file_path TEXT NOT NULL, document_type TEXT, notes TEXT, uploaded_by INTEGER, created_at DATETIME DEFAULT CURRENT_TIMESTAMP, FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE, FOREIGN KEY(uploaded_by) REFERENCES users(id) ON DELETE SET NULL)');
+
 
 $pdo->exec(
     'CREATE TABLE IF NOT EXISTS hr_greeting_images (
