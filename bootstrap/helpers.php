@@ -49,3 +49,33 @@ if (!function_exists('old')) {
         return (string) ($_POST[$key] ?? $default);
     }
 }
+
+if (!function_exists('app_setting')) {
+    function app_setting(PDO $pdo, string $settingKey, $default = null)
+    {
+        $stmt = $pdo->prepare('SELECT setting_value FROM app_settings WHERE setting_key = ?');
+        $stmt->execute([$settingKey]);
+        $value = $stmt->fetchColumn();
+
+        return $value !== false ? (string) $value : $default;
+    }
+}
+
+if (!function_exists('set_app_setting')) {
+    function set_app_setting(PDO $pdo, string $settingKey, string $settingValue)
+    {
+        $updateStmt = $pdo->prepare('UPDATE app_settings SET setting_value = ? WHERE setting_key = ?');
+        $updateStmt->execute([$settingValue, $settingKey]);
+
+        if ($updateStmt->rowCount() > 0) {
+            return;
+        }
+
+        $insertStmt = $pdo->prepare('INSERT INTO app_settings(setting_key, setting_value) VALUES (?, ?)');
+        try {
+            $insertStmt->execute([$settingKey, $settingValue]);
+        } catch (PDOException $exception) {
+            $updateStmt->execute([$settingValue, $settingKey]);
+        }
+    }
+}
