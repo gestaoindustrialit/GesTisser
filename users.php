@@ -1094,7 +1094,7 @@ if ($isAllPerPage) {
 }
 $users = $usersStmt ? $usersStmt->fetchAll(PDO::FETCH_ASSOC) : [];
 $userDocumentsByUserId = [];
-$userIdsForDocuments = array_values(array_filter(array_map(static fn($user) => (int) ($user['id'] ?? 0), $users)));
+$userIdsForDocuments = array_values(array_filter(array_map(static function ($user) { return (int) ($user['id'] ?? 0); }, $users)));
 if ($userIdsForDocuments) {
     $placeholders = implode(',', array_fill(0, count($userIdsForDocuments), '?'));
     $documentsStmt = $pdo->prepare('SELECT ud.*, u.name AS uploaded_by_name FROM user_documents ud LEFT JOIN users u ON u.id = ud.uploaded_by WHERE ud.user_id IN (' . $placeholders . ') ORDER BY ud.created_at DESC, ud.id DESC');
