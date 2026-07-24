@@ -1287,3 +1287,114 @@ body {
         width: 100%;
     }
 }
+
+.machine-upload-panel {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(260px, 360px);
+    gap: 16px;
+    align-items: stretch;
+    margin-bottom: 24px;
+    padding: 18px;
+    border: 2px dashed #cbd5d9;
+    border-radius: 18px;
+    background: #f7f8f8;
+}
+
+.machine-upload-panel span,
+.machine-upload-panel strong,
+.machine-upload-panel small {
+    display: block;
+}
+
+.machine-upload-panel span {
+    color: #55ad43;
+    font-size: 12px;
+    font-weight: 900;
+    letter-spacing: .18em;
+    text-transform: uppercase;
+}
+
+.machine-upload-panel strong {
+    margin-top: 5px;
+    color: #212124;
+    font-size: 18px;
+    font-weight: 900;
+}
+
+.machine-upload-panel small {
+    margin-top: 4px;
+    color: #6d7882;
+    font-weight: 700;
+}
+
+.machine-upload-drop {
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    gap: 8px;
+    min-height: 112px;
+    padding: 16px;
+    border: 2px solid #dfe4e8;
+    border-radius: 16px;
+    background: #fff;
+    color: #2b6fae;
+    text-align: center;
+    cursor: pointer;
+}
+
+.machine-upload-drop i {
+    font-size: 28px;
+}
+
+.machine-upload-drop input {
+    font-size: 14px;
+}
+
+.machine-existing-files {
+    grid-column: 1 / -1;
+    display: grid;
+    gap: 8px;
+}
+
+.machine-existing-file {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    padding: 9px 10px;
+    border: 1px solid #dfe4e8;
+    border-radius: 12px;
+    background: #fff;
+}
+
+.machine-existing-file a,
+.machine-file-chips a {
+    color: #2b6fae;
+    font-weight: 800;
+    text-decoration: none;
+}
+
+.machine-file-chips {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin-top: 14px;
+}
+
+.machine-file-chips a {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    max-width: 100%;
+    padding: 6px 9px;
+    border: 1px solid #dfe4e8;
+    border-radius: 999px;
+    background: #f7f8f8;
+    font-size: 12px;
+}
+
+@media (max-width: 1100px) {
+    .machine-upload-panel {
+        grid-template-columns: 1fr;
+    }
+}
