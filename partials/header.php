@@ -1,9 +1,14 @@
 <?php
-$helpersPath = dirname(__DIR__) . '/helpers.php';
-if (!is_file($helpersPath)) {
-    $helpersPath = __DIR__ . '/helpers.php';
+$bootstrapPath = dirname(__DIR__) . '/bootstrap/app.php';
+if (is_file($bootstrapPath)) {
+    require_once $bootstrapPath;
+} else {
+    $helpersPath = dirname(__DIR__) . '/helpers.php';
+    if (!is_file($helpersPath)) {
+        $helpersPath = __DIR__ . '/helpers.php';
+    }
+    require_once $helpersPath;
 }
-require_once $helpersPath;
 $user = current_user($pdo);
 $navbarLogo = app_setting($pdo, 'logo_navbar_light');
 $showHrMenu = $user && ((int) ($user['is_admin'] ?? 0) === 1 || (string) ($user['access_profile'] ?? '') === 'RH');
