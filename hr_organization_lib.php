@@ -1,5 +1,5 @@
 <?php
-require_once __DIR__ . '/bootstrap/app.php';
+require_once __DIR__ . '/config.php';
 
 function gt_column_exists(PDO $pdo, string $table, string $column): bool { foreach ($pdo->query('PRAGMA table_info(' . $table . ')')->fetchAll(PDO::FETCH_ASSOC) as $r) { if (($r['name'] ?? '') === $column) return true; } return false; }
 function gt_table_exists(PDO $pdo, string $table): bool { $s=$pdo->prepare("SELECT 1 FROM sqlite_master WHERE type='table' AND name=? LIMIT 1"); $s->execute([$table]); return (bool)$s->fetchColumn(); }
@@ -23,5 +23,5 @@ function gt_run_org_migrations(PDO $pdo) {
 }
 function gt_is_hr_allowed(PDO $pdo,int $uid): bool { $stmt=$pdo->prepare('SELECT is_admin, access_profile FROM users WHERE id = ?'); $stmt->execute([$uid]); $row=$stmt->fetch(PDO::FETCH_ASSOC); return $row && ((int)($row['is_admin']??0)===1 || (string)($row['access_profile']??'')==='RH'); }
 function gt_is_erp_allowed(PDO $pdo,array $u): bool { return (int)($u['is_admin']??0)===1 || in_array((string)($u['access_profile']??''), ['ERP','Admin','Gestão'], true); }
-function gt_prevents_cycle(PDO $pdo, int $userId, ?int $managerId): bool { if (!$managerId) return true; if ($userId===$managerId) return false; $seen=[]; while($managerId){ if ($managerId===$userId || isset($seen[$managerId])) return false; $seen[$managerId]=1; $s=$pdo->prepare('SELECT manager_user_id FROM users WHERE id=?'); $s->execute([$managerId]); $managerId=(int)$s->fetchColumn(); } return true; }
+function gt_prevents_cycle(PDO $pdo, int $userId, $managerId): bool { if (!$managerId) return true; if ($userId===$managerId) return false; $seen=[]; while($managerId){ if ($managerId===$userId || isset($seen[$managerId])) return false; $seen[$managerId]=1; $s=$pdo->prepare('SELECT manager_user_id FROM users WHERE id=?'); $s->execute([$managerId]); $managerId=(int)$s->fetchColumn(); } return true; }
 function gt_duty_risks(array $d): array { $r=[]; if (empty($d['backup_user_id'])) $r[]='Sem substituto principal'; if (!empty($d['review_date']) && $d['review_date'] < date('Y-m-d')) $r[]='Revisão vencida'; return $r; }

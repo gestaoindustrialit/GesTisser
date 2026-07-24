@@ -13,7 +13,7 @@ if (!gt_is_hr_allowed($pdo, $userId)) {
 $flashSuccess = null;
 $flashError = null;
 
-function gt_org_time_label(?string $time): string
+function gt_org_time_label($time): string
 {
     $value = trim((string) $time);
     if ($value === '') {
@@ -148,7 +148,7 @@ foreach ($people as $person) {
 
 $levels = [];
 $visited = [];
-$walk = static function (int $managerId, int $level) use (&$walk, &$levels, &$visited, $byManager): void {
+$walk = static function (int $managerId, int $level) use (&$walk, &$levels, &$visited, $byManager) {
     foreach ($byManager[$managerId] ?? [] as $person) {
         $pid = (int) $person['id'];
         if (isset($visited[$pid])) {
@@ -172,7 +172,8 @@ ksort($levels);
 if ($selectedId <= 0 || !isset($peopleById[$selectedId])) {
     foreach ($levels as $levelPeople) {
         if (!empty($levelPeople)) {
-            $selectedId = (int) $levelPeople[array_key_last($levelPeople)]['id'];
+            $lastLevelPerson = end($levelPeople);
+            $selectedId = (int) $lastLevelPerson['id'];
             break;
         }
     }
@@ -202,7 +203,7 @@ foreach ($people as $person) {
     $shiftStats[$sid]['fte'] += $fte;
     $shiftStats[$sid]['departments'][$departmentLabel] = ($shiftStats[$sid]['departments'][$departmentLabel] ?? 0) + $fte;
 }
-$shiftStats = array_values(array_filter($shiftStats, static fn (array $stat): bool => $stat['people'] > 0));
+$shiftStats = array_values(array_filter($shiftStats, static function (array $stat): bool { return $stat['people'] > 0; }));
 
 $exportRows = array_map(static function (array $person): array {
     return [
