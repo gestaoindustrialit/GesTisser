@@ -121,7 +121,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 }
                 $pdo->prepare('UPDATE erp_machine_attachments SET deleted_at=CURRENT_TIMESTAMP WHERE id=?')->execute([$attachmentId]);
                 $path = (string) ($attachment['file_path'] ?? '');
-                if ($path !== '' && str_starts_with($path, 'storage/uploads/machines/')) {
+                if ($path !== '' && substr($path, 0, strlen('storage/uploads/machines/')) === 'storage/uploads/machines/') {
                     @unlink(__DIR__ . '/' . $path);
                 }
                 gt_org_audit($pdo, $userId, 'erp.machines.attachment_delete', 'erp_machine_attachments', $attachmentId, $attachment, []);
@@ -152,7 +152,10 @@ if ($dep) { $where[] = 'm.department_id=?'; $args[] = $dep; }
 $st = $pdo->prepare('SELECT m.*,d.name department_name,u.name owner_name,(SELECT COUNT(*) FROM hr_machine_competencies c JOIN users uu ON uu.id=c.user_id WHERE c.machine_id=m.id AND c.level>=3 AND COALESCE(uu.is_active,1)=1 AND c.deleted_at IS NULL) autonomous FROM erp_machines m LEFT JOIN hr_departments d ON d.id=m.department_id LEFT JOIN users u ON u.id=m.owner_user_id WHERE ' . implode(' AND ', $where) . ' ORDER BY m.is_active DESC,m.code');
 $st->execute($args);
 $machines = $st->fetchAll(PDO::FETCH_ASSOC);
-$machineIds = array_map(static fn($machine) => (int) $machine['id'], $machines);
+$machineIds = [];
+foreach ($machines as $machineForAttachment) {
+    $machineIds[] = (int) $machineForAttachment['id'];
+}
 $attachmentsByMachine = [];
 if ($machineIds) {
     $placeholders = implode(',', array_fill(0, count($machineIds), '?'));
