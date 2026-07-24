@@ -136,8 +136,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         if (!in_array($entryType, ['entrada', 'saida'], true)) {
             $flashError = 'Tipo de registo de ponto inválido.';
         } else {
-            $stmt = $pdo->prepare('INSERT INTO shopfloor_time_entries(user_id, entry_type, note) VALUES (?, ?, ?)');
-            $stmt->execute([$userId, $entryType, $note !== '' ? $note : null]);
+            $occurredAt = date('Y-m-d H:i:s');
+            $stmt = $pdo->prepare('INSERT INTO shopfloor_time_entries(user_id, entry_type, note, occurred_at) VALUES (?, ?, ?, ?)');
+            $stmt->execute([$userId, $entryType, $note !== '' ? $note : null, $occurredAt]);
             log_app_event($pdo, $userId, 'shopfloor.clock.' . $entryType, 'Registo de ponto no Shopfloor.', ['entry_type' => $entryType]);
             $flashSuccess = $entryType === 'entrada' ? 'Ponto de entrada registado com sucesso.' : 'Ponto de saída registado com sucesso.';
         }
