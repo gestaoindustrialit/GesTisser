@@ -64,6 +64,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     }
 }
 
+if ((string)($_GET['page'] ?? '') === 'machines') { require __DIR__ . '/erp_machines.php'; return; }
 $page = (string)($_GET['page'] ?? 'overview');
 $units=$pdo->query('SELECT * FROM erp_units ORDER BY code')->fetchAll(PDO::FETCH_ASSOC);
 $materialTypes=$pdo->query('SELECT * FROM erp_material_types ORDER BY code')->fetchAll(PDO::FETCH_ASSOC);
