@@ -122,6 +122,26 @@ function save_user_document_upload(array $file, int $targetUserId, int $uploaded
         ->execute([$targetUserId, $originalName, 'uploads/user_documents/' . $targetUserId . '/' . $safeName, $documentType, $notes, $uploadedBy]);
 }
 
+function normalize_user_document_uploads(array $files): array
+{
+    if (!isset($files['name']) || !is_array($files['name'])) {
+        return $files ? [$files] : [];
+    }
+
+    $uploads = [];
+    foreach ($files['name'] as $index => $name) {
+        $uploads[] = [
+            'name' => $name,
+            'type' => $files['type'][$index] ?? '',
+            'tmp_name' => $files['tmp_name'][$index] ?? '',
+            'error' => $files['error'][$index] ?? UPLOAD_ERR_NO_FILE,
+            'size' => $files['size'][$index] ?? 0,
+        ];
+    }
+
+    return $uploads;
+}
+
 function normalize_bulk_header(string $value): string
 {
     $value = trim(mb_strtolower($value, 'UTF-8'));
@@ -406,14 +426,23 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     if ($action === 'upload_user_document') {
         $targetUserId = (int) ($_POST['user_id'] ?? 0);
         try {
-            save_user_document_upload(
-                $_FILES['document'] ?? [],
-                $targetUserId,
-                $userId,
-                trim((string) ($_POST['document_type'] ?? '')),
-                trim((string) ($_POST['document_notes'] ?? ''))
-            );
-            $flashSuccess = 'Documento adicionado ao perfil do colaborador.';
+            $uploads = normalize_user_document_uploads($_FILES['documents'] ?? ($_FILES['document'] ?? []));
+            if (!$uploads) {
+                throw new RuntimeException('Selecione pelo menos um documento válido para carregar.');
+            }
+            foreach ($uploads as $upload) {
+                save_user_document_upload(
+                    $upload,
+                    $targetUserId,
+                    $userId,
+                    trim((string) ($_POST['document_type'] ?? '')),
+                    trim((string) ($_POST['document_notes'] ?? ''))
+                );
+            }
+            $documentCount = count($uploads);
+            $flashSuccess = $documentCount === 1
+                ? 'Documento adicionado ao perfil do colaborador.'
+                : $documentCount . ' documentos adicionados ao perfil do colaborador.';
         } catch (Throwable $e) {
             $flashError = $e->getMessage();
         }
@@ -1287,6 +1316,10 @@ require __DIR__ . '/partials/header.php';
 </div>
 
 <style>
+    .user-form-compact.modal-content { max-height: calc(100vh - 2rem); overflow: hidden; }
+    .user-form-compact .modal-header,
+    .user-form-compact .modal-footer { flex: 0 0 auto; background: #fff; z-index: 2; }
+    .user-form-compact .modal-body { overflow-y: auto; overscroll-behavior: contain; }
     .user-form-compact .modal-body { background: #f8fafc; }
     .user-form-section { background: #fff; border: 1px solid #e5e7eb; border-radius: 1rem; padding: 1rem; box-shadow: 0 1px 2px rgba(15, 23, 42, .04); }
     .user-form-section + .user-form-section { margin-top: 1rem; }
@@ -1297,7 +1330,19 @@ require __DIR__ . '/partials/header.php';
     .user-form-compact textarea.form-control { min-height: 5rem; }
     .user-form-compact .form-check { padding-left: 2rem; }
     .user-form-compact .form-check-label { font-size: .9rem; }
-    .user-document-list { max-height: 10rem; overflow: auto; }
+    .user-document-upload { padding: 1rem; background: #f8fafc; border: 1px dashed #cbd5e1; border-radius: .75rem; }
+    .user-document-list { max-height: 16rem; overflow: auto; border: 1px solid #e5e7eb; border-radius: .75rem; }
+    .user-document-list .list-group-item { padding: .8rem 1rem !important; }
+    .user-document-icon { display: grid; width: 2.25rem; height: 2.25rem; flex: 0 0 auto; place-items: center; border-radius: .6rem; background: #eff6ff; color: #2563eb; }
+    .user-access-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: .9rem 2rem; }
+    .user-access-grid .form-check { min-height: 1.5rem; margin: 0; padding-left: 2.5rem; }
+    .user-access-grid .form-check-input { margin-left: -2.5rem; }
+    @media (max-width: 767.98px) {
+        .user-form-compact.modal-content { max-height: 100vh; border-radius: 0; }
+        .user-access-grid { grid-template-columns: 1fr; }
+        .user-form-compact .modal-footer { align-items: stretch; flex-direction: column-reverse; }
+        .user-form-compact .modal-footer > .d-flex { display: grid !important; }
+    }
 </style>
 
 <datalist id="managerOptions">
@@ -1332,7 +1377,7 @@ require __DIR__ . '/partials/header.php';
 </div>
 
 <div class="modal fade" id="userModal" tabindex="-1" aria-hidden="true">
-    <div class="modal-dialog modal-lg">
+    <div class="modal-dialog modal-xl modal-dialog-centered modal-dialog-scrollable">
         <form class="modal-content user-form-compact" method="post" enctype="multipart/form-data">
             <input type="hidden" name="action" value="create_user">
             <div class="modal-header"><h5 class="modal-title">Novo utilizador</h5><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div>
@@ -1409,7 +1454,7 @@ require __DIR__ . '/partials/header.php';
 
                 <div class="user-form-section">
                     <div class="user-form-section-title"><i class="bi bi-shield-check"></i> Acessos e notificações</div>
-                    <div class="row g-3">
+                    <div class="user-access-grid">
                     <div class="col-md-6 form-check"><input class="form-check-input" type="checkbox" name="is_admin" value="1" id="isAdmin"><label class="form-check-label" for="isAdmin">Administrador</label></div>
                     <div class="col-md-6 form-check form-switch"><input class="form-check-input" type="checkbox" name="is_active" value="1" id="isActive" checked><label class="form-check-label" for="isActive">Ativo</label></div>
                     <div class="col-md-6 form-check form-switch"><input class="form-check-input" type="checkbox" name="email_notifications_active" value="1" id="emailNotificationsActive" checked><label class="form-check-label" for="emailNotificationsActive">Ativo para email</label></div>
@@ -1427,7 +1472,7 @@ require __DIR__ . '/partials/header.php';
 
 <?php foreach ($users as $user): ?>
 <div class="modal fade" id="editUserModal<?= (int) $user['id'] ?>" tabindex="-1" aria-hidden="true">
-    <div class="modal-dialog modal-lg">
+    <div class="modal-dialog modal-xl modal-dialog-centered modal-dialog-scrollable">
         <form class="modal-content user-form-compact" method="post" enctype="multipart/form-data">
             <input type="hidden" name="user_id" value="<?= (int) $user['id'] ?>">
             <input type="hidden" name="action" value="update_user">
@@ -1499,20 +1544,30 @@ require __DIR__ . '/partials/header.php';
                 </div>
 
                 <div class="user-form-section">
-                    <div class="user-form-section-title"><i class="bi bi-paperclip"></i> Documentos do perfil</div>
                     <?php $userDocuments = $userDocumentsByUserId[(int) $user['id']] ?? []; ?>
-                    <div class="row g-3 align-items-end">
-                        <div class="col-md-4"><label class="form-label">Tipo de documento</label><input class="form-control" name="document_type" placeholder="Contrato, identificação..."></div>
-                        <div class="col-md-5"><label class="form-label">Documento</label><input class="form-control" type="file" name="document" accept=".pdf,.doc,.docx,.xls,.xlsx,.png,.jpg,.jpeg"></div>
-                        <div class="col-md-3"><label class="form-label">Notas</label><input class="form-control" name="document_notes" placeholder="Notas"></div>
+                    <div class="user-form-section-title">
+                        <i class="bi bi-paperclip"></i> Documentos do perfil
+                        <span class="badge rounded-pill text-bg-light ms-auto"><?= count($userDocuments) ?></span>
+                    </div>
+                    <div class="user-document-upload">
+                        <div class="row g-3 align-items-end">
+                            <div class="col-md-3"><label class="form-label">Tipo de documento</label><input class="form-control" name="document_type" placeholder="Ex.: Contrato"></div>
+                            <div class="col-md-5"><label class="form-label">Documentos</label><input class="form-control" type="file" name="documents[]" accept=".pdf,.doc,.docx,.xls,.xlsx,.png,.jpg,.jpeg" multiple></div>
+                            <div class="col-md-4"><label class="form-label">Notas comuns</label><input class="form-control" name="document_notes" placeholder="Notas opcionais"></div>
+                            <div class="col-12 d-flex flex-wrap justify-content-between align-items-center gap-2">
+                                <span class="small text-muted">Pode selecionar vários ficheiros de uma só vez (máx. 10 MB por ficheiro).</span>
+                                <button type="submit" class="btn btn-outline-primary" name="action" value="upload_user_document" formnovalidate><i class="bi bi-upload me-1"></i> Carregar documentos</button>
+                            </div>
+                        </div>
                     </div>
                     <div class="user-document-list list-group list-group-flush mt-3">
                         <?php if (!$userDocuments): ?>
                             <div class="list-group-item px-0 text-muted small">Sem documentos anexados.</div>
                         <?php endif; ?>
                         <?php foreach ($userDocuments as $document): ?>
-                            <div class="list-group-item px-0 d-flex justify-content-between gap-3 align-items-start">
-                                <div>
+                            <div class="list-group-item d-flex gap-3 align-items-start">
+                                <span class="user-document-icon"><i class="bi bi-file-earmark-text"></i></span>
+                                <div class="flex-grow-1 text-break">
                                     <a class="fw-semibold" href="<?= h((string) $document['file_path']) ?>" target="_blank" rel="noopener"><?= h((string) $document['original_name']) ?></a>
                                     <div class="small text-muted">
                                         <?= h((string) ($document['document_type'] ?: 'Documento')) ?> · <?= h(date('d/m/Y H:i', strtotime((string) $document['created_at']))) ?>
@@ -1520,7 +1575,7 @@ require __DIR__ . '/partials/header.php';
                                     </div>
                                     <?php if (!empty($document['notes'])): ?><div class="small"><?= h((string) $document['notes']) ?></div><?php endif; ?>
                                 </div>
-                                <i class="bi bi-file-earmark-text text-secondary"></i>
+                                <a class="btn btn-sm btn-light flex-shrink-0" href="<?= h((string) $document['file_path']) ?>" target="_blank" rel="noopener" aria-label="Abrir <?= h((string) $document['original_name']) ?>"><i class="bi bi-box-arrow-up-right"></i></a>
                             </div>
                         <?php endforeach; ?>
                     </div>
@@ -1528,7 +1583,7 @@ require __DIR__ . '/partials/header.php';
 
                 <div class="user-form-section">
                     <div class="user-form-section-title"><i class="bi bi-shield-check"></i> Acessos e notificações</div>
-                    <div class="row g-3">
+                    <div class="user-access-grid">
                     <div class="col-md-6 form-check"><input class="form-check-input" type="checkbox" name="is_admin" value="1" id="isAdminEdit<?= (int) $user['id'] ?>" <?= (int) $user['is_admin'] === 1 ? 'checked' : '' ?>><label class="form-check-label" for="isAdminEdit<?= (int) $user['id'] ?>">Administrador</label></div>
                     <div class="col-md-6 form-check form-switch"><input class="form-check-input" type="checkbox" name="is_active" value="1" id="isActiveEdit<?= (int) $user['id'] ?>" <?= (int) ($user['is_active'] ?? 1) === 1 ? 'checked' : '' ?>><label class="form-check-label" for="isActiveEdit<?= (int) $user['id'] ?>">Ativo</label></div>
                     <div class="col-md-6 form-check form-switch"><input class="form-check-input" type="checkbox" name="email_notifications_active" value="1" id="emailNotificationsActiveEdit<?= (int) $user['id'] ?>" <?= (int) ($user['email_notifications_active'] ?? 1) === 1 ? 'checked' : '' ?>><label class="form-check-label" for="emailNotificationsActiveEdit<?= (int) $user['id'] ?>">Ativo para email</label></div>
@@ -1549,7 +1604,6 @@ require __DIR__ . '/partials/header.php';
                     onclick="return confirm('Tem a certeza que deseja eliminar este utilizador? Esta ação não pode ser anulada.');"
                 >Eliminar utilizador</button>
                 <div class="d-flex gap-2">
-                    <button type="submit" class="btn btn-outline-primary" name="action" value="upload_user_document" formnovalidate><i class="bi bi-upload"></i> Adicionar documento</button>
                     <button type="submit" class="btn btn-primary">Guardar utilizador</button>
                 </div>
             </div>
@@ -1573,7 +1627,6 @@ require __DIR__ . '/partials/header.php';
         const syncInitials = () => {
             target.value = buildInitialsFromName(source.value);
         };
-
         source.addEventListener('input', syncInitials);
         if (!target.value) {
             syncInitials();
