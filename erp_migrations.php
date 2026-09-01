@@ -13,6 +13,14 @@ function erp_table_exists(PDO $pdo, string $table): bool
     return (bool) $stmt->fetchColumn();
 }
 
+function erp_column_exists(PDO $pdo, string $table, string $column): bool
+{
+    foreach ($pdo->query('PRAGMA table_info(' . $table . ')')->fetchAll(PDO::FETCH_ASSOC) as $info) {
+        if ((string) $info['name'] === $column) { return true; }
+    }
+    return false;
+}
+
 function erp_backup_database_once(PDO $pdo)
 {
     static $backupPath = null;
@@ -67,6 +75,29 @@ function erp_run_phase1_migrations(PDO $pdo)
             'CREATE TABLE IF NOT EXISTS erp_stock_balances (item_type TEXT NOT NULL, item_id INTEGER NOT NULL, warehouse_id INTEGER, location_id INTEGER, lot TEXT, physical_qty REAL NOT NULL DEFAULT 0, reserved_qty REAL NOT NULL DEFAULT 0, blocked_qty REAL NOT NULL DEFAULT 0, ordered_qty REAL NOT NULL DEFAULT 0, updated_at DATETIME DEFAULT CURRENT_TIMESTAMP, PRIMARY KEY(item_type, item_id, warehouse_id, location_id, lot))'
         ];
         foreach ($sql as $statement) { $pdo->exec($statement); }
+        /* Article master data owns every stable value used by a technical sheet. Order-only
+           values stay on the OF and the generated snapshot, preserving historical documents. */
+        $articleColumns = [
+            'material' => 'TEXT', 'bag_color' => 'TEXT', 'width_tolerance' => 'TEXT',
+            'length_tolerance' => 'TEXT', 'front_colors' => 'TEXT', 'back_colors' => 'TEXT',
+            'pallet_dimensions' => 'TEXT', 'pallet_lid' => 'TEXT', 'pallet_straps' => 'INTEGER',
+            'pallet_film' => 'TEXT', 'microperforation' => 'INTEGER NOT NULL DEFAULT 0',
+            'analysis_grammage' => 'TEXT', 'analysis_total_weight' => 'TEXT',
+            'analysis_apparent_width' => 'TEXT', 'analysis_gusset_width' => 'TEXT',
+            'analysis_bag_height' => 'TEXT', 'analysis_break_height' => 'TEXT',
+            'analysis_break_length' => 'TEXT', 'analysis_seam_strength' => 'TEXT',
+            'analysis_static_friction' => 'TEXT', 'analysis_dynamic_friction' => 'TEXT',
+            'analysis_air_permeability' => 'TEXT'
+        ];
+        foreach ($articleColumns as $column => $definition) {
+            if (!erp_column_exists($pdo, 'erp_finished_products', $column)) {
+                $pdo->exec('ALTER TABLE erp_finished_products ADD COLUMN ' . $column . ' ' . $definition);
+            }
+        }
+        if (!erp_column_exists($pdo, 'erp_production_orders', 'finished_product_id')) {
+            $pdo->exec('ALTER TABLE erp_production_orders ADD COLUMN finished_product_id INTEGER REFERENCES erp_finished_products(id)');
+        }
+        $pdo->exec('CREATE TABLE IF NOT EXISTS erp_technical_sheets (id INTEGER PRIMARY KEY AUTOINCREMENT, production_order_id INTEGER NOT NULL UNIQUE, finished_product_id INTEGER NOT NULL, snapshot_json TEXT NOT NULL, created_by INTEGER, created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP, FOREIGN KEY(production_order_id) REFERENCES erp_production_orders(id) ON DELETE CASCADE, FOREIGN KEY(finished_product_id) REFERENCES erp_finished_products(id), FOREIGN KEY(created_by) REFERENCES users(id) ON DELETE SET NULL)');
         $pdo->exec('CREATE INDEX IF NOT EXISTS idx_erp_stock_movements_item ON erp_stock_movements(item_type, item_id, movement_date)');
         $pdo->exec('CREATE INDEX IF NOT EXISTS idx_erp_raw_materials_status ON erp_raw_materials(status, code)');
         $pdo->exec('CREATE INDEX IF NOT EXISTS idx_erp_finished_products_customer ON erp_finished_products(customer_id, status)');
