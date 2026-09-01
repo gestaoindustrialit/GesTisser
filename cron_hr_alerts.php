@@ -356,6 +356,80 @@ function send_attendance_monthly_map_alert(array $users, PDO $pdo, DateTimeImmut
     return $deliveredToAtLeastOneRecipient;
 }
 
+function send_expired_citizen_card_alerts(PDO $pdo, DateTimeImmutable $now): int
+{
+    $today = $now->format('Y-m-d');
+    $expiredStmt = $pdo->prepare(
+        'SELECT id, name, user_number, citizen_card_number, citizen_card_expiry_date
+         FROM users
+         WHERE is_active = 1
+           AND citizen_card_expiry_date IS NOT NULL
+           AND TRIM(citizen_card_expiry_date) <> ""
+           AND citizen_card_expiry_date <= ?
+         ORDER BY citizen_card_expiry_date ASC, name COLLATE NOCASE ASC'
+    );
+    $expiredStmt->execute([$today]);
+    $expiredUsers = $expiredStmt->fetchAll(PDO::FETCH_ASSOC);
+    if (!$expiredUsers) {
+        return 0;
+    }
+
+    $recipientStmt = $pdo->query(
+        'SELECT id, name, email
+         FROM users
+         WHERE is_active = 1
+           AND email_notifications_active = 1
+           AND (is_admin = 1 OR access_profile = "RH")
+           AND TRIM(COALESCE(email, "")) <> ""
+         ORDER BY name COLLATE NOCASE ASC'
+    );
+    $recipients = $recipientStmt->fetchAll(PDO::FETCH_ASSOC);
+    if (!$recipients) {
+        cron_log_line('CC CADUCADO: sem destinatários ativos da Administração/RH com email.');
+        return 0;
+    }
+
+    $wasSentStmt = $pdo->prepare(
+        'SELECT 1 FROM hr_citizen_card_expiry_email_log
+         WHERE user_id = ? AND expiry_date = ? AND recipient_email = ? LIMIT 1'
+    );
+    $logStmt = $pdo->prepare(
+        'INSERT OR IGNORE INTO hr_citizen_card_expiry_email_log(user_id, expiry_date, recipient_email)
+         VALUES (?, ?, ?)'
+    );
+    $sentCount = 0;
+
+    foreach ($expiredUsers as $expiredUser) {
+        $employeeId = (int) ($expiredUser['id'] ?? 0);
+        $employeeName = trim((string) ($expiredUser['name'] ?? 'Colaborador'));
+        $expiryDate = trim((string) ($expiredUser['citizen_card_expiry_date'] ?? ''));
+        $formattedExpiryDate = DateTimeImmutable::createFromFormat('!Y-m-d', $expiryDate);
+        $expiryLabel = $formattedExpiryDate ? $formattedExpiryDate->format('d/m/Y') : $expiryDate;
+        $subject = '[GesTisser RH] Cartão de cidadão caducado - ' . $employeeName;
+        $body = "O cartão de cidadão do colaborador {$employeeName} caducou em {$expiryLabel}.\n\n";
+        $body .= "Solicite ao colaborador a nova data de validade e atualize a respetiva ficha de utilizador.";
+
+        foreach ($recipients as $recipient) {
+            $recipientEmail = trim((string) ($recipient['email'] ?? ''));
+            $wasSentStmt->execute([$employeeId, $expiryDate, $recipientEmail]);
+            if ($wasSentStmt->fetchColumn()) {
+                continue;
+            }
+
+            if (!deliver_report($recipientEmail, $subject, $body, nl2br(h($body)))) {
+                cron_log_line('CC CADUCADO user #' . $employeeId . ' falhou para ' . $recipientEmail);
+                continue;
+            }
+
+            $logStmt->execute([$employeeId, $expiryDate, $recipientEmail]);
+            $sentCount++;
+            cron_log_line('CC CADUCADO user #' . $employeeId . ' enviado para ' . $recipientEmail);
+        }
+    }
+
+    return $sentCount;
+}
+
 $now = new DateTimeImmutable('now');
 $currentTime = $now->format('H:i');
 $processedAlerts = 0;
@@ -378,6 +452,7 @@ try {
     );
     cron_log_line('CRON RH START time=' . $currentTime . ' active_alerts=' . (is_array($alerts) ? count($alerts) : 0));
     $processedGreetings = send_due_greeting_emails($pdo, $now);
+    $processedCitizenCardAlerts = send_expired_citizen_card_alerts($pdo, $now);
 
     if (!is_array($alerts)) {
         $alerts = [];
@@ -485,13 +560,14 @@ try {
         $pdo,
         'hr.alerts.cron.finished',
         'Execução do cron de alertas RH concluída.',
-        ['processed_alerts' => $processedAlerts, 'processed_greetings' => $processedGreetings]
+        ['processed_alerts' => $processedAlerts, 'processed_greetings' => $processedGreetings, 'processed_citizen_card_alerts' => $processedCitizenCardAlerts]
     );
-    cron_log_line('CRON RH FINISH processed_alerts=' . $processedAlerts . ' processed_greetings=' . $processedGreetings);
+    cron_log_line('CRON RH FINISH processed_alerts=' . $processedAlerts . ' processed_greetings=' . $processedGreetings . ' processed_cc_alerts=' . $processedCitizenCardAlerts);
 
     if (PHP_SAPI === 'cli') {
         echo 'Alertas RH processados: ' . $processedAlerts . PHP_EOL;
         echo 'Emails de parabéns processados: ' . $processedGreetings . PHP_EOL;
+        echo 'Alertas de cartões de cidadão caducados enviados: ' . $processedCitizenCardAlerts . PHP_EOL;
     }
 } catch (Throwable $exception) {
     cron_log_line('Erro fatal no cron_hr_alerts.php: ' . $exception->getMessage());
