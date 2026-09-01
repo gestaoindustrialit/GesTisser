@@ -253,6 +253,22 @@ if (!in_array('award_eligible', $userColumns, true)) {
     $pdo->exec('ALTER TABLE users ADD COLUMN award_eligible INTEGER NOT NULL DEFAULT 1');
 }
 
+// Personal and civil data kept alongside the user account so the employee
+// record no longer needs to be maintained in a separate spreadsheet.
+$userPersonalColumns = [
+    'personal_email', 'tax_number', 'social_security_number', 'address', 'postal_code', 'parish',
+    'municipality', 'district', 'place_of_birth', 'nationality',
+    'citizen_card_number', 'marital_status',
+];
+foreach ($userPersonalColumns as $column) {
+    if (!in_array($column, $userColumns, true)) {
+        $pdo->exec('ALTER TABLE users ADD COLUMN ' . $column . ' TEXT');
+    }
+}
+if (!in_array('dependents_count', $userColumns, true)) {
+    $pdo->exec('ALTER TABLE users ADD COLUMN dependents_count INTEGER DEFAULT 0');
+}
+
 $pdo->exec('UPDATE users SET username = email WHERE username IS NULL OR TRIM(username) = ""');
 $pdo->exec('UPDATE users SET access_profile = "Utilizador" WHERE access_profile IS NULL OR TRIM(access_profile) = ""');
 $pdo->exec('UPDATE users SET is_active = 1 WHERE is_active IS NULL');

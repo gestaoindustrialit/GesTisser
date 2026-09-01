@@ -182,7 +182,7 @@ function taskforce_normalize_rule_config(array $config, string $profileKey): arr
 function taskforce_fetch_evaluation_employee(PDO $pdo, int $userId)
 {
     $stmt = $pdo->prepare(
-        'SELECT u.id, u.user_number, u.name, u.email, u.department_id, u.award_profile, u.award_eligible,
+        'SELECT u.id, u.user_number, u.name, u.email AS professional_email, COALESCE(NULLIF(TRIM(u.personal_email), ""), u.email) AS email, u.department_id, u.award_profile, u.award_eligible,
                 d.name AS department_name, d.group_id AS department_group_id,
                 g.name AS department_group_name
          FROM users u

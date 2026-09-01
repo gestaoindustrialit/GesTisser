@@ -134,11 +134,11 @@ function has_hr_alert_reached_send_time(array $alert, string $currentTime): bool
 
 function fetch_alert_recipient_users(PDO $pdo, array $selectedUserIds): array
 {
-    $baseSql = 'SELECT id, name, email, user_number, department
+    $baseSql = 'SELECT id, name, email AS professional_email, COALESCE(NULLIF(TRIM(personal_email), ""), email) AS email, user_number, department
                 FROM users
                 WHERE is_active = 1
                   AND email_notifications_active = 1
-                  AND TRIM(email) <> ""';
+                  AND TRIM(COALESCE(NULLIF(personal_email, ""), email)) <> ""';
 
     $params = [];
     if ($selectedUserIds !== []) {
@@ -170,7 +170,7 @@ function fetch_selected_users_missing_delivery_requirements(PDO $pdo, array $sel
 
     $placeholders = implode(',', array_fill(0, count($selectedUserIds), '?'));
     $stmt = $pdo->prepare(
-        'SELECT id, name, email, is_active, email_notifications_active, pin_only_login
+        'SELECT id, name, email AS professional_email, COALESCE(NULLIF(TRIM(personal_email), ""), email) AS email, is_active, email_notifications_active, pin_only_login
          FROM users
          WHERE id IN (' . $placeholders . ')'
     );
@@ -284,7 +284,7 @@ function send_due_greeting_emails(PDO $pdo, DateTimeImmutable $now): int
             continue;
         }
         $column = $config['column'];
-        $stmt = $pdo->prepare('SELECT id, name, email FROM users WHERE is_active = 1 AND email_notifications_active = 1 AND TRIM(email) <> "" AND ' . $column . ' IS NOT NULL AND TRIM(' . $column . ') <> "" AND substr(' . $column . ', 6, 5) = ? AND NOT EXISTS (SELECT 1 FROM hr_greeting_email_log l WHERE l.user_id = users.id AND l.greeting_type = ? AND l.event_date = ?)');
+        $stmt = $pdo->prepare('SELECT id, name, COALESCE(NULLIF(TRIM(personal_email), ""), email) AS email FROM users WHERE is_active = 1 AND email_notifications_active = 1 AND TRIM(COALESCE(NULLIF(personal_email, ""), email)) <> "" AND ' . $column . ' IS NOT NULL AND TRIM(' . $column . ') <> "" AND substr(' . $column . ', 6, 5) = ? AND NOT EXISTS (SELECT 1 FROM hr_greeting_email_log l WHERE l.user_id = users.id AND l.greeting_type = ? AND l.event_date = ?)');
         $stmt->execute([$todayMonthDay, $type, $today]);
         foreach (($stmt->fetchAll(PDO::FETCH_ASSOC) ?: []) as $user) {
             $userId = (int) $user['id'];
