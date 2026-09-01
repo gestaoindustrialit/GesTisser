@@ -258,7 +258,7 @@ if (!in_array('award_eligible', $userColumns, true)) {
 $userPersonalColumns = [
     'personal_email', 'tax_number', 'social_security_number', 'address', 'postal_code', 'parish',
     'municipality', 'district', 'place_of_birth', 'nationality',
-    'citizen_card_number', 'marital_status',
+    'citizen_card_number', 'citizen_card_expiry_date', 'marital_status',
 ];
 foreach ($userPersonalColumns as $column) {
     if (!in_array($column, $userColumns, true)) {
@@ -283,6 +283,19 @@ $pdo->exec('UPDATE users SET award_profile = "operador" WHERE award_profile IS N
 $pdo->exec('UPDATE users SET award_eligible = 1 WHERE award_eligible IS NULL');
 
 $pdo->exec('CREATE TABLE IF NOT EXISTS user_documents (id INTEGER PRIMARY KEY AUTOINCREMENT, user_id INTEGER NOT NULL, original_name TEXT NOT NULL, file_path TEXT NOT NULL, document_type TEXT, notes TEXT, uploaded_by INTEGER, created_at DATETIME DEFAULT CURRENT_TIMESTAMP, FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE, FOREIGN KEY(uploaded_by) REFERENCES users(id) ON DELETE SET NULL)');
+
+$pdo->exec(
+    'CREATE TABLE IF NOT EXISTS hr_citizen_card_expiry_email_log (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        user_id INTEGER NOT NULL,
+        expiry_date TEXT NOT NULL,
+        recipient_email TEXT NOT NULL,
+        sent_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE,
+        UNIQUE(user_id, expiry_date, recipient_email)
+    )'
+);
+$pdo->exec('CREATE INDEX IF NOT EXISTS idx_hr_cc_expiry_email_log_user_date ON hr_citizen_card_expiry_email_log(user_id, expiry_date)');
 
 
 $pdo->exec(

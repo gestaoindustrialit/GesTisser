@@ -496,6 +496,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $placeOfBirth = trim((string) ($_POST['place_of_birth'] ?? ''));
         $nationality = trim((string) ($_POST['nationality'] ?? ''));
         $citizenCardNumber = trim((string) ($_POST['citizen_card_number'] ?? ''));
+        $citizenCardExpiryDate = trim((string) ($_POST['citizen_card_expiry_date'] ?? ''));
         $maritalStatus = trim((string) ($_POST['marital_status'] ?? ''));
         $dependentsCount = max(0, (int) ($_POST['dependents_count'] ?? 0));
 
@@ -503,6 +504,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $flashError = 'Preencha nome, utilizador, email e password para criar utilizador.';
         } elseif ($personalEmail !== '' && filter_var($personalEmail, FILTER_VALIDATE_EMAIL) === false) {
             $flashError = 'Introduza um email pessoal válido.';
+        } elseif ($citizenCardExpiryDate !== '' && !preg_match('/^\d{4}-\d{2}-\d{2}$/', $citizenCardExpiryDate)) {
+            $flashError = 'Introduza uma data de validade do cartão de cidadão válida.';
         } elseif ($pinCode !== '' && !preg_match('/^\d{6}$/', $pinCode)) {
             $flashError = 'O PIN deve ter exatamente 6 dígitos.';
         } elseif ($pinOnlyLogin === 1 && $pinCode === '') {
@@ -527,7 +530,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             }
 
             try {
-                $stmt = $pdo->prepare('INSERT INTO users(name, username, email, password, is_admin, access_profile, is_active, must_change_password, pin_code_hash, pin_code, pin_only_login, user_type, user_number, title, short_name, initials, email_notifications_active, sms_notifications_active, profession, category, manager_name, department, department_id, schedule_id, hire_date, birth_date, termination_date, timezone, phone, mobile, notes, send_access_email, personal_email, tax_number, social_security_number, address, postal_code, parish, municipality, district, place_of_birth, nationality, citizen_card_number, marital_status, dependents_count) VALUES (' . implode(', ', array_fill(0, 45, '?')) . ')');
+                $stmt = $pdo->prepare('INSERT INTO users(name, username, email, password, is_admin, access_profile, is_active, must_change_password, pin_code_hash, pin_code, pin_only_login, user_type, user_number, title, short_name, initials, email_notifications_active, sms_notifications_active, profession, category, manager_name, department, department_id, schedule_id, hire_date, birth_date, termination_date, timezone, phone, mobile, notes, send_access_email, personal_email, tax_number, social_security_number, address, postal_code, parish, municipality, district, place_of_birth, nationality, citizen_card_number, citizen_card_expiry_date, marital_status, dependents_count) VALUES (' . implode(', ', array_fill(0, 46, '?')) . ')');
                 $stmt->execute([
                     $name,
                     $username,
@@ -563,7 +566,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     $sendAccessEmail,
                     $personalEmail, $taxNumber, $socialSecurityNumber, $address, $postalCode, $parish,
                     $municipality, $district, $placeOfBirth, $nationality,
-                    $citizenCardNumber, $maritalStatus, $dependentsCount,
+                    $citizenCardNumber, $citizenCardExpiryDate !== '' ? $citizenCardExpiryDate : null, $maritalStatus, $dependentsCount,
                 ]);
                 $flashSuccess = 'Utilizador criado com sucesso.';
             } catch (PDOException $e) {
@@ -628,6 +631,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $placeOfBirth = trim((string) ($_POST['place_of_birth'] ?? ''));
         $nationality = trim((string) ($_POST['nationality'] ?? ''));
         $citizenCardNumber = trim((string) ($_POST['citizen_card_number'] ?? ''));
+        $citizenCardExpiryDate = trim((string) ($_POST['citizen_card_expiry_date'] ?? ''));
         $maritalStatus = trim((string) ($_POST['marital_status'] ?? ''));
         $dependentsCount = max(0, (int) ($_POST['dependents_count'] ?? 0));
 
@@ -646,6 +650,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $flashError = 'Utilizador não encontrado para atualização.';
         } elseif ($personalEmail !== '' && filter_var($personalEmail, FILTER_VALIDATE_EMAIL) === false) {
             $flashError = 'Introduza um email pessoal válido.';
+        } elseif ($citizenCardExpiryDate !== '' && !preg_match('/^\d{4}-\d{2}-\d{2}$/', $citizenCardExpiryDate)) {
+            $flashError = 'Introduza uma data de validade do cartão de cidadão válida.';
         } elseif ($pinCode !== '' && !preg_match('/^\d{6}$/', $pinCode)) {
             $flashError = 'O PIN deve ter exatamente 6 dígitos.';
         } elseif ($pinOnlyLogin === 1 && $pinCode === '' && trim((string) $existingPinCodeHash) === '') {
@@ -676,12 +682,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             try {
                 $passwordWasUpdated = false;
                 if ($password !== '') {
-                    $stmt = $pdo->prepare('UPDATE users SET name = ?, username = ?, email = ?, password = ?, is_admin = ?, access_profile = ?, is_active = ?, must_change_password = ?, pin_code_hash = COALESCE(?, pin_code_hash), pin_code = COALESCE(?, pin_code), pin_only_login = ?, user_type = ?, user_number = ?, title = ?, short_name = ?, initials = ?, email_notifications_active = ?, sms_notifications_active = ?, profession = ?, category = ?, manager_name = ?, department = ?, department_id = ?, schedule_id = ?, hire_date = ?, birth_date = ?, termination_date = ?, timezone = ?, phone = ?, mobile = ?, notes = ?, send_access_email = ?, personal_email = ?, tax_number = ?, social_security_number = ?, address = ?, postal_code = ?, parish = ?, municipality = ?, district = ?, place_of_birth = ?, nationality = ?, citizen_card_number = ?, marital_status = ?, dependents_count = ? WHERE id = ?');
-                    $stmt->execute([$name, $username, $email, password_hash($password, PASSWORD_DEFAULT), $isTargetAdmin, $accessProfile, $isActive, $mustChangePassword, $pinCodeHash, $pinCodeHash, $pinOnlyLogin, $userType, $userNumber, $title, $shortName, $initials, $emailNotificationsActive, $smsNotificationsActive, $profession, $category, $managerName, $department, $departmentId > 0 ? $departmentId : null, $scheduleId > 0 ? $scheduleId : null, $hireDate, $birthDate, $terminationDate, $timezone, $phone, $mobile, $notes, $sendAccessEmail, $personalEmail, $taxNumber, $socialSecurityNumber, $address, $postalCode, $parish, $municipality, $district, $placeOfBirth, $nationality, $citizenCardNumber, $maritalStatus, $dependentsCount, $targetUserId]);
+                    $stmt = $pdo->prepare('UPDATE users SET name = ?, username = ?, email = ?, password = ?, is_admin = ?, access_profile = ?, is_active = ?, must_change_password = ?, pin_code_hash = COALESCE(?, pin_code_hash), pin_code = COALESCE(?, pin_code), pin_only_login = ?, user_type = ?, user_number = ?, title = ?, short_name = ?, initials = ?, email_notifications_active = ?, sms_notifications_active = ?, profession = ?, category = ?, manager_name = ?, department = ?, department_id = ?, schedule_id = ?, hire_date = ?, birth_date = ?, termination_date = ?, timezone = ?, phone = ?, mobile = ?, notes = ?, send_access_email = ?, personal_email = ?, tax_number = ?, social_security_number = ?, address = ?, postal_code = ?, parish = ?, municipality = ?, district = ?, place_of_birth = ?, nationality = ?, citizen_card_number = ?, citizen_card_expiry_date = ?, marital_status = ?, dependents_count = ? WHERE id = ?');
+                    $stmt->execute([$name, $username, $email, password_hash($password, PASSWORD_DEFAULT), $isTargetAdmin, $accessProfile, $isActive, $mustChangePassword, $pinCodeHash, $pinCodeHash, $pinOnlyLogin, $userType, $userNumber, $title, $shortName, $initials, $emailNotificationsActive, $smsNotificationsActive, $profession, $category, $managerName, $department, $departmentId > 0 ? $departmentId : null, $scheduleId > 0 ? $scheduleId : null, $hireDate, $birthDate, $terminationDate, $timezone, $phone, $mobile, $notes, $sendAccessEmail, $personalEmail, $taxNumber, $socialSecurityNumber, $address, $postalCode, $parish, $municipality, $district, $placeOfBirth, $nationality, $citizenCardNumber, $citizenCardExpiryDate !== '' ? $citizenCardExpiryDate : null, $maritalStatus, $dependentsCount, $targetUserId]);
                     $passwordWasUpdated = true;
                 } else {
-                    $stmt = $pdo->prepare('UPDATE users SET name = ?, username = ?, email = ?, is_admin = ?, access_profile = ?, is_active = ?, must_change_password = ?, pin_code_hash = COALESCE(?, pin_code_hash), pin_code = COALESCE(?, pin_code), pin_only_login = ?, user_type = ?, user_number = ?, title = ?, short_name = ?, initials = ?, email_notifications_active = ?, sms_notifications_active = ?, profession = ?, category = ?, manager_name = ?, department = ?, department_id = ?, schedule_id = ?, hire_date = ?, birth_date = ?, termination_date = ?, timezone = ?, phone = ?, mobile = ?, notes = ?, send_access_email = ?, personal_email = ?, tax_number = ?, social_security_number = ?, address = ?, postal_code = ?, parish = ?, municipality = ?, district = ?, place_of_birth = ?, nationality = ?, citizen_card_number = ?, marital_status = ?, dependents_count = ? WHERE id = ?');
-                    $stmt->execute([$name, $username, $email, $isTargetAdmin, $accessProfile, $isActive, $mustChangePassword, $pinCodeHash, $pinCodeHash, $pinOnlyLogin, $userType, $userNumber, $title, $shortName, $initials, $emailNotificationsActive, $smsNotificationsActive, $profession, $category, $managerName, $department, $departmentId > 0 ? $departmentId : null, $scheduleId > 0 ? $scheduleId : null, $hireDate, $birthDate, $terminationDate, $timezone, $phone, $mobile, $notes, $sendAccessEmail, $personalEmail, $taxNumber, $socialSecurityNumber, $address, $postalCode, $parish, $municipality, $district, $placeOfBirth, $nationality, $citizenCardNumber, $maritalStatus, $dependentsCount, $targetUserId]);
+                    $stmt = $pdo->prepare('UPDATE users SET name = ?, username = ?, email = ?, is_admin = ?, access_profile = ?, is_active = ?, must_change_password = ?, pin_code_hash = COALESCE(?, pin_code_hash), pin_code = COALESCE(?, pin_code), pin_only_login = ?, user_type = ?, user_number = ?, title = ?, short_name = ?, initials = ?, email_notifications_active = ?, sms_notifications_active = ?, profession = ?, category = ?, manager_name = ?, department = ?, department_id = ?, schedule_id = ?, hire_date = ?, birth_date = ?, termination_date = ?, timezone = ?, phone = ?, mobile = ?, notes = ?, send_access_email = ?, personal_email = ?, tax_number = ?, social_security_number = ?, address = ?, postal_code = ?, parish = ?, municipality = ?, district = ?, place_of_birth = ?, nationality = ?, citizen_card_number = ?, citizen_card_expiry_date = ?, marital_status = ?, dependents_count = ? WHERE id = ?');
+                    $stmt->execute([$name, $username, $email, $isTargetAdmin, $accessProfile, $isActive, $mustChangePassword, $pinCodeHash, $pinCodeHash, $pinOnlyLogin, $userType, $userNumber, $title, $shortName, $initials, $emailNotificationsActive, $smsNotificationsActive, $profession, $category, $managerName, $department, $departmentId > 0 ? $departmentId : null, $scheduleId > 0 ? $scheduleId : null, $hireDate, $birthDate, $terminationDate, $timezone, $phone, $mobile, $notes, $sendAccessEmail, $personalEmail, $taxNumber, $socialSecurityNumber, $address, $postalCode, $parish, $municipality, $district, $placeOfBirth, $nationality, $citizenCardNumber, $citizenCardExpiryDate !== '' ? $citizenCardExpiryDate : null, $maritalStatus, $dependentsCount, $targetUserId]);
                 }
 
                 if ($passwordWasUpdated) {
@@ -1136,7 +1142,7 @@ if ($isAllPerPage) {
     $offset = ($page - 1) * $perPageLimit;
 }
 
-$usersBaseSql = 'SELECT id, name, username, email, is_admin, access_profile, is_active, must_change_password, pin_only_login, created_at, user_type, user_number, title, short_name, initials, email_notifications_active, sms_notifications_active, profession, category, manager_name, department, department_id, schedule_id, hire_date, birth_date, termination_date, timezone, phone, mobile, notes, send_access_email, personal_email, tax_number, social_security_number, address, postal_code, parish, municipality, district, place_of_birth, nationality, citizen_card_number, marital_status, dependents_count FROM users'
+$usersBaseSql = 'SELECT id, name, username, email, is_admin, access_profile, is_active, must_change_password, pin_only_login, created_at, user_type, user_number, title, short_name, initials, email_notifications_active, sms_notifications_active, profession, category, manager_name, department, department_id, schedule_id, hire_date, birth_date, termination_date, timezone, phone, mobile, notes, send_access_email, personal_email, tax_number, social_security_number, address, postal_code, parish, municipality, district, place_of_birth, nationality, citizen_card_number, citizen_card_expiry_date, marital_status, dependents_count FROM users'
     . $filtersWhereSql
     . ' ORDER BY created_at DESC';
 if ($isAllPerPage) {
@@ -1488,6 +1494,7 @@ require __DIR__ . '/partials/header.php';
                         <div class="col-md-3"><label class="form-label">NIF</label><input class="form-control" name="tax_number" inputmode="numeric" maxlength="9" placeholder="NIF"></div>
                         <div class="col-md-3"><label class="form-label">NISS</label><input class="form-control" name="social_security_number" inputmode="numeric" maxlength="11" placeholder="NISS"></div>
                         <div class="col-md-3"><label class="form-label">Cartão de cidadão</label><input class="form-control" name="citizen_card_number" placeholder="Cartão de cidadão"></div>
+                        <div class="col-md-3"><label class="form-label">Data de validade</label><input class="form-control" type="date" name="citizen_card_expiry_date"></div>
                         <div class="col-md-3"><label class="form-label">N.º de dependentes</label><input class="form-control" type="number" name="dependents_count" min="0" value="0"></div>
                         <div class="col-md-6"><label class="form-label">Morada</label><input class="form-control" name="address" placeholder="Morada"></div>
                         <div class="col-md-2"><label class="form-label">Código postal</label><input class="form-control" name="postal_code" placeholder="0000-000"></div>
@@ -1603,7 +1610,8 @@ require __DIR__ . '/partials/header.php';
                         <div class="col-md-6 d-flex align-items-end"><div id="personalEmailHelp<?= (int) $user['id'] ?>" class="form-text mb-2">As comunicações pessoais de RH serão enviadas preferencialmente para este endereço.</div></div>
                         <div class="col-md-3"><label class="form-label">NIF</label><input class="form-control" name="tax_number" inputmode="numeric" maxlength="9" value="<?= h((string) ($user['tax_number'] ?? '')) ?>"></div>
                         <div class="col-md-3"><label class="form-label">NISS</label><input class="form-control" name="social_security_number" inputmode="numeric" maxlength="11" value="<?= h((string) ($user['social_security_number'] ?? '')) ?>"></div>
-                        <div class="col-md-3"><label class="form-label">Cartão de cidadão</label><input class="form-control" name="citizen_card_number"  value="<?= h((string) ($user['citizen_card_number'] ?? '')) ?>"></div>
+                        <div class="col-md-3"><label class="form-label">Cartão de cidadão</label><input class="form-control" name="citizen_card_number" value="<?= h((string) ($user['citizen_card_number'] ?? '')) ?>"></div>
+                        <div class="col-md-3"><label class="form-label">Data de validade</label><input class="form-control" type="date" name="citizen_card_expiry_date" value="<?= h((string) ($user['citizen_card_expiry_date'] ?? '')) ?>"></div>
                         <div class="col-md-3"><label class="form-label">N.º de dependentes</label><input class="form-control" name="dependents_count" type="number" min="0" value="<?= h((string) ($user['dependents_count'] ?? '')) ?>"></div>
                         <div class="col-md-6"><label class="form-label">Morada</label><input class="form-control" name="address"  value="<?= h((string) ($user['address'] ?? '')) ?>"></div>
                         <div class="col-md-2"><label class="form-label">Código postal</label><input class="form-control" name="postal_code"  value="<?= h((string) ($user['postal_code'] ?? '')) ?>"></div>
