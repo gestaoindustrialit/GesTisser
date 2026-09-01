@@ -50,11 +50,41 @@ final class ArticleSpreadsheet
         $zip=new ZipArchive(); if ($zip->open($path)!==true) { throw new RuntimeException('O ficheiro Excel não é um .xlsx válido.'); }
         $shared=[]; $sharedXml=$zip->getFromName('xl/sharedStrings.xml');
         if ($sharedXml!==false) { $sharedXml=preg_replace('/\sxmlns="[^"]+"/','',$sharedXml,1); $xml=simplexml_load_string($sharedXml); foreach ($xml->si as $si) { $parts=[]; foreach ($si->xpath('.//t') as $text) { $parts[]=(string)$text; } $shared[]=implode('',$parts); } }
-        $sheetXml=$zip->getFromName('xl/worksheets/sheet1.xml'); $zip->close();
+        $sheetPath=self::firstWorksheetPath($zip);
+        $sheetXml=$zip->getFromName($sheetPath); $zip->close();
         if ($sheetXml===false) { throw new RuntimeException('A primeira folha do Excel não foi encontrada.'); }
         $sheetXml=preg_replace('/\sxmlns="[^"]+"/','',$sheetXml,1); $xml=simplexml_load_string($sheetXml); $matrix=[];
         foreach ($xml->sheetData->row as $row) { $values=[]; $sequentialIndex=0; foreach ($row->c as $cell) { preg_match('/[A-Z]+/',(string)$cell['r'],$m); $index=isset($m[0])?self::columnIndex($m[0]):$sequentialIndex; $type=(string)$cell['t']; $value=$type==='inlineStr'?(string)$cell->is->t:(string)$cell->v; if ($type==='s') { $value=$shared[(int)$value]??''; } $values[$index]=$value; $sequentialIndex=$index+1; } if ($values) { $matrix[]=array_replace(array_fill(0,max(array_keys($values))+1,''),$values); } }
         return $matrix;
+    }
+
+    private static function firstWorksheetPath(ZipArchive $zip): string
+    {
+        $workbookXml=$zip->getFromName('xl/workbook.xml');
+        $relationshipsXml=$zip->getFromName('xl/_rels/workbook.xml.rels');
+        if ($workbookXml===false || $relationshipsXml===false) { return 'xl/worksheets/sheet1.xml'; }
+
+        $workbookXml=preg_replace('/\sxmlns="[^"]+"/','',$workbookXml,1);
+        $relationshipsXml=preg_replace('/\sxmlns="[^"]+"/','',$relationshipsXml,1);
+        $workbook=simplexml_load_string($workbookXml);
+        $relationships=simplexml_load_string($relationshipsXml);
+        if ($workbook===false || $relationships===false) { return 'xl/worksheets/sheet1.xml'; }
+
+        $relationshipId='';
+        foreach ($workbook->sheets->sheet ?? [] as $sheet) {
+            $attributes=$sheet->attributes('http://schemas.openxmlformats.org/officeDocument/2006/relationships');
+            $relationshipId=(string)($attributes['id'] ?? '');
+            if ($relationshipId!=='') { break; }
+        }
+        foreach ($relationships->Relationship as $relationship) {
+            if ((string)$relationship['Id']!==$relationshipId) { continue; }
+            $target=str_replace('\\','/',(string)$relationship['Target']);
+            if ($target==='') { break; }
+            if ($target[0]==='/') { return ltrim($target,'/'); }
+            while (strpos($target,'../')===0) { $target=substr($target,3); }
+            return strpos($target,'xl/')===0 ? $target : 'xl/'.$target;
+        }
+        return 'xl/worksheets/sheet1.xml';
     }
 
     private static function combine(array $headers, array $rows, array $columns, array $required): array
