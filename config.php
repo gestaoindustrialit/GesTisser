@@ -256,7 +256,7 @@ if (!in_array('award_eligible', $userColumns, true)) {
 // Personal and civil data kept alongside the user account so the employee
 // record no longer needs to be maintained in a separate spreadsheet.
 $userPersonalColumns = [
-    'tax_number', 'social_security_number', 'address', 'postal_code', 'parish',
+    'personal_email', 'tax_number', 'social_security_number', 'address', 'postal_code', 'parish',
     'municipality', 'district', 'place_of_birth', 'nationality',
     'citizen_card_number', 'marital_status',
 ];

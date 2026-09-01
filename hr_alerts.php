@@ -79,11 +79,11 @@ function normalize_alert_monthly_day($value): int
 
 function fetch_alert_target_users(PDO $pdo, array $selectedUserIds): array
 {
-    $baseSql = 'SELECT id, name, email
+    $baseSql = 'SELECT id, name, email AS professional_email, COALESCE(NULLIF(TRIM(personal_email), ""), email) AS email
                 FROM users
                 WHERE is_active = 1
                   AND email_notifications_active = 1
-                  AND TRIM(email) <> ""';
+                  AND TRIM(COALESCE(NULLIF(personal_email, ""), email)) <> ""';
     $params = [];
 
     if ($selectedUserIds) {
