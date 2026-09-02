@@ -567,6 +567,16 @@ function taskforce_write_report_log(array $lines)
     @file_put_contents(__DIR__ . '/reports_sent.log', implode(PHP_EOL, $lines) . PHP_EOL, FILE_APPEND);
 }
 
+function taskforce_set_last_delivery_error(string $message)
+{
+    $GLOBALS['taskforce_last_delivery_error'] = trim($message);
+}
+
+function taskforce_last_delivery_error(): string
+{
+    return trim((string) ($GLOBALS['taskforce_last_delivery_error'] ?? ''));
+}
+
 function taskforce_smtp_expect($socket, array $expectedCodes): string
 {
     $response = '';
@@ -599,7 +609,7 @@ function taskforce_smtp_send_mail(string $recipient, string $subject, string $bo
     }
 
     $transport = $config['host'];
-    if ($config['secure'] === 'ssl' || ($config['secure'] === '' && $config['port'] === 465)) {
+    if ($config['secure'] === 'ssl' || $config['port'] === 465) {
         $transport = 'ssl://' . $transport;
     }
 
@@ -622,7 +632,7 @@ function taskforce_smtp_send_mail(string $recipient, string $subject, string $bo
         taskforce_smtp_write($socket, 'EHLO gestisser.local');
         taskforce_smtp_expect($socket, [250]);
 
-        if ($config['secure'] === 'tls' || ($config['secure'] === '' && $config['port'] === 587)) {
+        if (($config['secure'] === 'tls' || ($config['secure'] === '' && $config['port'] === 587)) && $config['port'] !== 465) {
             taskforce_smtp_write($socket, 'STARTTLS');
             taskforce_smtp_expect($socket, [220]);
 
@@ -642,7 +652,8 @@ function taskforce_smtp_send_mail(string $recipient, string $subject, string $bo
         taskforce_smtp_expect($socket, [235]);
 
         $fromAddress = taskforce_mail_from_address();
-        taskforce_smtp_write($socket, 'MAIL FROM:<' . $fromAddress . '>');
+        $envelopeFrom = filter_var($config['username'], FILTER_VALIDATE_EMAIL) ? $config['username'] : $fromAddress;
+        taskforce_smtp_write($socket, 'MAIL FROM:<' . $envelopeFrom . '>');
         taskforce_smtp_expect($socket, [250]);
         taskforce_smtp_write($socket, 'RCPT TO:<' . $recipient . '>');
         taskforce_smtp_expect($socket, [250, 251]);
@@ -749,7 +760,9 @@ function taskforce_build_mail_payload(string $subject, string $textBody, $htmlBo
 
 function deliver_report(string $email, string $subject, string $body, $htmlBody = null, array $attachments = []): bool
 {
+    taskforce_set_last_delivery_error('');
     if (!filter_var($email, FILTER_VALIDATE_EMAIL) || preg_match('/[\r\n]/', $email . $subject)) {
+        taskforce_set_last_delivery_error('Destinatário ou assunto inválido.');
         taskforce_write_report_log([
             '[' . date('Y-m-d H:i:s') . '] DELIVERY REJECTED',
             'RESULT: FAIL',
@@ -780,6 +793,7 @@ function deliver_report(string $email, string $subject, string $body, $htmlBody 
         $logLines[] = 'TRANSPORT: smtp';
         $logLines[] = 'RESULT: FAIL';
         $logLines[] = 'SMTP_ERROR: ' . (string) ($smtpAttempt['error'] ?? 'Erro desconhecido SMTP.');
+        taskforce_set_last_delivery_error((string) ($smtpAttempt['error'] ?? 'Erro desconhecido SMTP.'));
     }
 
     $phpErrorMessage = '';
@@ -807,6 +821,13 @@ function deliver_report(string $email, string $subject, string $body, $htmlBody 
     $logLines[] = 'RESULT: FAIL';
     if ($phpErrorMessage !== '') {
         $logLines[] = 'MAIL_ERROR: ' . $phpErrorMessage;
+        taskforce_set_last_delivery_error($phpErrorMessage);
+    }
+
+    if ($smtpConfigured) {
+        $logLines[] = 'RESULT_FALLBACK: FAIL';
+        taskforce_write_report_log($logLines);
+        return false;
     }
 
     if ($smtpConfigured) {
@@ -827,6 +848,7 @@ function deliver_report(string $email, string $subject, string $body, $htmlBody 
     $logLines[] = 'TRANSPORT_FALLBACK: smtp';
     $logLines[] = 'RESULT_FALLBACK: FAIL';
     $logLines[] = 'SMTP_ERROR: ' . (string) ($smtpAttempt['error'] ?? 'Erro desconhecido SMTP.');
+    taskforce_set_last_delivery_error((string) ($smtpAttempt['error'] ?? 'Erro desconhecido SMTP.'));
     $logLines[] = 'HEADERS:';
     $logLines[] = $headers;
     $logLines[] = 'BODY:';
@@ -941,6 +963,129 @@ function taskforce_pdf_from_jpeg(string $jpegData, int $widthPx, int $heightPx):
     $pdf .= "trailer\n<< /Size " . (count($objects) + 1) . " /Root 1 0 R >>\nstartxref\n{$xrefOffset}\n%%EOF";
 
     return $pdf;
+}
+
+function taskforce_generate_monthly_native_pdf(array $reportData): string
+{
+    $escape = static function (string $value): string {
+        $value = preg_replace('/\s+/u', ' ', trim($value)) ?: trim($value);
+        if (function_exists('iconv')) {
+            $converted = @iconv('UTF-8', 'windows-1252//TRANSLIT//IGNORE', $value);
+            if ($converted !== false) {
+                $value = $converted;
+            }
+        }
+        return str_replace(['\\', '(', ')'], ['\\\\', '\\(', '\\)'], $value);
+    };
+    $fit = static function (string $value, int $limit): string {
+        $value = trim($value);
+        if (function_exists('mb_strimwidth')) {
+            return mb_strimwidth($value, 0, $limit, '...', 'UTF-8');
+        }
+        return strlen($value) > $limit ? substr($value, 0, max(0, $limit - 3)) . '...' : $value;
+    };
+    $text = static function (float $x, float $y, string $value, float $size = 8, string $font = 'F1', string $color = '0.13 0.14 0.15') use ($escape): string {
+        return "BT /{$font} {$size} Tf {$color} rg {$x} {$y} Td (" . $escape($value) . ") Tj ET\n";
+    };
+
+    $logoJpeg = null;
+    $logoWidth = 0;
+    $logoHeight = 0;
+    $logoPath = trim((string) ($reportData['logo_path'] ?? ''));
+    if ($logoPath !== '' && is_file($logoPath)) {
+        $logoInfo = @getimagesize($logoPath);
+        if (is_array($logoInfo) && ($logoInfo['mime'] ?? '') === 'image/jpeg') {
+            $logoJpeg = @file_get_contents($logoPath);
+            $logoWidth = (int) ($logoInfo[0] ?? 0);
+            $logoHeight = (int) ($logoInfo[1] ?? 0);
+            if (!is_string($logoJpeg) || $logoJpeg === '' || $logoWidth < 1 || $logoHeight < 1) {
+                $logoJpeg = null;
+            }
+        }
+    }
+
+    $content = "1 1 1 rg 0 0 595 842 re f\n";
+    $content .= "0.125 0.13 0.14 rg 0 754 595 88 re f\n";
+    $content .= "0.22 0.68 0.18 rg 0 748 595 6 re f\n";
+    $content .= $text(30, 800, strtoupper((string) ($reportData['company_name'] ?? 'TISSER')), 18, 'F2', '1 1 1');
+    $content .= $text(30, 780, 'RECURSOS HUMANOS  /  CONTROLO DE ASSIDUIDADE', 7, 'F2', '0.22 0.68 0.18');
+    if ($logoJpeg !== null) {
+        $drawWidth = min(145, 54 * ($logoWidth / $logoHeight));
+        $drawHeight = $drawWidth * ($logoHeight / $logoWidth);
+        $content .= sprintf("q %.2F 0 0 %.2F %.2F %.2F cm /Logo Do Q\n", $drawWidth, $drawHeight, 565 - $drawWidth, 775);
+    }
+    $content .= $text(30, 720, 'Mapa mensal de picagens', 19, 'F2');
+    $content .= $text(30, 700, (string) ($reportData['month'] ?? ''), 10, 'F2', '0.22 0.68 0.18');
+    $content .= $text(30, 680, 'Colaborador', 7, 'F2', '0.42 0.45 0.44');
+    $content .= $text(30, 665, (string) ($reportData['employee'] ?? '-'), 10, 'F2');
+    $content .= $text(260, 680, 'PERIODO', 7, 'F2', '0.42 0.45 0.44');
+    $content .= $text(260, 665, (string) ($reportData['period'] ?? '-'), 9, 'F1');
+    $content .= $text(430, 680, 'NUMERO / DEPARTAMENTO', 7, 'F2', '0.42 0.45 0.44');
+    $content .= $text(430, 665, trim((string) ($reportData['user_number'] ?? '-') . '  /  ' . (string) ($reportData['department'] ?? '-')), 8, 'F1');
+
+    $columns = [
+        ['Data', 30, 55, 12], ['Dia', 85, 28, 5], ['Tipo', 113, 52, 10],
+        ['Picagens', 165, 220, 49], ['BH', 385, 42, 8], ['Justificacao', 427, 138, 27],
+    ];
+    $tableTop = 635;
+    $content .= "0.22 0.68 0.18 rg 30 {$tableTop} 535 20 re f\n";
+    foreach ($columns as $column) {
+        $content .= $text($column[1] + 5, $tableTop + 7, $column[0], 7, 'F2', '1 1 1');
+    }
+    $rowHeight = 15;
+    $y = $tableTop - $rowHeight;
+    foreach ((array) ($reportData['rows'] ?? []) as $index => $row) {
+        if ($index % 2 === 0) {
+            $content .= "0.965 0.97 0.96 rg 30 {$y} 535 {$rowHeight} re f\n";
+        }
+        $content .= "0.84 0.86 0.84 RG 0.4 w 30 {$y} 535 {$rowHeight} re S\n";
+        $values = [
+            (string) ($row['date'] ?? ''), (string) ($row['weekday'] ?? ''), (string) ($row['type'] ?? ''),
+            implode(' ', array_filter((array) ($row['slots'] ?? []), static function ($slot): bool { return (string) $slot !== '--:--'; })),
+            (string) ($row['bh'] ?? ''), (string) ($row['justification'] ?? ''),
+        ];
+        foreach ($columns as $columnIndex => $column) {
+            $content .= $text($column[1] + 4, $y + 5, $fit($values[$columnIndex], $column[3]), 6.6, $columnIndex === 4 ? 'F2' : 'F1');
+        }
+        $y -= $rowHeight;
+    }
+
+    $summaryY = max(48, $y - 48);
+    $summary = array_values((array) ($reportData['summary'] ?? []));
+    $cardWidth = 103;
+    foreach (array_slice($summary, 0, 5) as $index => $item) {
+        $parts = explode(':', (string) $item, 2);
+        $x = 30 + ($index * 107);
+        $content .= "0.94 0.95 0.94 rg {$x} {$summaryY} {$cardWidth} 38 re f\n";
+        $content .= $text($x + 7, $summaryY + 24, trim($parts[0]), 6.2, 'F2', '0.42 0.45 0.44');
+        $content .= $text($x + 7, $summaryY + 9, trim($parts[1] ?? ''), 10, 'F2');
+    }
+    $content .= $text(30, 22, 'Documento gerado automaticamente pelo GesTisser.', 6.5, 'F1', '0.42 0.45 0.44');
+
+    $objects = [];
+    $objects[] = "1 0 obj\n<< /Type /Catalog /Pages 2 0 R >>\nendobj\n";
+    $objects[] = "2 0 obj\n<< /Type /Pages /Kids [3 0 R] /Count 1 >>\nendobj\n";
+    $contentObjectNumber = $logoJpeg !== null ? 7 : 6;
+    $xObjectResources = $logoJpeg !== null ? ' /XObject << /Logo 6 0 R >>' : '';
+    $objects[] = "3 0 obj\n<< /Type /Page /Parent 2 0 R /MediaBox [0 0 595 842] /Resources << /Font << /F1 4 0 R /F2 5 0 R >>{$xObjectResources} >> /Contents {$contentObjectNumber} 0 R >>\nendobj\n";
+    $objects[] = "4 0 obj\n<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica /Encoding /WinAnsiEncoding >>\nendobj\n";
+    $objects[] = "5 0 obj\n<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica-Bold /Encoding /WinAnsiEncoding >>\nendobj\n";
+    if ($logoJpeg !== null) {
+        $objects[] = "6 0 obj\n<< /Type /XObject /Subtype /Image /Width {$logoWidth} /Height {$logoHeight} /ColorSpace /DeviceRGB /BitsPerComponent 8 /Filter /DCTDecode /Length " . strlen($logoJpeg) . " >>\nstream\n{$logoJpeg}\nendstream\nendobj\n";
+    }
+    $objects[] = $contentObjectNumber . " 0 obj\n<< /Length " . strlen($content) . " >>\nstream\n{$content}endstream\nendobj\n";
+    $pdf = "%PDF-1.4\n";
+    $offsets = [0];
+    foreach ($objects as $object) {
+        $offsets[] = strlen($pdf);
+        $pdf .= $object;
+    }
+    $xref = strlen($pdf);
+    $pdf .= "xref\n0 " . (count($objects) + 1) . "\n0000000000 65535 f \n";
+    for ($i = 1; $i <= count($objects); $i++) {
+        $pdf .= sprintf('%010d 00000 n ', $offsets[$i]) . "\n";
+    }
+    return $pdf . "trailer\n<< /Size " . (count($objects) + 1) . " /Root 1 0 R >>\nstartxref\n{$xref}\n%%EOF";
 }
 
 function taskforce_generate_monthly_layout_pdf(array $reportData): string
@@ -1820,6 +1965,7 @@ function taskforce_generate_monthly_attendance_report(PDO $pdo, array $user, Dat
         $pdfEngine = 'fpdf';
         $pdfContent = taskforce_generate_monthly_attendance_fpdf_pdf([
             'company_name' => (string) $companyName,
+            'logo_path' => $logoFilePath,
             'company_contacts' => $companyContacts,
             'logo_path' => $logoFilePath,
             'period' => $periodStart->format('d/m/Y') . ' - ' . $periodEnd->format('d/m/Y'),
@@ -1840,10 +1986,13 @@ function taskforce_generate_monthly_attendance_report(PDO $pdo, array $user, Dat
         ]);
     }
     if ($pdfContent === null) {
-        $pdfEngine = 'layout';
-        $pdfContent = taskforce_generate_monthly_layout_pdf([
+        $pdfEngine = 'native';
+        $pdfContent = taskforce_generate_monthly_native_pdf([
+            'company_name' => (string) $companyName,
             'period' => $periodStart->format('d/m/Y') . ' - ' . $periodEnd->format('d/m/Y'),
             'employee' => (string) ($user['name'] ?? ''),
+            'user_number' => $userNumberLabel,
+            'department' => $departmentLabel,
             'month' => $reportMonthLabel,
             'rows' => $rows,
             'summary' => [

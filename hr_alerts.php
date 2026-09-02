@@ -174,6 +174,7 @@ function run_alert_now(PDO $pdo, array $alert, int $currentUserId): array
     $now = new DateTimeImmutable('now');
     $delivered = 0;
     $failed = 0;
+    $deliveryErrors = [];
     foreach ($users as $user) {
         $recipientEmail = trim((string) ($user['email'] ?? ''));
         if ($recipientEmail === '') {
@@ -218,12 +219,19 @@ function run_alert_now(PDO $pdo, array $alert, int $currentUserId): array
             $delivered++;
         } else {
             $failed++;
+            $deliveryError = taskforce_last_delivery_error();
+            if ($deliveryError !== '') {
+                $deliveryErrors[$deliveryError] = $deliveryError;
+            }
         }
     }
 
     $summary = 'Envio imediato concluído: ' . $delivered . ' com sucesso';
     if ($failed > 0) {
         $summary .= ', ' . $failed . ' falhas';
+        if ($deliveryErrors) {
+            $summary .= '. Erro do servidor: ' . implode(' | ', array_values($deliveryErrors));
+        }
     }
 
     try {
