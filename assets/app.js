@@ -686,3 +686,17 @@ function initResultsPage() {
 document.querySelectorAll('[data-user-picker-modal-target]').forEach((root) => initUserPicker(root));
 initResultsPage();
 initHrAlertsPage();
+
+
+function initArticleMaterials() {
+    const addButton = document.querySelector('[data-add-material]');
+    const rows = document.querySelector('[data-material-rows]');
+    const template = document.querySelector('[data-material-template]');
+    if (!addButton || !rows || !template) return;
+    addButton.addEventListener('click', () => rows.appendChild(template.content.cloneNode(true)));
+    rows.addEventListener('click', (event) => {
+        const button = event.target.closest('[data-remove-material]');
+        if (button) button.closest('tr').remove();
+    });
+}
+initArticleMaterials();
