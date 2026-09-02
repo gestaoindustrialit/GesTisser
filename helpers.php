@@ -106,6 +106,15 @@ function authenticated_home_url(array $user): string
     return 'dashboard.php';
 }
 
+function has_shopfloor_only_navigation(array $user): bool
+{
+    if ((int) ($user['is_admin'] ?? 0) === 1) {
+        return false;
+    }
+
+    return is_pin_only_user($user) || (string) ($user['access_profile'] ?? 'Utilizador') === 'Utilizador';
+}
+
 function redirect(string $url)
 {
     header('Location: ' . $url);
@@ -813,6 +822,12 @@ function deliver_report(string $email, string $subject, string $body, $htmlBody 
     if ($phpErrorMessage !== '') {
         $logLines[] = 'MAIL_ERROR: ' . $phpErrorMessage;
         taskforce_set_last_delivery_error($phpErrorMessage);
+    }
+
+    if ($smtpConfigured) {
+        $logLines[] = 'RESULT_FALLBACK: FAIL';
+        taskforce_write_report_log($logLines);
+        return false;
     }
 
     if ($smtpConfigured) {
