@@ -373,6 +373,23 @@ if (!in_array('parent_schedule_id', $hrSchedulesColumns, true)) {
     $pdo->exec('ALTER TABLE hr_schedules ADD COLUMN parent_schedule_id INTEGER');
 }
 
+// A row linked through parent_schedule_id is another daily period of the same
+// shift, not a shift that can be assigned independently. Keep old assignments
+// consistent with that model when upgrading databases created by earlier
+// versions, where those rows were exposed as "variants".
+$pdo->exec(
+    'UPDATE users
+     SET schedule_id = (
+        SELECT child.parent_schedule_id
+        FROM hr_schedules child
+        WHERE child.id = users.schedule_id
+          AND child.parent_schedule_id IS NOT NULL
+     )
+     WHERE schedule_id IN (
+        SELECT id FROM hr_schedules WHERE parent_schedule_id IS NOT NULL
+     )'
+);
+
 $pdo->exec(
     'CREATE TABLE IF NOT EXISTS hr_vacation_events (
         id INTEGER PRIMARY KEY AUTOINCREMENT,

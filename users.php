@@ -14,7 +14,7 @@ $timezoneOptions = ['Europe/Lisbon', 'Europe/Madrid', 'UTC'];
 
 $departmentOptionsStmt = $pdo->query('SELECT d.id, d.name, g.name AS group_name FROM hr_departments d LEFT JOIN hr_department_groups g ON g.id = d.group_id ORDER BY d.name COLLATE NOCASE ASC');
 $departmentOptions = $departmentOptionsStmt->fetchAll(PDO::FETCH_ASSOC);
-$scheduleOptionsStmt = $pdo->query('SELECT id, name, start_time, end_time FROM hr_schedules ORDER BY name COLLATE NOCASE ASC');
+$scheduleOptionsStmt = $pdo->query('SELECT id, name, start_time, end_time FROM hr_schedules WHERE parent_schedule_id IS NULL ORDER BY name COLLATE NOCASE ASC');
 $scheduleOptions = $scheduleOptionsStmt->fetchAll(PDO::FETCH_ASSOC);
 $departmentNameById = [];
 foreach ($departmentOptions as $departmentOption) {
