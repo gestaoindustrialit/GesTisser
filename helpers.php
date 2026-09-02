@@ -1458,18 +1458,18 @@ function taskforce_generate_monthly_attendance_report(PDO $pdo, array $user, Dat
         $targetMinutes = 0;
         if ($scheduleApplies) {
             foreach ([['start_time', 'end_time'], ['second_start_time', 'second_end_time']] as $periodColumns) {
-                $periodStart = trim((string) ($schedule[$periodColumns[0]] ?? ''));
-                $periodEnd = trim((string) ($schedule[$periodColumns[1]] ?? ''));
-                if (preg_match('/^\d{2}:\d{2}$/', $periodStart) !== 1 || preg_match('/^\d{2}:\d{2}$/', $periodEnd) !== 1) {
+                $shiftStart = trim((string) ($schedule[$periodColumns[0]] ?? ''));
+                $shiftEnd = trim((string) ($schedule[$periodColumns[1]] ?? ''));
+                if (preg_match('/^\d{2}:\d{2}$/', $shiftStart) !== 1 || preg_match('/^\d{2}:\d{2}$/', $shiftEnd) !== 1) {
                     continue;
                 }
 
-                $periodStartParts = array_map('intval', explode(':', $periodStart));
-                $periodEndParts = array_map('intval', explode(':', $periodEnd));
-                $startHour = $periodStartParts[0];
-                $startMinute = $periodStartParts[1];
-                $endHour = $periodEndParts[0];
-                $endMinute = $periodEndParts[1];
+                $shiftStartParts = array_map('intval', explode(':', $shiftStart));
+                $shiftEndParts = array_map('intval', explode(':', $shiftEnd));
+                $startHour = $shiftStartParts[0];
+                $startMinute = $shiftStartParts[1];
+                $endHour = $shiftEndParts[0];
+                $endMinute = $shiftEndParts[1];
                 $periodMinutes = (($endHour * 60) + $endMinute) - (($startHour * 60) + $startMinute);
                 if ($periodMinutes > 0) {
                     $targetMinutes += $periodMinutes;
