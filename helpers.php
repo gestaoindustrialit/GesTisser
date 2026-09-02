@@ -97,6 +97,24 @@ function is_pin_only_user(array $user): bool
     return (int) ($user['pin_only_login'] ?? 0) === 1;
 }
 
+function authenticated_home_url(array $user): string
+{
+    if (is_pin_only_user($user) || (string) ($user['access_profile'] ?? 'Utilizador') === 'Utilizador') {
+        return 'shopfloor.php';
+    }
+
+    return 'dashboard.php';
+}
+
+function has_shopfloor_only_navigation(array $user): bool
+{
+    if ((int) ($user['is_admin'] ?? 0) === 1) {
+        return false;
+    }
+
+    return is_pin_only_user($user) || (string) ($user['access_profile'] ?? 'Utilizador') === 'Utilizador';
+}
+
 function redirect(string $url)
 {
     header('Location: ' . $url);

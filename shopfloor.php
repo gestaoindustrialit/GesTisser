@@ -898,7 +898,12 @@ require __DIR__ . '/partials/header.php';
     <div class="<?= $pendingAnnouncementAck ? 'd-none' : '' ?>">
 
     <div class="shopfloor-panel mb-4">
-        <div class="shopfloor-panel-header flex-wrap gap-2"><h2 class="h4 mb-0">Produção - escolher OF</h2><a href="erp.php" class="btn btn-outline-primary btn-sm">ERP / relatórios</a></div>
+        <div class="shopfloor-panel-header flex-wrap gap-2">
+            <h2 class="h4 mb-0">Produção - escolher OF</h2>
+            <?php if ($isAdmin || $profile !== 'Utilizador'): ?>
+                <a href="erp.php" class="btn btn-outline-primary btn-sm">ERP / relatórios</a>
+            <?php endif; ?>
+        </div>
         <form method="get" class="row g-2 align-items-end mb-3"><div class="col-md-8"><label class="form-label">Ordem de fabrico</label><select name="of_id" class="form-select" onchange="this.form.submit()"><?php foreach ($productionOrders as $of): ?><option value="<?= (int)$of['id'] ?>" <?= (int)$of['id']===$selectedOfId?'selected':'' ?>><?= h($of['order_number'].' · '.$of['product_code'].' · '.$of['product_description']) ?></option><?php endforeach; ?></select></div><div class="col-md-4"><button class="btn btn-primary w-100">Abrir OF</button></div></form>
         <?php if ($selectedOf): ?>
             <div class="alert alert-info small"><strong><?= h($selectedOf['order_number']) ?></strong> — Quantidade planeada: <?= h((string)$selectedOf['planned_quantity']) ?> · Estado: <?= h($selectedOf['status']) ?></div>
