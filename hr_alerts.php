@@ -152,7 +152,7 @@ function build_attendance_alert_preview(PDO $pdo, array $alert): array
         'message' => 'Pré-visualização gerada para ' . (string) ($sampleUser['name'] ?? 'colaborador') . '.',
         'preview' => [
             'alert_id' => (int) ($alert['id'] ?? 0),
-            'created_at' => $now->format(DateTimeInterface::ATOM),
+            'created_at' => $now->format('c'),
             'sample_user_name' => (string) ($sampleUser['name'] ?? ''),
             'sample_user_email' => (string) ($sampleUser['email'] ?? ''),
             'pdf_filename' => (string) ($report['pdf_filename'] ?? 'mapa-mensal.pdf'),
