@@ -9,9 +9,9 @@ $isAdmin = (int) ($user['is_admin'] ?? 0) === 1;
 $isRh = $profile === 'RH';
 $isChief = $profile === 'Chefias';
 
-if (!$isAdmin && !in_array($profile, ['Utilizador', 'Chefias', 'RH'], true)) {
+if (!$isAdmin && !in_array($profile, ['Utilizador', 'Produção', 'Chefias', 'RH'], true)) {
     http_response_code(403);
-    exit('Acesso reservado aos perfis Utilizador, Chefias e RH.');
+    exit('Acesso reservado aos perfis Utilizador, Produção, Chefias e RH.');
 }
 
 $flashSuccess = null;
