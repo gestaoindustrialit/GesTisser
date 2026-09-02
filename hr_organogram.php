@@ -98,7 +98,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 }
 
 $deps = $pdo->query('SELECT * FROM hr_departments ORDER BY name COLLATE NOCASE ASC')->fetchAll(PDO::FETCH_ASSOC);
-$schedules = $pdo->query('SELECT * FROM hr_schedules ORDER BY name COLLATE NOCASE ASC')->fetchAll(PDO::FETCH_ASSOC);
+$schedules = $pdo->query('SELECT * FROM hr_schedules WHERE parent_schedule_id IS NULL ORDER BY name COLLATE NOCASE ASC')->fetchAll(PDO::FETCH_ASSOC);
 $dep = trim((string) ($_GET['department'] ?? ''));
 $sch = (int) ($_GET['schedule_id'] ?? 0);
 $q = trim((string) ($_GET['q'] ?? ''));

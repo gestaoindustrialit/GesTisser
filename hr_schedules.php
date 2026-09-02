@@ -109,6 +109,20 @@ $schedules = $pdo->query('SELECT id, name, start_time, end_time, second_start_ti
 $mainSchedules = array_values(array_filter($schedules, static function (array $schedule): bool {
     return (int) ($schedule['parent_schedule_id'] ?? 0) === 0;
 }));
+$schedulePartsByParent = [];
+foreach ($schedules as $schedule) {
+    $parentId = (int) ($schedule['parent_schedule_id'] ?? 0);
+    if ($parentId > 0) {
+        $schedulePartsByParent[$parentId][] = $schedule;
+    }
+}
+$displaySchedules = [];
+foreach ($mainSchedules as $mainSchedule) {
+    $displaySchedules[] = $mainSchedule;
+    foreach (($schedulePartsByParent[(int) $mainSchedule['id']] ?? []) as $schedulePart) {
+        $displaySchedules[] = $schedulePart;
+    }
+}
 $weekdayLabels = ['1' => 'Seg', '2' => 'Ter', '3' => 'Qua', '4' => 'Qui', '5' => 'Sex', '6' => 'Sáb', '7' => 'Dom'];
 
 $pageTitle = 'Horários';
@@ -136,7 +150,7 @@ require __DIR__ . '/partials/header.php';
                     <label class="form-check form-check-inline"><input class="form-check-input" type="checkbox" name="weekdays[]" value="<?= $value ?>" <?= (int) $value <= 5 ? 'checked' : '' ?>><span class="form-check-label"><?= $label ?></span></label>
                 <?php endforeach; ?>
             </div>
-            <div class="col-md-4"><label class="form-label">Adicionar a um turno</label><select class="form-select" name="parent_schedule_id"><option value="0">Criar um novo turno</option><?php foreach ($mainSchedules as $baseSchedule): ?><option value="<?= (int) $baseSchedule['id'] ?>"><?= h((string) $baseSchedule['name']) ?></option><?php endforeach; ?></select><div class="form-text">Selecione um turno para lhe adicionar um intervalo aplicável noutros dias.</div></div><div class="col-12"><button class="btn btn-primary">Criar horário</button></div>
+            <div class="col-md-4"><label class="form-label">Turno</label><select class="form-select" name="parent_schedule_id"><option value="0">Criar um novo turno</option><?php foreach ($mainSchedules as $baseSchedule): ?><option value="<?= (int) $baseSchedule['id'] ?>"><?= h((string) $baseSchedule['name']) ?></option><?php endforeach; ?></select><div class="form-text">Ao selecionar um turno, este horário passa a fazer parte dele e é aplicado automaticamente nos dias escolhidos.</div></div><div class="col-12"><button class="btn btn-primary">Criar horário</button></div>
         </form>
     </div>
 </div>
@@ -148,13 +162,14 @@ require __DIR__ . '/partials/header.php';
             <table class="table table-sm align-middle">
                 <thead><tr><th>Nome</th><th>Horário</th><th>Dias</th><th>Tipo</th><th>Editar</th></tr></thead>
                 <tbody>
-                <?php foreach ($schedules as $schedule): ?>
+                <?php foreach ($displaySchedules as $schedule): ?>
                     <?php $mask = array_filter(explode(',', (string) $schedule['weekdays_mask'])); ?>
+                    <?php $isSchedulePart = (int) ($schedule['parent_schedule_id'] ?? 0) > 0; ?>
                     <tr>
-                        <td><?= h($schedule['name']) ?></td>
+                        <td><?= $isSchedulePart ? '<span class="text-muted me-1">↳</span>' : '' ?><?= h($schedule['name']) ?></td>
                         <td><?= h(format_schedule_periods($schedule)) ?></td>
                         <td><?= h(implode(', ', array_map(static function ($d) use ($weekdayLabels) { return $weekdayLabels[$d] ?? $d; }, $mask))) ?></td>
-                        <td><?= (int) ($schedule['parent_schedule_id'] ?? 0) > 0 ? '<span class="badge text-bg-info">Variante</span>' : '<span class="badge text-bg-secondary">Principal</span>' ?></td>
+                        <td><?= $isSchedulePart ? '<span class="badge text-bg-info">Parte do turno</span>' : '<span class="badge text-bg-secondary">Turno</span>' ?></td>
                         <td>
                             <form method="post" class="row g-1">
                                 <input type="hidden" name="action" value="update_schedule">
@@ -175,11 +190,11 @@ require __DIR__ . '/partials/header.php';
                             </form>
                             <?php if ((int) ($schedule['parent_schedule_id'] ?? 0) === 0): ?>
                                 <details class="mt-2">
-                                    <summary class="btn btn-sm btn-outline-primary">+ Adicionar intervalo de horas</summary>
+                                    <summary class="btn btn-sm btn-outline-primary">+ Adicionar horário ao turno</summary>
                                     <form method="post" class="row g-2 mt-1 p-2 border rounded bg-light">
                                         <input type="hidden" name="action" value="create_schedule">
                                         <input type="hidden" name="parent_schedule_id" value="<?= (int) $schedule['id'] ?>">
-                                        <div class="col-md-3"><label class="form-label small">Nome do intervalo</label><input class="form-control form-control-sm" name="name" value="<?= h((string) $schedule['name']) ?> - " placeholder="Ex.: Sexta-feira" required></div>
+                                        <div class="col-md-3"><label class="form-label small">Nome do horário</label><input class="form-control form-control-sm" name="name" value="<?= h((string) $schedule['name']) ?> - " placeholder="Ex.: Sexta-feira" required></div>
                                         <div class="col-md-2"><label class="form-label small">Entrada 1</label><input class="form-control form-control-sm" type="time" name="start_time" required></div>
                                         <div class="col-md-2"><label class="form-label small">Saída 1</label><input class="form-control form-control-sm" type="time" name="end_time" required></div>
                                         <div class="col-md-2"><label class="form-label small">Entrada 2</label><input class="form-control form-control-sm" type="time" name="second_start_time"></div>
