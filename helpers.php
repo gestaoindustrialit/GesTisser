@@ -641,8 +641,12 @@ function taskforce_smtp_send_mail(string $recipient, string $subject, string $bo
         taskforce_smtp_expect($socket, [354]);
 
         $encodedSubject = '=?UTF-8?B?' . base64_encode($subject) . '?=';
-        $message = 'Subject: ' . $encodedSubject . "\r\n" . $headers . "\r\n" . $body;
-        $message = preg_replace("/(\r\n|\n|\r)\.([^\r\n])/", '$1..$2', $message) ?? $message;
+        $messageIdDomain = substr(strrchr($fromAddress, '@') ?: '@localhost', 1);
+        $message = 'Date: ' . date(DATE_RFC2822) . "\r\n"
+            . 'Message-ID: <' . taskforce_random_hex(12) . '@' . $messageIdDomain . ">\r\n"
+            . 'To: <' . $recipient . ">\r\n"
+            . 'Subject: ' . $encodedSubject . "\r\n" . $headers . "\r\n" . $body;
+        $message = preg_replace('/(^|\r\n|\n|\r)\./', '$1..', $message) ?? $message;
         fwrite($socket, $message . "\r\n.\r\n");
         taskforce_smtp_expect($socket, [250]);
 
@@ -736,6 +740,15 @@ function taskforce_build_mail_payload(string $subject, string $textBody, $htmlBo
 
 function deliver_report(string $email, string $subject, string $body, $htmlBody = null, array $attachments = []): bool
 {
+    if (!filter_var($email, FILTER_VALIDATE_EMAIL) || preg_match('/[\r\n]/', $email . $subject)) {
+        taskforce_write_report_log([
+            '[' . date('Y-m-d H:i:s') . '] DELIVERY REJECTED',
+            'RESULT: FAIL',
+            'ERROR: Destinatário ou assunto inválido.',
+        ]);
+        return false;
+    }
+
     $payload = taskforce_build_mail_payload($subject, $body, $htmlBody, $attachments);
     $headers = $payload['headers'];
     $mailBody = $payload['body'];
@@ -744,6 +757,21 @@ function deliver_report(string $email, string $subject, string $body, $htmlBody 
         'TO: ' . $email,
         'SUBJECT: ' . $subject,
     ];
+
+    $smtpConfig = taskforce_smtp_config();
+    $smtpConfigured = $smtpConfig['host'] !== '' && $smtpConfig['username'] !== '' && $smtpConfig['password'] !== '';
+    if ($smtpConfigured) {
+        $smtpAttempt = taskforce_smtp_send_mail($email, $subject, $mailBody, $headers);
+        if (!empty($smtpAttempt['sent'])) {
+            $logLines[] = 'TRANSPORT: smtp';
+            $logLines[] = 'RESULT: SUCCESS';
+            taskforce_write_report_log($logLines);
+            return true;
+        }
+        $logLines[] = 'TRANSPORT: smtp';
+        $logLines[] = 'RESULT: FAIL';
+        $logLines[] = 'SMTP_ERROR: ' . (string) ($smtpAttempt['error'] ?? 'Erro desconhecido SMTP.');
+    }
 
     $phpErrorMessage = '';
     set_error_handler(static function (int $severity, string $message) use (&$phpErrorMessage): bool {
@@ -766,10 +794,16 @@ function deliver_report(string $email, string $subject, string $body, $htmlBody 
         return true;
     }
 
-    $logLines[] = 'TRANSPORT: mail()';
+    $logLines[] = $smtpConfigured ? 'TRANSPORT_FALLBACK: mail()' : 'TRANSPORT: mail()';
     $logLines[] = 'RESULT: FAIL';
     if ($phpErrorMessage !== '') {
         $logLines[] = 'MAIL_ERROR: ' . $phpErrorMessage;
+    }
+
+    if ($smtpConfigured) {
+        $logLines[] = 'RESULT_FALLBACK: FAIL';
+        taskforce_write_report_log($logLines);
+        return false;
     }
 
     $smtpAttempt = taskforce_smtp_send_mail($email, $subject, $mailBody, $headers);
@@ -1208,11 +1242,17 @@ function taskforce_generate_pdf_from_html(string $html)
                 $fontDirs = $defaultConfig['fontDir'] ?? [];
                 $fontData = $defaultFontConfig['fontdata'] ?? [];
             }
-            $fontDirs[] = __DIR__ . '/assets/fonts';
-            $fontData['raleway'] = [
-                'R' => 'Raleway-Regular.ttf',
-                'B' => 'Raleway-Bold.ttf',
-            ];
+            $defaultFont = 'dejavusans';
+            $ralewayRegular = __DIR__ . '/assets/fonts/Raleway-Regular.ttf';
+            $ralewayBold = __DIR__ . '/assets/fonts/Raleway-Bold.ttf';
+            if (is_file($ralewayRegular) && is_file($ralewayBold)) {
+                $fontDirs[] = __DIR__ . '/assets/fonts';
+                $fontData['raleway'] = [
+                    'R' => 'Raleway-Regular.ttf',
+                    'B' => 'Raleway-Bold.ttf',
+                ];
+                $defaultFont = 'raleway';
+            }
 
             $mpdf = new \Mpdf\Mpdf([
                 'mode' => 'utf-8',
@@ -1224,7 +1264,7 @@ function taskforce_generate_pdf_from_html(string $html)
                 'margin_bottom' => 10,
                 'fontDir' => array_values(array_unique($fontDirs)),
                 'fontdata' => $fontData,
-                'default_font' => 'raleway',
+                'default_font' => $defaultFont,
             ]);
             $mpdf->WriteHTML($html);
             $pdfBinary = (string) $mpdf->Output('', 'S');

@@ -357,11 +357,13 @@ function taskforce_get_evaluation_branding(PDO $pdo): array
     $companyAddress = trim((string) app_setting($pdo, 'company_address', ''));
     $companyPhone = trim((string) app_setting($pdo, 'company_phone', ''));
     $companyEmail = trim((string) app_setting($pdo, 'company_email', ''));
-    $logoPath = trim((string) app_setting($pdo, 'logo_report_dark', ''));
-
-    $logoUrl = '';
-    if ($logoPath !== '') {
-        $logoUrl = rtrim((string) app_base_url(), '/') . '/' . ltrim($logoPath, '/');
+    $configuredLogo = trim((string) app_setting($pdo, 'logo_report_dark', ''));
+    $logoPath = $configuredLogo !== '' && preg_match('#^https?://#i', $configuredLogo) !== 1
+        ? __DIR__ . '/' . ltrim($configuredLogo, '/')
+        : '';
+    $logoUrl = is_file($logoPath) ? $logoPath : '';
+    if ($configuredLogo !== '' && preg_match('#^https?://#i', $configuredLogo)) {
+        $logoUrl = $configuredLogo;
     }
 
     return [
@@ -370,6 +372,7 @@ function taskforce_get_evaluation_branding(PDO $pdo): array
         'company_phone' => $companyPhone,
         'company_email' => $companyEmail,
         'logo_url' => $logoUrl,
+        'logo_path' => is_file($logoPath) ? $logoPath : '',
     ];
 }
 
@@ -388,18 +391,25 @@ function taskforce_build_company_contact_line(array $branding): string
 
 function taskforce_build_evaluation_mail_html(string $employeeName, string $leadMessage, array $branding): string
 {
-    $companyName = h((string) ($branding['company_name'] ?? 'GesTisser'));
+    $companyName = h((string) ($branding['company_name'] ?? 'Tisser'));
     $contactLine = h(taskforce_build_company_contact_line($branding));
-    return '<!doctype html><html lang="pt"><head><meta charset="utf-8"><style>'
-        . 'body{margin:0;background:#f3f6fb;padding:20px;font-family:Arial,sans-serif;color:#1f2937;}'
-        . '.card{max-width:640px;margin:0 auto;background:#fff;border:1px solid #d7dde8;border-radius:14px;padding:20px;}'
-        . 'h1{font-size:18px;margin:0 0 12px;} p{margin:0 0 12px;line-height:1.5;}'
-        . '.footer{margin-top:18px;padding-top:12px;border-top:1px solid #e5e7eb;color:#6b7280;font-size:12px;}'
-        . '</style></head><body><div class="card">'
-        . '<h1>Olá ' . h($employeeName) . ',</h1>'
-        . '<p>' . h($leadMessage) . '</p>'
-        . '<p>Cumprimentos,<br><strong>Equipa RH</strong></p>'
-        . '<div class="footer"><strong>' . $companyName . '</strong>'
+    $logoPath = (string) ($branding['logo_path'] ?? '');
+    $logoHtml = '';
+    if ($logoPath !== '' && is_file($logoPath)) {
+        $mime = strtolower(pathinfo($logoPath, PATHINFO_EXTENSION)) === 'png' ? 'image/png' : 'image/jpeg';
+        $logoHtml = '<img src="data:' . $mime . ';base64,' . base64_encode((string) file_get_contents($logoPath)) . '" alt="Tisser" style="display:block;width:180px;max-width:100%;height:auto">';
+    }
+
+    return '<!doctype html><html lang="pt"><head><meta charset="utf-8"></head>'
+        . '<body style="margin:0;background:#f2f3f1;padding:28px 12px;font-family:Arial,sans-serif;color:#202124">'
+        . '<div style="max-width:640px;margin:0 auto;background:#fff;border-top:6px solid #38ad2f">'
+        . '<div style="background:#202124;padding:22px 28px">' . ($logoHtml !== '' ? $logoHtml : '<strong style="font-size:26px;color:#fff">TISSER</strong>') . '</div>'
+        . '<div style="padding:30px 28px"><div style="color:#38ad2f;font-size:12px;font-weight:bold;letter-spacing:1.5px;text-transform:uppercase">Recursos Humanos</div>'
+        . '<h1 style="font-size:24px;margin:8px 0 18px">Olá ' . h($employeeName) . ',</h1>'
+        . '<p style="font-size:15px;margin:0 0 18px;line-height:1.6">' . h($leadMessage) . '</p>'
+        . '<div style="background:#f2f3f1;border-left:4px solid #38ad2f;padding:14px 16px;font-size:14px;line-height:1.5">O documento segue em anexo a este email.</div>'
+        . '<p style="margin:24px 0 0;line-height:1.6">Cumprimentos,<br><strong>Equipa RH</strong></p></div>'
+        . '<div style="background:#202124;color:#cfd2cf;padding:18px 28px;font-size:12px;line-height:1.5"><strong style="color:#fff">' . $companyName . '</strong>'
         . ($contactLine !== '' ? '<br>' . $contactLine : '')
         . '</div></div></body></html>';
 }
@@ -516,9 +526,25 @@ function taskforce_generate_single_evaluation_fpdf_pdf(array $reportData)
         return $clean;
     };
 
-    $pdf->SetFillColor(245, 247, 250);
-    $pdf->SetDrawColor(220, 226, 234);
-    $pdf->SetTextColor(31, 41, 55);
+    $pdf->SetFillColor(242, 243, 241);
+    $pdf->SetDrawColor(210, 214, 210);
+    $pdf->SetTextColor(32, 33, 36);
+
+    $logoPath = (string) ($reportData['logo_path'] ?? '');
+    if ($logoPath !== '' && is_file($logoPath)) {
+        try {
+            $pdf->Image($logoPath, 150, 10, 46);
+        } catch (Throwable $exception) {
+            // A identificação textual mantém o cabeçalho legível.
+        }
+    }
+    $pdf->SetFont('Arial', 'B', 10);
+    $pdf->SetTextColor(56, 173, 47);
+    $pdf->Cell(0, 6, $toPdfText(strtoupper((string) ($reportData['company_name'] ?? 'Tisser'))), 0, 1);
+    $pdf->SetDrawColor(56, 173, 47);
+    $pdf->Line(10, 29, 200, 29);
+    $pdf->Ln(8);
+    $pdf->SetTextColor(32, 33, 36);
 
     $pdf->SetFont('Arial', 'B', 18);
     $pdf->Cell(0, 10, $toPdfText((string) ($reportData['title'] ?? 'Avaliação de desempenho')), 0, 1);
@@ -654,6 +680,8 @@ function taskforce_send_evaluation_pdf(PDO $pdo, array $employee, array $evaluat
         'interview_date' => $interviewDate,
         'general_notes' => $generalNotes,
         'sent_by' => $sentBy ?? '',
+        'company_name' => (string) ($branding['company_name'] ?? 'Tisser'),
+        'logo_path' => (string) ($branding['logo_path'] ?? ''),
         'metrics' => [
             'performance' => (int) ($evaluation['performance_score'] ?? 0) . ' (' . taskforce_money((float) ($evaluation['performance_value'] ?? 0)) . ')',
             'behavior' => (int) ($evaluation['behavior_score'] ?? 0) . ' (' . taskforce_money((float) ($evaluation['behavior_value'] ?? 0)) . ')',
@@ -784,12 +812,8 @@ function taskforce_send_evaluation_pdf(PDO $pdo, array $employee, array $evaluat
     $pdfEngine = 'layout oficial';
     $pdfContent = taskforce_generate_pdf_from_html($html);
     if (!is_string($pdfContent) || $pdfContent === '') {
-        return [
-            'ok' => false,
-            'message' => 'Não foi possível gerar o PDF com o layout oficial. ' . taskforce_pdf_generation_diagnostics(),
-        ];
-        $pdfContent = taskforce_generate_evaluation_history_layout_pdf($singleFallbackPayload);
-        $pdfEngine = 'modo compatibilidade';
+        $pdfContent = taskforce_generate_single_evaluation_fpdf_pdf($singlePayload);
+        $pdfEngine = 'layout compatível';
     }
     if (!is_string($pdfContent) || $pdfContent === '' || strncmp($pdfContent, '%PDF', 4) !== 0) {
         return [
@@ -917,6 +941,8 @@ function taskforce_send_evaluation_history_pdf(PDO $pdo, array $employee, int $y
         'closure' => $closure ?? [],
         'evaluations' => $evaluations,
         'sent_by' => $sentBy ?? '',
+        'company_name' => (string) ($branding['company_name'] ?? 'Tisser'),
+        'logo_path' => (string) ($branding['logo_path'] ?? ''),
         'lines' => [
             'GesTisser RH - Histórico de avaliações',
             (string) ($branding['company_name'] ?? 'GesTisser'),
@@ -930,11 +956,11 @@ function taskforce_send_evaluation_history_pdf(PDO $pdo, array $employee, int $y
         ],
     ];
 
-    $pdfEngine = 'FPDF';
-    $pdfContent = taskforce_generate_evaluation_history_fpdf_pdf($fallbackPayload);
-    if ((!is_string($pdfContent) || $pdfContent === '') && taskforce_can_use_mpdf_engine()) {
-        $pdfEngine = 'layout oficial';
-        $pdfContent = taskforce_generate_pdf_from_html($html);
+    $pdfEngine = 'layout oficial';
+    $pdfContent = taskforce_generate_pdf_from_html($html);
+    if (!is_string($pdfContent) || $pdfContent === '') {
+        $pdfEngine = 'layout compatível';
+        $pdfContent = taskforce_generate_evaluation_history_fpdf_pdf($fallbackPayload);
     }
     if (!is_string($pdfContent) || $pdfContent === '') {
         $pdfContent = taskforce_generate_evaluation_history_layout_pdf($fallbackPayload);
@@ -1021,9 +1047,25 @@ function taskforce_generate_evaluation_history_fpdf_pdf(array $reportData)
     $closure = (array) ($reportData['closure'] ?? []);
     $evaluations = (array) ($reportData['evaluations'] ?? []);
 
-    $pdf->SetFillColor(245, 247, 250);
-    $pdf->SetDrawColor(220, 226, 234);
-    $pdf->SetTextColor(31, 41, 55);
+    $pdf->SetFillColor(242, 243, 241);
+    $pdf->SetDrawColor(210, 214, 210);
+    $pdf->SetTextColor(32, 33, 36);
+
+    $logoPath = (string) ($reportData['logo_path'] ?? '');
+    if ($logoPath !== '' && is_file($logoPath)) {
+        try {
+            $pdf->Image($logoPath, 150, 10, 46);
+        } catch (Throwable $exception) {
+            // Continuar com a identificação textual da marca.
+        }
+    }
+    $pdf->SetFont('Arial', 'B', 10);
+    $pdf->SetTextColor(56, 173, 47);
+    $pdf->Cell(0, 6, $toPdfText(strtoupper((string) ($reportData['company_name'] ?? 'Tisser'))), 0, 1);
+    $pdf->SetDrawColor(56, 173, 47);
+    $pdf->Line(10, 29, 200, 29);
+    $pdf->Ln(8);
+    $pdf->SetTextColor(32, 33, 36);
 
     $pdf->SetFont('Arial', 'B', 18);
     $pdf->Cell(0, 10, $toPdfText((string) ($reportData['title'] ?? 'Histórico de avaliações')), 0, 1);
