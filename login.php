@@ -3,11 +3,11 @@ require_once __DIR__ . '/helpers.php';
 
 if (is_logged_in()) {
     $loggedUser = current_user($pdo);
-    if ($loggedUser && (int) ($loggedUser['pin_only_login'] ?? 0) === 1) {
-        redirect('shopfloor.php');
+    if ($loggedUser) {
+        redirect(authenticated_home_url($loggedUser));
     }
 
-    redirect('dashboard.php');
+    redirect('logout.php');
 }
 
 $error = null;
@@ -58,7 +58,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     $pdo->prepare('UPDATE users SET last_login_at = CURRENT_TIMESTAMP WHERE id = ?')->execute([(int) $pendingUser['id']]);
                     AuditLog::write($pdo, (int) $pendingUser['id'], 'auth.login_success', ['mode' => 'password']);
                     safe_log_app_event($pdo, (int) $pendingUser['id'], 'auth.login_success', 'Login com sucesso.');
-                    redirect('dashboard.php');
+                    redirect(authenticated_home_url($pendingUser));
                 }
 
                 RateLimiter::recordLoginAttempt($pdo, $identifier, $requestIp, false);
@@ -69,7 +69,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             if ($action === 'login_pin' && $loginMode === 'pin') {
                 $pin = preg_replace('/\D+/', '', (string) ($_POST['pin'] ?? ''));
 
-                $pinUsersStmt = $pdo->query('SELECT * FROM users WHERE is_active = 1 AND pin_only_login = 1');
+                // O endereço shopfloor funciona como porta de entrada partilhada:
+                // qualquer colaborador ativo com um PIN definido pode identificar-se
+                // aqui, mesmo que também tenha login normal por password.
+                $pinUsersStmt = $pdo->query(
+                    'SELECT * FROM users
+                     WHERE is_active = 1
+                       AND (TRIM(COALESCE(pin_code_hash, "")) <> ""
+                            OR TRIM(COALESCE(pin_code, "")) <> "")'
+                );
                 $pinUsers = $pinUsersStmt->fetchAll(PDO::FETCH_ASSOC);
 
                 $matchedPinUser = null;
