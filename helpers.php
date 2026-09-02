@@ -106,6 +106,15 @@ function authenticated_home_url(array $user): string
     return 'dashboard.php';
 }
 
+function has_shopfloor_only_navigation(array $user): bool
+{
+    if ((int) ($user['is_admin'] ?? 0) === 1) {
+        return false;
+    }
+
+    return is_pin_only_user($user) || (string) ($user['access_profile'] ?? 'Utilizador') === 'Utilizador';
+}
+
 function redirect(string $url)
 {
     header('Location: ' . $url);

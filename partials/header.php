@@ -12,7 +12,7 @@ if (is_file($bootstrapPath)) {
 $user = current_user($pdo);
 $navbarLogo = app_setting($pdo, 'logo_navbar_light');
 $showHrMenu = $user && ((int) ($user['is_admin'] ?? 0) === 1 || (string) ($user['access_profile'] ?? '') === 'RH');
-$isPinOnlyUser = $user && (int) ($user['pin_only_login'] ?? 0) === 1;
+$isShopfloorOnlyNavigation = $user && has_shopfloor_only_navigation($user);
 
 if ($user && !isset($navbarClockControl)) {
     $todayEntriesStmt = $pdo->prepare('SELECT entry_type, occurred_at AS occurred_at_local FROM shopfloor_time_entries WHERE user_id = ? AND date(occurred_at) = date("now") ORDER BY occurred_at DESC');
@@ -98,7 +98,7 @@ header('Content-Type: text/html; charset=UTF-8');
 <div class="gt-app-shell">
     <aside class="gt-sidebar" id="gtSidebar" aria-label="Navegação principal">
         <div class="gt-brand">
-            <a class="gt-brand-logo-shell" href="<?= h(route_url('home', 'dashboard.php')) ?>" aria-label="Abrir visão geral">
+            <a class="gt-brand-logo-shell" href="<?= h($isShopfloorOnlyNavigation ? route_url('shopfloor', 'shopfloor.php') : route_url('home', 'dashboard.php')) ?>" aria-label="Abrir página inicial">
                 <?php if ($navbarLogo): ?>
                     <img src="<?= h($navbarLogo) ?>" alt="Logótipo empresa" class="gt-brand-logo">
                 <?php else: ?>
@@ -110,18 +110,10 @@ header('Content-Type: text/html; charset=UTF-8');
         </div>
 
         <nav class="gt-nav">
-            <?php if ($isPinOnlyUser): ?>
+            <?php if ($isShopfloorOnlyNavigation): ?>
                 <a class="gt-nav-link<?= $isCurrentFile('shopfloor.php') ? ' is-active' : '' ?>" href="<?= h(route_url('shopfloor', 'shopfloor.php')) ?>">
                     <i class="bi bi-speedometer2"></i><span>Shopfloor</span>
                 </a>
-                <details class="gt-nav-group"<?= $isCurrentFile('erp.php') ? ' open' : '' ?>>
-                    <summary><span><i class="bi bi-boxes"></i>ERP</span><i class="bi bi-chevron-down gt-nav-chevron"></i></summary>
-                    <div class="gt-nav-submenu">
-                        <a class="<?= $isCurrentFile('erp.php') && $currentErpPage === 'overview' ? 'is-active' : '' ?>" href="<?= h(route_url('erp', 'erp.php')) ?>">Visão geral ERP</a>
-                        <a class="<?= $isCurrentFile('erp.php') && $currentErpPage === 'production' ? 'is-active' : '' ?>" href="erp.php?page=production">Planeamento e produção</a>
-                        <a class="<?= $isCurrentFile('erp.php') && $currentErpPage === 'warehouse' ? 'is-active' : '' ?>" href="erp.php?page=warehouse">Armazém e stock</a>
-                    </div>
-                </details>
             <?php else: ?>
                 <a class="gt-nav-link<?= $isCurrentFile('dashboard.php') ? ' is-active' : '' ?>" href="<?= h(route_url('home', 'dashboard.php')) ?>">
                     <i class="bi bi-grid-1x2"></i><span>Visão geral</span>
