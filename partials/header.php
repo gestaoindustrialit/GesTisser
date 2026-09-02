@@ -15,11 +15,13 @@ $showHrMenu = $user && ((int) ($user['is_admin'] ?? 0) === 1 || (string) ($user[
 $isShopfloorOnlyNavigation = $user && has_shopfloor_only_navigation($user);
 
 if ($user && !isset($navbarClockControl)) {
-    $todayEntriesStmt = $pdo->prepare('SELECT entry_type, occurred_at AS occurred_at_local FROM shopfloor_time_entries WHERE user_id = ? AND date(occurred_at) = date("now") ORDER BY occurred_at DESC');
-    $todayEntriesStmt->execute([(int) $user['id']]);
-    $todayEntries = $todayEntriesStmt->fetchAll(PDO::FETCH_ASSOC);
+    // Keep navbar query variables isolated from the page that includes this partial.
+    // Shopfloor also uses $todayEntries to render the complete daily history.
+    $navbarTodayEntriesStmt = $pdo->prepare('SELECT entry_type, occurred_at AS occurred_at_local FROM shopfloor_time_entries WHERE user_id = ? AND date(occurred_at) = date("now") ORDER BY occurred_at DESC');
+    $navbarTodayEntriesStmt->execute([(int) $user['id']]);
+    $navbarTodayEntries = $navbarTodayEntriesStmt->fetchAll(PDO::FETCH_ASSOC);
 
-    $latestTodayEntry = $todayEntries[0] ?? null;
+    $latestTodayEntry = $navbarTodayEntries[0] ?? null;
     $nextEntryType = $latestTodayEntry && (($latestTodayEntry['entry_type'] ?? '') === 'entrada') ? 'saida' : 'entrada';
     $clockButtonLabel = $nextEntryType === 'entrada' ? 'Ponto de entrada' : 'Ponto de saída';
     $clockButtonClass = $nextEntryType === 'entrada' ? 'btn-primary' : 'btn-outline-light';
