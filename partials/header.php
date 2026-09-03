@@ -160,13 +160,13 @@ header('Content-Type: text/html; charset=UTF-8');
                             <a class="<?= $isCurrentFile('hr_skills.php') ? 'is-active' : '' ?>" href="hr_skills.php">Matriz de competências</a>
                             <a class="<?= $isCurrentFile('hr_job_descriptions.php') ? 'is-active' : '' ?>" href="hr_job_descriptions.php">Cadernos de encargos</a>
                             <span class="gt-nav-label">Operação diária</span>
+                            <a class="<?= $isCurrentFile('resultados.php') ? 'is-active' : '' ?>" href="resultados.php">Resultados</a>
                             <a class="<?= $isCurrentFile('hr_calendar.php') ? 'is-active' : '' ?>" href="hr_calendar.php">Calendário</a>
                             <a class="<?= $isCurrentFile('hr_absences.php') ? 'is-active' : '' ?>" href="hr_absences.php">Ausências</a>
                             <a class="<?= $isCurrentFile('hr_vacations.php') ? 'is-active' : '' ?>" href="hr_vacations.php">Férias</a>
                             <a class="<?= $isCurrentFile('hr_bank.php') ? 'is-active' : '' ?>" href="hr_bank.php">Banco de horas</a>
                             <a class="<?= $isCurrentFile('hr_alerts.php') ? 'is-active' : '' ?>" href="hr_alerts.php">Alertas RH</a>
                             <a class="<?= $isCurrentFile('hr_evaluations.php') ? 'is-active' : '' ?>" href="hr_evaluations.php">Avaliações</a>
-                            <a class="<?= $isCurrentFile('resultados.php') ? 'is-active' : '' ?>" href="resultados.php">Resultados</a>
                             <a class="<?= $isCurrentFile('shopfloor_break_dashboard.php') ? 'is-active' : '' ?>" href="shopfloor_break_dashboard.php">Dashboard de pausas</a>
                             <a class="<?= $isCurrentFile('shopfloor_break_reasons.php') ? 'is-active' : '' ?>" href="shopfloor_break_reasons.php">Pausas e paragens</a>
                             <a class="<?= $isCurrentFile('shopfloor_absence_reasons.php') ? 'is-active' : '' ?>" href="shopfloor_absence_reasons.php">Motivos de ausência</a>
