@@ -711,8 +711,9 @@ function taskforce_build_mail_payload(string $subject, string $textBody, $htmlBo
         return [
             'headers' => "MIME-Version: 1.0\r\n"
                 . "Content-Type: text/plain; charset=UTF-8\r\n"
+                . "Content-Transfer-Encoding: base64\r\n"
                 . $headers,
-            'body' => $textBody,
+            'body' => chunk_split(base64_encode($textBody), 76, "\r\n"),
         ];
     }
 
@@ -733,14 +734,14 @@ function taskforce_build_mail_payload(string $subject, string $textBody, $htmlBo
 
     $message .= '--' . $alternativeBoundary . "\r\n";
     $message .= "Content-Type: text/plain; charset=UTF-8\r\n";
-    $message .= "Content-Transfer-Encoding: 8bit\r\n\r\n";
-    $message .= $textBody . "\r\n\r\n";
+    $message .= "Content-Transfer-Encoding: base64\r\n\r\n";
+    $message .= chunk_split(base64_encode($textBody), 76, "\r\n") . "\r\n";
 
     if ($normalizedHtmlBody !== null) {
         $message .= '--' . $alternativeBoundary . "\r\n";
         $message .= "Content-Type: text/html; charset=UTF-8\r\n";
-        $message .= "Content-Transfer-Encoding: 8bit\r\n\r\n";
-        $message .= $normalizedHtmlBody . "\r\n\r\n";
+        $message .= "Content-Transfer-Encoding: base64\r\n\r\n";
+        $message .= chunk_split(base64_encode($normalizedHtmlBody), 76, "\r\n") . "\r\n";
     }
 
     $message .= '--' . $alternativeBoundary . "--\r\n";
