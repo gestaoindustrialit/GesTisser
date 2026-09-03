@@ -71,7 +71,7 @@ $hrFiles = [
     'resultados.php', 'shopfloor_absence_reasons.php', 'shopfloor_break_reasons.php',
     'shopfloor_break_dashboard.php', 'hr_raffle.php', 'hr_organogram.php', 'hr_job_descriptions.php', 'hr_skills.php'
 ];
-$adminFiles = ['company_profile.php', 'requests.php', 'checklists.php', 'app_logs.php'];
+$adminFiles = ['company_profile.php', 'erp_settings.php', 'requests.php', 'checklists.php', 'app_logs.php'];
 $isCurrentFile = static function ($file) use ($currentFile) {
     return $currentFile === $file;
 };
@@ -138,8 +138,6 @@ header('Content-Type: text/html; charset=UTF-8');
                             'warehouse' => 'Armazém e stock',
                             'quality' => 'Qualidade',
                             'costs' => 'Custos e margens',
-                            'master' => 'Dados mestre',
-                            'settings' => 'Configuração ERP',
                             'machines' => 'Máquinas e equipamentos',
                         ];
                         ?>
@@ -182,6 +180,7 @@ header('Content-Type: text/html; charset=UTF-8');
                         <summary><span><i class="bi bi-sliders"></i>Administração</span><i class="bi bi-chevron-down gt-nav-chevron"></i></summary>
                         <div class="gt-nav-submenu">
                             <a class="<?= $isCurrentFile('company_profile.php') ? 'is-active' : '' ?>" href="company_profile.php">Empresa e branding</a>
+                            <a class="<?= $isCurrentFile('erp_settings.php') ? 'is-active' : '' ?>" href="erp_settings.php">Configuração ERP</a>
                             <a class="<?= $isCurrentFile('requests.php') ? 'is-active' : '' ?>" href="requests.php">Gerar formulários</a>
                             <a class="<?= $isCurrentFile('checklists.php') ? 'is-active' : '' ?>" href="checklists.php">Checklists</a>
                             <a class="<?= $isCurrentFile('app_logs.php') ? 'is-active' : '' ?>" href="app_logs.php">Logs da aplicação</a>
