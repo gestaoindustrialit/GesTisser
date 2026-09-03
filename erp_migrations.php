@@ -130,6 +130,7 @@ function erp_run_phase1_migrations(PDO $pdo)
         $set = $pdo->prepare('INSERT OR IGNORE INTO erp_settings(key,value) VALUES (?,?)');
         $set->execute(['allow_negative_stock','0']);
         $set->execute(['raw_material_code_pattern','{tipo}{caracteristica}{largura}{gramagem}{seq}']);
+        $set->execute(['labor_hourly_rate','0.00']);
 
         foreach ([['BOB','Bobina'],['PAL','Palete'],['PRD','Produção'],['EXP','Expedição']] as $lt) { $pdo->prepare('INSERT OR IGNORE INTO erp_location_types(code,description) VALUES (?,?)')->execute($lt); }
         foreach ([['BL','Branco laminado'],['BNL','Branco não laminado'],['TL','Transparente laminado'],['TNL','Transparente não laminado'],['R30','R30'],['R50','R50']] as $mf) { $pdo->prepare('INSERT OR IGNORE INTO erp_material_features(code,description) VALUES (?,?)')->execute($mf); }

@@ -27,9 +27,6 @@ $hrAlertsCronRunsPerDay = '1440';
 $companyDailyObjective = '08:15';
 $navbarLogo = null;
 $reportLogo = null;
-$ticketStatuses = [];
-$recurrenceCatalog = [];
-$pendingDepartmentCatalog = [];
 $greetingImages = ['birthday' => [], 'work_anniversary' => []];
 
 function save_hr_greeting_image_upload(array $file, string $type)
@@ -77,119 +74,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $hrAlertsCronRunsPerDay = (int) ($_POST['hr_alerts_inline_cron_runs_per_day'] ?? 1440);
         $companyDailyObjective = trim((string) ($_POST['company_daily_objective'] ?? '08:15'));
 
-        $statusValues = $_POST['ticket_status_value'] ?? [];
-        $statusLabels = $_POST['ticket_status_label'] ?? [];
-        $statusCompleted = $_POST['ticket_status_completed'] ?? [];
-        $statusSortOrders = $_POST['ticket_status_sort_order'] ?? [];
-        $statusColors = $_POST['ticket_status_color'] ?? [];
-        $ticketStatuses = [];
-
-        $recurrenceValues = $_POST['recurrence_value'] ?? [];
-        $recurrenceLabels = $_POST['recurrence_label'] ?? [];
-        $recurrenceEnabled = $_POST['recurrence_enabled'] ?? [];
-        $recurrenceCatalog = [];
-
-        $pendingDepartmentValues = $_POST['pending_department_value'] ?? [];
-        $pendingDepartmentEnabled = $_POST['pending_department_enabled'] ?? [];
-        $pendingDepartmentCatalog = [];
-
-        foreach ($statusValues as $index => $rawValue) {
-            $value = strtolower(trim((string) $rawValue));
-            $label = trim((string) ($statusLabels[$index] ?? ''));
-            $sortOrder = (int) ($statusSortOrders[$index] ?? 0);
-            $color = strtoupper(trim((string) ($statusColors[$index] ?? '')));
-
-            if ($value === '' && $label === '') {
-                continue;
-            }
-
-            $value = preg_replace('/[^a-z0-9_\-]/', '_', $value) ?: '';
-            if ($value === '' || $label === '') {
-                continue;
-            }
-
-            if (!preg_match('/^#[0-9A-F]{6}$/', $color)) {
-                $color = (isset($statusCompleted[$index]) && $statusCompleted[$index] === '1') ? '#22C55E' : '#FACC15';
-            }
-
-            if (isset($ticketStatuses[$value])) {
-                continue;
-            }
-
-            $ticketStatuses[$value] = [
-                'value' => $value,
-                'label' => $label,
-                'is_completed' => isset($statusCompleted[$index]) && $statusCompleted[$index] === '1',
-                'sort_order' => $sortOrder,
-                'color' => $color,
-            ];
-        }
-
-        $defaultRecurrences = default_recurring_task_recurrence_options();
-        $allowedRecurrences = [];
-        foreach ($defaultRecurrences as $defaultRecurrence) {
-            $allowedRecurrences[(string) $defaultRecurrence['value']] = (string) $defaultRecurrence['label'];
-        }
-
-        $defaultPendingDepartments = default_pending_ticket_department_options($pdo);
-        $allowedPendingDepartments = [];
-        foreach ($defaultPendingDepartments as $defaultDepartment) {
-            $allowedPendingDepartments[(string) $defaultDepartment['value']] = (string) $defaultDepartment['label'];
-        }
-
-        foreach ($pendingDepartmentValues as $index => $rawValue) {
-            $value = strtolower(trim((string) $rawValue));
-            if (!isset($allowedPendingDepartments[$value]) || isset($pendingDepartmentCatalog[$value])) {
-                continue;
-            }
-
-            $pendingDepartmentCatalog[$value] = [
-                'value' => $value,
-                'label' => $allowedPendingDepartments[$value],
-                'enabled' => isset($pendingDepartmentEnabled[$index]) && $pendingDepartmentEnabled[$index] === '1',
-            ];
-        }
-
-        foreach ($defaultPendingDepartments as $defaultDepartment) {
-            $value = (string) $defaultDepartment['value'];
-            if (!isset($pendingDepartmentCatalog[$value])) {
-                $pendingDepartmentCatalog[$value] = [
-                    'value' => $value,
-                    'label' => (string) $defaultDepartment['label'],
-                    'enabled' => !empty($defaultDepartment['enabled']),
-                ];
-            }
-        }
-
-        foreach ($recurrenceValues as $index => $rawValue) {
-            $value = strtolower(trim((string) $rawValue));
-            if (!isset($allowedRecurrences[$value]) || isset($recurrenceCatalog[$value])) {
-                continue;
-            }
-
-            $label = trim((string) ($recurrenceLabels[$index] ?? ''));
-            if ($label === '') {
-                $label = $allowedRecurrences[$value];
-            }
-
-            $recurrenceCatalog[$value] = [
-                'value' => $value,
-                'label' => $label,
-                'enabled' => isset($recurrenceEnabled[$index]) && $recurrenceEnabled[$index] === '1',
-            ];
-        }
-
-        foreach ($defaultRecurrences as $defaultRecurrence) {
-            $value = (string) $defaultRecurrence['value'];
-            if (!isset($recurrenceCatalog[$value])) {
-                $recurrenceCatalog[$value] = [
-                    'value' => $value,
-                    'label' => (string) $defaultRecurrence['label'],
-                    'enabled' => !empty($defaultRecurrence['enabled']),
-                ];
-            }
-        }
-
         if (!in_array($smtpSecure, ['', 'tls', 'ssl'], true)) {
             $smtpSecure = 'tls';
         }
@@ -215,14 +99,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $flashError = 'Preencha a password SMTP quando definir um servidor SMTP.';
         } elseif ($mailFromAddress !== '' && filter_var($mailFromAddress, FILTER_VALIDATE_EMAIL) === false) {
             $flashError = 'Indique um email válido para o remetente.';
-        } elseif (count($ticketStatuses) === 0) {
-            $flashError = 'Defina pelo menos um estado para os tickets.';
-        } elseif (!array_filter($ticketStatuses, static function (array $status): bool { return empty($status['is_completed']); })) {
-            $flashError = 'Defina pelo menos um estado não concluído para os tickets.';
-        } elseif (!array_filter($recurrenceCatalog, static function (array $entry): bool { return !empty($entry['enabled']); })) {
-            $flashError = 'Ative pelo menos um tipo de recorrência para tarefas recorrentes.';
-        } elseif (!array_filter($pendingDepartmentCatalog, static function (array $entry): bool { return !empty($entry['enabled']); })) {
-            $flashError = 'Ative pelo menos um departamento para pendentes no dashboard.';
         } else {
             set_app_setting($pdo, 'company_name', $companyName);
             set_app_setting($pdo, 'company_address', $companyAddress);
@@ -238,9 +114,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             set_app_setting($pdo, 'mail_from_name', $mailFromName);
             set_app_setting($pdo, 'hr_alerts_inline_cron_runs_per_day', (string) $hrAlertsCronRunsPerDay);
             set_app_setting($pdo, 'company_daily_objective', sprintf('%02d:%02d', (int) $dailyObjectiveMatches[1], (int) $dailyObjectiveMatches[2]));
-            set_app_setting($pdo, 'ticket_statuses_json', json_encode(array_values($ticketStatuses), JSON_UNESCAPED_UNICODE));
-            set_app_setting($pdo, 'recurring_task_recurrences_json', json_encode(array_values($recurrenceCatalog), JSON_UNESCAPED_UNICODE));
-            set_app_setting($pdo, 'pending_ticket_departments_json', json_encode(array_values($pendingDepartmentCatalog), JSON_UNESCAPED_UNICODE));
 
             $savedLogos = 0;
             $lightPath = save_brand_logo($_FILES['logo_navbar_light'] ?? [], 'navbar_light');
@@ -352,11 +225,6 @@ $hrAlertsCronRunsPerDay = (string) app_setting($pdo, 'hr_alerts_inline_cron_runs
 $companyDailyObjective = format_minutes_hhmm(company_daily_objective_minutes($pdo));
 $navbarLogo = app_setting($pdo, 'logo_navbar_light');
 $reportLogo = app_setting($pdo, 'logo_report_dark');
-$ticketStatuses = ticket_statuses($pdo);
-$recurrenceCatalog = recurring_task_recurrence_catalog($pdo);
-$pendingDepartmentCatalog = function_exists('pending_ticket_department_catalog')
-    ? pending_ticket_department_catalog($pdo)
-    : default_pending_ticket_department_options($pdo);
 $greetingStmt = $pdo->query('SELECT id, greeting_type, title, file_path, sort_order, is_active, created_at FROM hr_greeting_images ORDER BY greeting_type ASC, sort_order ASC, id ASC');
 foreach ($greetingStmt->fetchAll(PDO::FETCH_ASSOC) as $greetingImage) {
     $greetingImages[(string) $greetingImage['greeting_type']][] = $greetingImage;
@@ -459,84 +327,6 @@ require __DIR__ . '/partials/header.php';
                 <input class="form-control form-control-sm mb-2" type="file" name="logo_report_dark" accept="image/png,image/jpeg,image/svg+xml,image/webp" <?= !$isAdmin ? 'disabled' : '' ?>>
                 <?php if ($reportLogo): ?><img src="<?= h($reportLogo) ?>" alt="Logo relatório" class="img-fluid border rounded p-2 mb-2"><?php endif; ?>
             </div>
-            <div class="col-12">
-                <hr>
-                <div class="d-flex justify-content-between align-items-center mb-2">
-                    <label class="form-label mb-0">Estados dos tickets</label>
-                    <?php if ($isAdmin): ?><button type="button" class="btn btn-sm btn-outline-secondary" id="add-ticket-status">Adicionar estado</button><?php endif; ?>
-                </div>
-                <p class="small text-muted mb-2">Defina os estados disponíveis no ticketing, a ordem de apresentação e a cor hexadecimal do badge de alerta.</p>
-                <div id="ticket-status-list" class="vstack gap-2">
-                    <?php foreach ($ticketStatuses as $index => $status): ?>
-                        <div class="row g-2 align-items-center ticket-status-row border rounded p-2">
-                            <div class="col-md-2"><input class="form-control form-control-sm" name="ticket_status_value[]" value="<?= h($status['value']) ?>" placeholder="valor_tecnico" <?= !$isAdmin ? 'readonly' : '' ?>></div>
-                            <div class="col-md-3"><input class="form-control form-control-sm" name="ticket_status_label[]" value="<?= h($status['label']) ?>" placeholder="Etiqueta" <?= !$isAdmin ? 'readonly' : '' ?>></div>
-                            <div class="col-md-2"><input class="form-control form-control-sm ticket-status-sort-order" type="number" name="ticket_status_sort_order[]" value="<?= (int) ($status['sort_order'] ?? (($index + 1) * 10)) ?>" placeholder="Ordem" <?= !$isAdmin ? 'readonly' : '' ?>></div>
-                            <div class="col-md-2">
-                                <div class="d-flex align-items-center gap-2">
-                                    <input class="form-control form-control-color form-control-sm ticket-status-color-picker" type="color" value="<?= h($status['color'] ?? (!empty($status['is_completed']) ? '#22C55E' : '#FACC15')) ?>" title="Cor do badge" <?= !$isAdmin ? 'disabled' : '' ?>>
-                                    <input class="form-control form-control-sm text-uppercase ticket-status-color-hex" name="ticket_status_color[]" value="<?= h($status['color'] ?? (!empty($status['is_completed']) ? '#22C55E' : '#FACC15')) ?>" pattern="^#[0-9A-Fa-f]{6}$" placeholder="#RRGGBB" <?= !$isAdmin ? 'readonly' : '' ?>>
-                                </div>
-                            </div>
-                            <div class="col-md-2">
-                                <div class="form-check">
-                                    <input class="form-check-input ticket-status-completed" type="checkbox" name="ticket_status_completed[<?= (int) $index ?>]" value="1" <?= !empty($status['is_completed']) ? 'checked' : '' ?> <?= !$isAdmin ? 'disabled' : '' ?>>
-                                    <label class="form-check-label small">Concluído</label>
-                                </div>
-                            </div>
-                            <div class="col-md-1">
-                                <?php if ($isAdmin): ?>
-                                    <div class="d-flex gap-1 justify-content-end">
-                                        <button type="button" class="btn btn-sm btn-outline-secondary move-ticket-status-up" title="Subir">↑</button>
-                                        <button type="button" class="btn btn-sm btn-outline-secondary move-ticket-status-down" title="Descer">↓</button>
-                                        <button type="button" class="btn btn-sm btn-outline-danger remove-ticket-status">×</button>
-                                    </div>
-                                <?php endif; ?>
-                            </div>
-                        </div>
-                    <?php endforeach; ?>
-                </div>
-            </div>
-
-            <div class="col-12">
-                <hr>
-                <label class="form-label mb-0">Departamentos pendentes no dashboard</label>
-                <p class="small text-muted mb-2">Escolha os departamentos que devem aparecer automaticamente no bloco de pendentes por equipa técnica.</p>
-                <div id="pending-department-list" class="vstack gap-2 mb-2">
-                    <?php foreach ($pendingDepartmentCatalog as $index => $department): ?>
-                        <div class="row g-2 align-items-center">
-                            <div class="col-md-4"><input class="form-control form-control-sm" name="pending_department_value[]" value="<?= h($department['value']) ?>" readonly></div>
-                            <div class="col-md-5"><input class="form-control form-control-sm" value="<?= h($department['label']) ?>" readonly></div>
-                            <div class="col-md-3">
-                                <div class="form-check">
-                                    <input class="form-check-input" type="checkbox" name="pending_department_enabled[<?= (int) $index ?>]" value="1" <?= !empty($department['enabled']) ? 'checked' : '' ?> <?= !$isAdmin ? 'disabled' : '' ?>>
-                                    <label class="form-check-label small">Ativo</label>
-                                </div>
-                            </div>
-                        </div>
-                    <?php endforeach; ?>
-                </div>
-            </div>
-
-            <div class="col-12">
-                <hr>
-                <label class="form-label mb-0">Recorrências de tarefas</label>
-                <p class="small text-muted mb-2">Personalize os nomes e ative/desative tipos de recorrência disponíveis ao criar tarefas recorrentes.</p>
-                <div id="recurrence-list" class="vstack gap-2">
-                    <?php foreach ($recurrenceCatalog as $index => $recurrence): ?>
-                        <div class="row g-2 align-items-center recurrence-row">
-                            <div class="col-md-3"><input class="form-control form-control-sm" name="recurrence_value[]" value="<?= h($recurrence['value']) ?>" readonly></div>
-                            <div class="col-md-6"><input class="form-control form-control-sm" name="recurrence_label[]" value="<?= h($recurrence['label']) ?>" placeholder="Etiqueta" <?= !$isAdmin ? 'readonly' : '' ?>></div>
-                            <div class="col-md-3">
-                                <div class="form-check">
-                                    <input class="form-check-input" type="checkbox" name="recurrence_enabled[<?= (int) $index ?>]" value="1" <?= !empty($recurrence['enabled']) ? 'checked' : '' ?> <?= !$isAdmin ? 'disabled' : '' ?>>
-                                    <label class="form-check-label small">Ativo</label>
-                                </div>
-                            </div>
-                        </div>
-                    <?php endforeach; ?>
-                </div>
-            </div>
         </div>
 
         <?php if ($isAdmin): ?>
@@ -602,148 +392,4 @@ require __DIR__ . '/partials/header.php';
 </form>
 <?php endif; ?>
 
-<?php if ($isAdmin): ?>
-<script>
-(function () {
-    const list = document.getElementById('ticket-status-list');
-    const addButton = document.getElementById('add-ticket-status');
-    if (!list || !addButton) {
-        return;
-    }
-
-
-    const normalizeRows = () => {
-        list.querySelectorAll('.ticket-status-row').forEach((row, index) => {
-            const sortOrderInput = row.querySelector('.ticket-status-sort-order');
-            if (sortOrderInput) {
-                sortOrderInput.value = String((index + 1) * 10);
-            }
-
-            const completedInput = row.querySelector('.ticket-status-completed');
-            if (completedInput) {
-                completedInput.name = `ticket_status_completed[${index}]`;
-            }
-
-            const upBtn = row.querySelector('.move-ticket-status-up');
-            const downBtn = row.querySelector('.move-ticket-status-down');
-            if (upBtn) {
-                upBtn.disabled = index === 0;
-            }
-            if (downBtn) {
-                downBtn.disabled = index === list.querySelectorAll('.ticket-status-row').length - 1;
-            }
-        });
-    };
-
-    const bindColorSync = (row) => {
-        const picker = row.querySelector('.ticket-status-color-picker');
-        const hex = row.querySelector('.ticket-status-color-hex');
-        if (!picker || !hex) {
-            return;
-        }
-
-        picker.addEventListener('input', () => {
-            hex.value = picker.value.toUpperCase();
-        });
-
-        hex.addEventListener('input', () => {
-            const normalized = hex.value.trim().toUpperCase();
-            if (/^#[0-9A-F]{6}$/.test(normalized)) {
-                picker.value = normalized;
-            }
-        });
-    };
-
-    const bindMove = (button, direction) => {
-        button.addEventListener('click', () => {
-            const row = button.closest('.ticket-status-row');
-            if (!row) {
-                return;
-            }
-
-            if (direction === 'up') {
-                const previous = row.previousElementSibling;
-                if (previous) {
-                    list.insertBefore(row, previous);
-                }
-            } else {
-                const next = row.nextElementSibling;
-                if (next) {
-                    list.insertBefore(next, row);
-                }
-            }
-
-            normalizeRows();
-        });
-    };
-
-    const bindRemove = (button) => {
-        button.addEventListener('click', () => {
-            const row = button.closest('.ticket-status-row');
-            if (row) {
-                row.remove();
-                normalizeRows();
-            }
-        });
-    };
-
-    const bindRowControls = (row) => {
-        bindColorSync(row);
-
-        const remove = row.querySelector('.remove-ticket-status');
-        if (remove) {
-            bindRemove(remove);
-        }
-
-        const up = row.querySelector('.move-ticket-status-up');
-        if (up) {
-            bindMove(up, 'up');
-        }
-
-        const down = row.querySelector('.move-ticket-status-down');
-        if (down) {
-            bindMove(down, 'down');
-        }
-    };
-
-    list.querySelectorAll('.ticket-status-row').forEach(bindRowControls);
-    normalizeRows();
-
-    addButton.addEventListener('click', () => {
-        const index = list.querySelectorAll('.ticket-status-row').length;
-        const wrapper = document.createElement('div');
-        wrapper.className = 'row g-2 align-items-center ticket-status-row border rounded p-2';
-        wrapper.innerHTML = `
-            <div class="col-md-2"><input class="form-control form-control-sm" name="ticket_status_value[]" placeholder="valor_tecnico"></div>
-            <div class="col-md-3"><input class="form-control form-control-sm" name="ticket_status_label[]" placeholder="Etiqueta"></div>
-            <div class="col-md-2"><input class="form-control form-control-sm ticket-status-sort-order" type="number" name="ticket_status_sort_order[]" value="${(index + 1) * 10}" placeholder="Ordem"></div>
-            <div class="col-md-2">
-                <div class="d-flex align-items-center gap-2">
-                    <input class="form-control form-control-color form-control-sm ticket-status-color-picker" type="color" value="#FACC15" title="Cor do badge">
-                    <input class="form-control form-control-sm text-uppercase ticket-status-color-hex" name="ticket_status_color[]" value="#FACC15" pattern="^#[0-9A-Fa-f]{6}$" placeholder="#RRGGBB">
-                </div>
-            </div>
-            <div class="col-md-2"><div class="form-check"><input class="form-check-input ticket-status-completed" type="checkbox" name="ticket_status_completed[${index}]" value="1"><label class="form-check-label small">Concluído</label></div></div>
-            <div class="col-md-1">
-                <div class="d-flex gap-1 justify-content-end">
-                    <button type="button" class="btn btn-sm btn-outline-secondary move-ticket-status-up" title="Subir">↑</button>
-                    <button type="button" class="btn btn-sm btn-outline-secondary move-ticket-status-down" title="Descer">↓</button>
-                    <button type="button" class="btn btn-sm btn-outline-danger remove-ticket-status">×</button>
-                </div>
-            </div>
-        `;
-        list.appendChild(wrapper);
-        bindRowControls(wrapper);
-        normalizeRows();
-    });
-
-    const form = list.closest('form');
-    if (form) {
-        form.addEventListener('submit', () => {
-            normalizeRows();
-        });
-    }
-})();
-</script>
-<?php endif; ?>
 <?php require __DIR__ . '/partials/footer.php'; ?>
