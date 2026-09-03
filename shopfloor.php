@@ -1,5 +1,6 @@
 <?php
 require_once __DIR__ . '/helpers.php';
+require_once __DIR__ . '/app/Services/ShopfloorAttachment.php';
 require_login();
 
 $userId = (int) $_SESSION['user_id'];
@@ -327,44 +328,21 @@ $requestType,
         $absenceRequestId = (int) ($_POST['absence_request_id'] ?? 0);
         $eventDate = date('Y-m-d');
         $description = trim((string) ($_POST['description'] ?? ''));
-        $photoFile = $_FILES['photo'] ?? null;
+        $attachmentFile = $_FILES['attachment'] ?? null;
         $attachmentPath = null;
-        $hasPhotoUpload = is_array($photoFile) && (($photoFile['error'] ?? UPLOAD_ERR_NO_FILE) !== UPLOAD_ERR_NO_FILE);
+        $hasAttachmentUpload = is_array($attachmentFile) && (($attachmentFile['error'] ?? UPLOAD_ERR_NO_FILE) !== UPLOAD_ERR_NO_FILE);
 
-        if ($hasPhotoUpload) {
-            $allowedImageMimeTypes = [
-                'image/jpeg' => 'jpg',
-                'image/png' => 'png',
-                'image/webp' => 'webp',
-            ];
-
-            $uploadError = (int) ($photoFile['error'] ?? UPLOAD_ERR_NO_FILE);
+        if ($hasAttachmentUpload) {
+            $uploadError = (int) ($attachmentFile['error'] ?? UPLOAD_ERR_NO_FILE);
             if ($uploadError !== UPLOAD_ERR_OK) {
-                $flashError = 'Não foi possível carregar a fotografia da justificação.';
-            } elseif (!isset($photoFile['tmp_name']) || !is_string($photoFile['tmp_name']) || !is_file($photoFile['tmp_name'])) {
-                $flashError = 'O ficheiro da fotografia submetida é inválido.';
+                $flashError = 'Não foi possível carregar o ficheiro da justificação.';
+            } elseif (!isset($attachmentFile['tmp_name']) || !is_string($attachmentFile['tmp_name']) || !is_file($attachmentFile['tmp_name'])) {
+                $flashError = 'O ficheiro submetido é inválido.';
             } else {
-                $detectedMimeType = '';
-                if (function_exists('finfo_open')) {
-                    $finfo = finfo_open(FILEINFO_MIME_TYPE);
-                    if ($finfo !== false) {
-                        $finfoMimeType = finfo_file($finfo, (string) $photoFile['tmp_name']);
-                        if (is_string($finfoMimeType)) {
-                            $detectedMimeType = $finfoMimeType;
-                        }
-                        finfo_close($finfo);
-                    }
-                }
+                $attachmentExtension = ShopfloorAttachment::detectExtension((string) $attachmentFile['tmp_name']);
 
-                if ($detectedMimeType === '' && function_exists('mime_content_type')) {
-                    $mimeType = mime_content_type((string) $photoFile['tmp_name']);
-                    if (is_string($mimeType)) {
-                        $detectedMimeType = $mimeType;
-                    }
-                }
-
-                if (!isset($allowedImageMimeTypes[$detectedMimeType])) {
-                    $flashError = 'Formato de imagem inválido. Use JPG, PNG ou WEBP.';
+                if ($attachmentExtension === null) {
+                    $flashError = 'Formato de ficheiro inválido. Use PDF, JPG, PNG ou WEBP.';
                 } else {
                     $uploadDir = __DIR__ . '/assets/uploads/justifications';
                     if (!is_dir($uploadDir)) {
@@ -375,12 +353,12 @@ $requestType,
                         'justification_%d_%s.%s',
                         $userId,
                         bin2hex(random_bytes(6)),
-                        $allowedImageMimeTypes[$detectedMimeType]
+                        $attachmentExtension
                     );
                     $targetPath = $uploadDir . '/' . $filename;
 
-                    if (!move_uploaded_file((string) $photoFile['tmp_name'], $targetPath)) {
-                        $flashError = 'Falha ao guardar a fotografia da justificação.';
+                    if (!move_uploaded_file((string) $attachmentFile['tmp_name'], $targetPath)) {
+                        $flashError = 'Falha ao guardar o ficheiro da justificação.';
                     } else {
                         $attachmentPath = 'assets/uploads/justifications/' . $filename;
                     }
@@ -388,8 +366,8 @@ $requestType,
             }
         }
 
-        if ($flashError === null && !$hasPhotoUpload) {
-            $flashError = 'Anexe uma fotografia para a justificação.';
+        if ($flashError === null && !$hasAttachmentUpload) {
+            $flashError = 'Anexe um ficheiro para a justificação.';
         }
 
         if ($flashError === null) {
@@ -404,7 +382,7 @@ $requestType,
             }
 
             $stmt = $pdo->prepare('INSERT INTO shopfloor_justifications(user_id, absence_request_id, event_date, description) VALUES (?, ?, ?, ?)');
-            $justificationDescription = $description !== '' ? $description : 'Fotografia anexada';
+            $justificationDescription = $description !== '' ? $description : 'Ficheiro anexado';
             $stmt->execute([$userId, $targetAbsenceId, $eventDate, $justificationDescription]);
             if ($attachmentPath !== null) {
                 $justificationId = (int) $pdo->lastInsertId();
@@ -1063,10 +1041,11 @@ require __DIR__ . '/partials/header.php';
                         <td class="text-end">
                             <div class="d-inline-flex align-items-center gap-2">
                                 <?php if (!empty($absence['latest_attachment_path'])): ?>
+                                    <?php $latestAttachmentIsPdf = strtolower((string) pathinfo((string) $absence['latest_attachment_path'], PATHINFO_EXTENSION)) === 'pdf'; ?>
                                     <a
                                         href="<?= h((string) $absence['latest_attachment_path']) ?>"
                                         class="btn btn-outline-secondary btn-sm"
-                                        data-lightbox-image="<?= h((string) $absence['latest_attachment_path']) ?>"
+                                        <?= $latestAttachmentIsPdf ? 'target="_blank" rel="noopener"' : 'data-lightbox-image="' . h((string) $absence['latest_attachment_path']) . '"' ?>
                                     >Ver ficheiro</a>
                                 <?php endif; ?>
                                 <button class="btn btn-primary btn-sm" type="button" data-bs-toggle="collapse" data-bs-target="#justification-form-<?= (int) $absence['id'] ?>">Anexar</button>
@@ -1079,8 +1058,8 @@ require __DIR__ . '/partials/header.php';
                                 <input type="hidden" name="action" value="submit_justification">
                                 <input type="hidden" name="absence_request_id" value="<?= (int) $absence['id'] ?>">
                                 <div class="col-md-10">
-                                    <label class="form-label mb-1">Fotografia</label>
-                                    <input type="file" name="photo" class="form-control form-control-sm" accept="image/jpeg,image/png,image/webp" required>
+                                    <label class="form-label mb-1">Ficheiro (PDF ou fotografia)</label>
+                                    <input type="file" name="attachment" class="form-control form-control-sm" accept="application/pdf,image/jpeg,image/png,image/webp" required>
                                 </div>
                                 <div class="col-md-2">
                                     <button type="submit" class="btn btn-outline-primary btn-sm w-100">Submeter</button>
@@ -1097,10 +1076,11 @@ require __DIR__ . '/partials/header.php';
                                                 <span class="text-secondary"><?= h((string) $absenceJustification['event_date']) ?></span>
                                                 <span>— <?= h((string) $absenceJustification['description']) ?></span>
                                                 <?php if (!empty($absenceJustification['attachment_path'])): ?>
+                                                    <?php $attachmentIsPdf = strtolower((string) pathinfo((string) $absenceJustification['attachment_path'], PATHINFO_EXTENSION)) === 'pdf'; ?>
                                                     <a
                                                         href="<?= h((string) $absenceJustification['attachment_path']) ?>"
                                                         class="btn btn-outline-secondary btn-sm py-0 px-2"
-                                                        data-lightbox-image="<?= h((string) $absenceJustification['attachment_path']) ?>"
+                                                        <?= $attachmentIsPdf ? 'target="_blank" rel="noopener"' : 'data-lightbox-image="' . h((string) $absenceJustification['attachment_path']) . '"' ?>
                                                     >Ver ficheiro</a>
                                                 <?php else: ?>
                                                     <span class="text-secondary">Sem anexo</span>
