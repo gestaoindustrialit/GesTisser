@@ -1485,19 +1485,25 @@ require __DIR__ . '/partials/header.php';
                 </div>
 
                 <div class="user-form-section">
+                    <div class="user-form-section-title"><i class="bi bi-telephone"></i> Dados de contacto</div>
+                    <div class="row g-3">
+                        <div class="col-md-6"><label class="form-label">Email pessoal</label><input class="form-control" type="email" name="personal_email" placeholder="nome@exemplo.pt" aria-describedby="personalEmailHelp"></div>
+                        <div class="col-md-3"><label class="form-label">Telefone</label><input class="form-control" name="phone" placeholder="Telefone"></div>
+                        <div class="col-md-3"><label class="form-label">Telemóvel</label><input class="form-control" name="mobile" placeholder="Telemóvel"></div>
+                        <div class="col-12"><div id="personalEmailHelp" class="form-text">As comunicações pessoais de RH serão enviadas preferencialmente para este endereço.</div></div>
+                    </div>
+                </div>
+
+                <div class="user-form-section">
                     <div class="user-form-section-title"><i class="bi bi-person-vcard"></i> Dados pessoais e civis</div>
                     <div class="row g-3">
                         <div class="col-md-4"><label class="form-label">Data de nascimento</label><input class="form-control" type="date" name="birth_date"></div>
-                        <div class="col-md-4"><label class="form-label">Telefone</label><input class="form-control" name="phone" placeholder="Telefone"></div>
-                        <div class="col-md-4"><label class="form-label">Telemóvel</label><input class="form-control" name="mobile" placeholder="Telemóvel"></div>
-                        <div class="col-md-6"><label class="form-label">Email pessoal</label><input class="form-control" type="email" name="personal_email" placeholder="nome@exemplo.pt" aria-describedby="personalEmailHelp"></div>
-                        <div class="col-md-6 d-flex align-items-end"><div id="personalEmailHelp" class="form-text mb-2">As comunicações pessoais de RH serão enviadas preferencialmente para este endereço.</div></div>
                         <div class="col-md-3"><label class="form-label">NIF</label><input class="form-control" name="tax_number" inputmode="numeric" maxlength="9" placeholder="NIF"></div>
                         <div class="col-md-3"><label class="form-label">NISS</label><input class="form-control" name="social_security_number" inputmode="numeric" maxlength="11" placeholder="NISS"></div>
                         <div class="col-md-3"><label class="form-label">Cartão de cidadão</label><input class="form-control" name="citizen_card_number" placeholder="Cartão de cidadão"></div>
                         <div class="col-md-3"><label class="form-label">Data de validade</label><input class="form-control" type="date" name="citizen_card_expiry_date"></div>
-                        <div class="col-md-3"><label class="form-label">N.º de dependentes</label><input class="form-control" type="number" name="dependents_count" min="0" value="0"></div>
-                        <div class="col-md-6"><label class="form-label">Morada</label><input class="form-control" name="address" placeholder="Morada"></div>
+                        <div class="col-md-2"><label class="form-label">N.º de dependentes</label><input class="form-control" type="number" name="dependents_count" min="0" max="99" value="0"></div>
+                        <div class="col-md-8"><label class="form-label">Morada</label><input class="form-control" name="address" placeholder="Morada"></div>
                         <div class="col-md-2"><label class="form-label">Código postal</label><input class="form-control" name="postal_code" placeholder="0000-000"></div>
                         <div class="col-md-4"><label class="form-label">Freguesia</label><input class="form-control" name="parish" placeholder="Freguesia"></div>
                         <div class="col-md-4"><label class="form-label">Concelho</label><input class="form-control" name="municipality" placeholder="Concelho"></div>
@@ -1600,19 +1606,25 @@ require __DIR__ . '/partials/header.php';
                 </div>
 
                 <div class="user-form-section">
+                    <div class="user-form-section-title"><i class="bi bi-telephone"></i> Dados de contacto</div>
+                    <div class="row g-3">
+                        <div class="col-md-6"><label class="form-label">Email pessoal</label><input class="form-control" type="email" name="personal_email" value="<?= h((string) ($user['personal_email'] ?? '')) ?>" aria-describedby="personalEmailHelp<?= (int) $user['id'] ?>"></div>
+                        <div class="col-md-3"><label class="form-label">Telefone</label><input class="form-control" name="phone" value="<?= h((string) ($user['phone'] ?? '')) ?>" placeholder="Telefone"></div>
+                        <div class="col-md-3"><label class="form-label">Telemóvel</label><input class="form-control" name="mobile" value="<?= h((string) ($user['mobile'] ?? '')) ?>" placeholder="Telemóvel"></div>
+                        <div class="col-12"><div id="personalEmailHelp<?= (int) $user['id'] ?>" class="form-text">As comunicações pessoais de RH serão enviadas preferencialmente para este endereço.</div></div>
+                    </div>
+                </div>
+
+                <div class="user-form-section">
                     <div class="user-form-section-title"><i class="bi bi-person-vcard"></i> Dados pessoais e civis</div>
                     <div class="row g-3">
                         <div class="col-md-4"><label class="form-label">Data de nascimento</label><input class="form-control" type="date" name="birth_date" value="<?= h((string) ($user['birth_date'] ?? '')) ?>"></div>
-                        <div class="col-md-4"><label class="form-label">Telefone</label><input class="form-control" name="phone" value="<?= h((string) ($user['phone'] ?? '')) ?>" placeholder="Telefone"></div>
-                        <div class="col-md-4"><label class="form-label">Telemóvel</label><input class="form-control" name="mobile" value="<?= h((string) ($user['mobile'] ?? '')) ?>" placeholder="Telemóvel"></div>
-                        <div class="col-md-6"><label class="form-label">Email pessoal</label><input class="form-control" type="email" name="personal_email" value="<?= h((string) ($user['personal_email'] ?? '')) ?>" aria-describedby="personalEmailHelp<?= (int) $user['id'] ?>"></div>
-                        <div class="col-md-6 d-flex align-items-end"><div id="personalEmailHelp<?= (int) $user['id'] ?>" class="form-text mb-2">As comunicações pessoais de RH serão enviadas preferencialmente para este endereço.</div></div>
                         <div class="col-md-3"><label class="form-label">NIF</label><input class="form-control" name="tax_number" inputmode="numeric" maxlength="9" value="<?= h((string) ($user['tax_number'] ?? '')) ?>"></div>
                         <div class="col-md-3"><label class="form-label">NISS</label><input class="form-control" name="social_security_number" inputmode="numeric" maxlength="11" value="<?= h((string) ($user['social_security_number'] ?? '')) ?>"></div>
                         <div class="col-md-3"><label class="form-label">Cartão de cidadão</label><input class="form-control" name="citizen_card_number" value="<?= h((string) ($user['citizen_card_number'] ?? '')) ?>"></div>
                         <div class="col-md-3"><label class="form-label">Data de validade</label><input class="form-control" type="date" name="citizen_card_expiry_date" value="<?= h((string) ($user['citizen_card_expiry_date'] ?? '')) ?>"></div>
-                        <div class="col-md-3"><label class="form-label">N.º de dependentes</label><input class="form-control" name="dependents_count" type="number" min="0" value="<?= h((string) ($user['dependents_count'] ?? '')) ?>"></div>
-                        <div class="col-md-6"><label class="form-label">Morada</label><input class="form-control" name="address"  value="<?= h((string) ($user['address'] ?? '')) ?>"></div>
+                        <div class="col-md-2"><label class="form-label">N.º de dependentes</label><input class="form-control" name="dependents_count" type="number" min="0" max="99" value="<?= h((string) ($user['dependents_count'] ?? '')) ?>"></div>
+                        <div class="col-md-8"><label class="form-label">Morada</label><input class="form-control" name="address"  value="<?= h((string) ($user['address'] ?? '')) ?>"></div>
                         <div class="col-md-2"><label class="form-label">Código postal</label><input class="form-control" name="postal_code"  value="<?= h((string) ($user['postal_code'] ?? '')) ?>"></div>
                         <div class="col-md-4"><label class="form-label">Freguesia</label><input class="form-control" name="parish"  value="<?= h((string) ($user['parish'] ?? '')) ?>"></div>
                         <div class="col-md-4"><label class="form-label">Concelho</label><input class="form-control" name="municipality"  value="<?= h((string) ($user['municipality'] ?? '')) ?>"></div>
