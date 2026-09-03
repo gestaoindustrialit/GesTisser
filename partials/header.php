@@ -154,23 +154,23 @@ header('Content-Type: text/html; charset=UTF-8');
                             <a class="<?= $isCurrentFile('hr.php') ? 'is-active' : '' ?>" href="hr.php">Visão geral RH</a>
                             <span class="gt-nav-label">Gestão base</span>
                             <a class="<?= $isCurrentFile('users.php') ? 'is-active' : '' ?>" href="users.php">Utilizadores</a>
-                            <a class="<?= $isCurrentFile('hr_departments.php') ? 'is-active' : '' ?>" href="hr_departments.php">Departamentos</a>
                             <a class="<?= $isCurrentFile('hr_schedules.php') ? 'is-active' : '' ?>" href="hr_schedules.php">Horários</a>
+                            <a class="<?= $isCurrentFile('hr_departments.php') ? 'is-active' : '' ?>" href="hr_departments.php">Departamentos</a>
                             <a class="<?= $isCurrentFile('hr_organogram.php') ? 'is-active' : '' ?>" href="hr_organogram.php">Organograma</a>
-                            <a class="<?= $isCurrentFile('hr_job_descriptions.php') ? 'is-active' : '' ?>" href="hr_job_descriptions.php">Cadernos de encargos</a>
                             <a class="<?= $isCurrentFile('hr_skills.php') ? 'is-active' : '' ?>" href="hr_skills.php">Matriz de competências</a>
+                            <a class="<?= $isCurrentFile('hr_job_descriptions.php') ? 'is-active' : '' ?>" href="hr_job_descriptions.php">Cadernos de encargos</a>
                             <span class="gt-nav-label">Operação diária</span>
                             <a class="<?= $isCurrentFile('hr_calendar.php') ? 'is-active' : '' ?>" href="hr_calendar.php">Calendário</a>
-                            <a class="<?= $isCurrentFile('hr_bank.php') ? 'is-active' : '' ?>" href="hr_bank.php">Banco de horas</a>
                             <a class="<?= $isCurrentFile('hr_absences.php') ? 'is-active' : '' ?>" href="hr_absences.php">Ausências</a>
                             <a class="<?= $isCurrentFile('hr_vacations.php') ? 'is-active' : '' ?>" href="hr_vacations.php">Férias</a>
+                            <a class="<?= $isCurrentFile('hr_bank.php') ? 'is-active' : '' ?>" href="hr_bank.php">Banco de horas</a>
                             <a class="<?= $isCurrentFile('hr_alerts.php') ? 'is-active' : '' ?>" href="hr_alerts.php">Alertas RH</a>
                             <a class="<?= $isCurrentFile('hr_evaluations.php') ? 'is-active' : '' ?>" href="hr_evaluations.php">Avaliações</a>
-                            <a class="<?= $isCurrentFile('hr_evaluation_rules.php') ? 'is-active' : '' ?>" href="hr_evaluation_rules.php">Regras de avaliação</a>
                             <a class="<?= $isCurrentFile('resultados.php') ? 'is-active' : '' ?>" href="resultados.php">Resultados</a>
-                            <a class="<?= $isCurrentFile('shopfloor_absence_reasons.php') ? 'is-active' : '' ?>" href="shopfloor_absence_reasons.php">Motivos de ausência</a>
-                            <a class="<?= $isCurrentFile('shopfloor_break_reasons.php') ? 'is-active' : '' ?>" href="shopfloor_break_reasons.php">Pausas e paragens</a>
                             <a class="<?= $isCurrentFile('shopfloor_break_dashboard.php') ? 'is-active' : '' ?>" href="shopfloor_break_dashboard.php">Dashboard de pausas</a>
+                            <a class="<?= $isCurrentFile('shopfloor_break_reasons.php') ? 'is-active' : '' ?>" href="shopfloor_break_reasons.php">Pausas e paragens</a>
+                            <a class="<?= $isCurrentFile('shopfloor_absence_reasons.php') ? 'is-active' : '' ?>" href="shopfloor_absence_reasons.php">Motivos de ausência</a>
+                            <a class="<?= $isCurrentFile('hr_evaluation_rules.php') ? 'is-active' : '' ?>" href="hr_evaluation_rules.php">Regras de avaliação</a>
                         </div>
                     </details>
                 <?php endif; ?>
