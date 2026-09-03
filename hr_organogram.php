@@ -295,6 +295,7 @@ require __DIR__ . '/partials/header.php';
             </select>
             <label class="form-check-label small text-nowrap"><input class="form-check-input" type="checkbox" name="inactive" value="1" <?= $showInactive ? 'checked' : '' ?>> Inativos</label>
             <button class="btn btn-light border fw-bold">Filtrar</button>
+            <a class="btn btn-light border fw-bold" href="hr_organogram_pdf.php?<?= h(http_build_query(['q' => $q, 'department' => $dep, 'schedule_id' => $sch, 'inactive' => $showInactive])) ?>" target="_blank" rel="noopener"><i class="bi bi-file-earmark-pdf"></i> Exportar PDF</a>
             <button class="btn btn-light border fw-bold" type="button" id="orgExportJson">Exportar JSON</button>
             <a class="btn btn-primary fw-bold" href="users.php"><i class="bi bi-plus-lg"></i> Adicionar</a>
         </form>
