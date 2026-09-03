@@ -1311,11 +1311,11 @@ require __DIR__ . '/partials/header.php';
 
         <div class="table-responsive">
             <table class="table table-sm align-middle">
-                <thead><tr><th>#</th><th>Nome</th><th>Utilizador</th><th>Email</th><th>Perfil</th><th>Tipo</th><th>Estado</th><th>Segurança</th><th>Criado</th><th></th></tr></thead>
+                <thead><tr><th>N.º colaborador</th><th>Nome</th><th>Utilizador</th><th>Email</th><th>Perfil</th><th>Tipo</th><th>Estado</th><th>Segurança</th><th>Criado</th><th></th></tr></thead>
                 <tbody>
                 <?php foreach ($users as $user): ?>
                     <tr>
-                        <td><?= (int) $user['id'] ?></td>
+                        <td><?= h(trim((string) ($user['user_number'] ?? '')) !== '' ? (string) $user['user_number'] : '—') ?></td>
                         <td><?= h($user['name']) ?></td>
                         <td><?= h((string) ($user['username'] ?? '')) ?></td>
                         <td><?= h($user['email']) ?></td>
@@ -1448,7 +1448,6 @@ require __DIR__ . '/partials/header.php';
                     <div class="col-md-4"><label class="form-label">Password</label><input class="form-control" type="password" name="password" placeholder="Password" required></div>
                     <div class="col-md-4"><label class="form-label">PIN (6 dígitos)</label><input class="form-control" type="text" name="pin_code" inputmode="numeric" pattern="\d{6}" maxlength="6" placeholder="Opcional"></div>
                     <div class="col-md-4"><label class="form-label">Profissão</label><input class="form-control" name="profession" placeholder="Profissão"></div>
-                    <div class="col-md-4"><label class="form-label">Categoria</label><input class="form-control" name="category" placeholder="Categoria"></div>
                     <div class="col-md-4"><label class="form-label">Responsável</label><input class="form-control" name="manager_name" placeholder="Responsável" list="managerOptions" autocomplete="off"></div>
                     <div class="col-md-4">
                         <label class="form-label">Departamento</label>
@@ -1469,7 +1468,6 @@ require __DIR__ . '/partials/header.php';
                         </select>
                     </div>
                     <div class="col-md-4"><label class="form-label">Data de admissão</label><input class="form-control" type="date" name="hire_date"></div>
-                    <div class="col-md-4"><label class="form-label">Data de nascimento</label><input class="form-control" type="date" name="birth_date"></div>
                     <div class="col-md-4"><label class="form-label">Data saída</label><input class="form-control" type="date" name="termination_date"></div>
                     <div class="col-md-4">
                         <label class="form-label">Fuso horário</label>
@@ -1479,9 +1477,6 @@ require __DIR__ . '/partials/header.php';
                             <?php endforeach; ?>
                         </select>
                     </div>
-                    <div class="col-md-4"><label class="form-label">Telefone</label><input class="form-control" name="phone" placeholder="Telefone"></div>
-                    <div class="col-md-4"><label class="form-label">Telemóvel</label><input class="form-control" name="mobile" placeholder="Telemóvel"></div>
-                    <div class="col-md-4"></div>
                     <div class="col-12"><label class="form-label">Observações</label><textarea class="form-control" name="notes" rows="3" placeholder="Observações"></textarea></div>
                     </div>
                 </div>
@@ -1489,6 +1484,9 @@ require __DIR__ . '/partials/header.php';
                 <div class="user-form-section">
                     <div class="user-form-section-title"><i class="bi bi-person-vcard"></i> Dados pessoais e civis</div>
                     <div class="row g-3">
+                        <div class="col-md-4"><label class="form-label">Data de nascimento</label><input class="form-control" type="date" name="birth_date"></div>
+                        <div class="col-md-4"><label class="form-label">Telefone</label><input class="form-control" name="phone" placeholder="Telefone"></div>
+                        <div class="col-md-4"><label class="form-label">Telemóvel</label><input class="form-control" name="mobile" placeholder="Telemóvel"></div>
                         <div class="col-md-6"><label class="form-label">Email pessoal</label><input class="form-control" type="email" name="personal_email" placeholder="nome@exemplo.pt" aria-describedby="personalEmailHelp"></div>
                         <div class="col-md-6 d-flex align-items-end"><div id="personalEmailHelp" class="form-text mb-2">As comunicações pessoais de RH serão enviadas preferencialmente para este endereço.</div></div>
                         <div class="col-md-3"><label class="form-label">NIF</label><input class="form-control" name="tax_number" inputmode="numeric" maxlength="9" placeholder="NIF"></div>
@@ -1565,7 +1563,6 @@ require __DIR__ . '/partials/header.php';
                     <div class="col-md-4"><label class="form-label">Nova password (opcional)</label><input class="form-control" type="password" name="password" placeholder="Nova password (opcional)"></div>
                     <div class="col-md-4"><label class="form-label">Novo PIN (6 dígitos)</label><input class="form-control" type="text" name="pin_code" inputmode="numeric" pattern="\d{6}" maxlength="6" placeholder="Opcional"></div>
                     <div class="col-md-4"><label class="form-label">Profissão</label><input class="form-control" name="profession" value="<?= h((string) ($user['profession'] ?? '')) ?>" placeholder="Profissão"></div>
-                    <div class="col-md-4"><label class="form-label">Categoria</label><input class="form-control" name="category" value="<?= h((string) ($user['category'] ?? '')) ?>" placeholder="Categoria"></div>
                     <div class="col-md-4"><label class="form-label">Responsável</label><input class="form-control" name="manager_name" value="<?= h((string) ($user['manager_name'] ?? '')) ?>" placeholder="Responsável" list="managerOptions" autocomplete="off"></div>
                     <div class="col-md-4">
                         <label class="form-label">Departamento</label>
@@ -1586,7 +1583,6 @@ require __DIR__ . '/partials/header.php';
                         </select>
                     </div>
                     <div class="col-md-4"><label class="form-label">Data de admissão</label><input class="form-control" type="date" name="hire_date" value="<?= h((string) ($user['hire_date'] ?? '')) ?>"></div>
-                    <div class="col-md-4"><label class="form-label">Data de nascimento</label><input class="form-control" type="date" name="birth_date" value="<?= h((string) ($user['birth_date'] ?? '')) ?>"></div>
                     <div class="col-md-4"><label class="form-label">Data saída</label><input class="form-control" type="date" name="termination_date" value="<?= h((string) ($user['termination_date'] ?? '')) ?>"></div>
                     <div class="col-md-4">
                         <label class="form-label">Fuso horário</label>
@@ -1596,9 +1592,6 @@ require __DIR__ . '/partials/header.php';
                             <?php endforeach; ?>
                         </select>
                     </div>
-                    <div class="col-md-4"><label class="form-label">Telefone</label><input class="form-control" name="phone" value="<?= h((string) ($user['phone'] ?? '')) ?>" placeholder="Telefone"></div>
-                    <div class="col-md-4"><label class="form-label">Telemóvel</label><input class="form-control" name="mobile" value="<?= h((string) ($user['mobile'] ?? '')) ?>" placeholder="Telemóvel"></div>
-                    <div class="col-md-4"></div>
                     <div class="col-12"><label class="form-label">Observações</label><textarea class="form-control" name="notes" rows="3" placeholder="Observações"><?= h((string) ($user['notes'] ?? '')) ?></textarea></div>
                     </div>
                 </div>
@@ -1606,6 +1599,9 @@ require __DIR__ . '/partials/header.php';
                 <div class="user-form-section">
                     <div class="user-form-section-title"><i class="bi bi-person-vcard"></i> Dados pessoais e civis</div>
                     <div class="row g-3">
+                        <div class="col-md-4"><label class="form-label">Data de nascimento</label><input class="form-control" type="date" name="birth_date" value="<?= h((string) ($user['birth_date'] ?? '')) ?>"></div>
+                        <div class="col-md-4"><label class="form-label">Telefone</label><input class="form-control" name="phone" value="<?= h((string) ($user['phone'] ?? '')) ?>" placeholder="Telefone"></div>
+                        <div class="col-md-4"><label class="form-label">Telemóvel</label><input class="form-control" name="mobile" value="<?= h((string) ($user['mobile'] ?? '')) ?>" placeholder="Telemóvel"></div>
                         <div class="col-md-6"><label class="form-label">Email pessoal</label><input class="form-control" type="email" name="personal_email" value="<?= h((string) ($user['personal_email'] ?? '')) ?>" aria-describedby="personalEmailHelp<?= (int) $user['id'] ?>"></div>
                         <div class="col-md-6 d-flex align-items-end"><div id="personalEmailHelp<?= (int) $user['id'] ?>" class="form-text mb-2">As comunicações pessoais de RH serão enviadas preferencialmente para este endereço.</div></div>
                         <div class="col-md-3"><label class="form-label">NIF</label><input class="form-control" name="tax_number" inputmode="numeric" maxlength="9" value="<?= h((string) ($user['tax_number'] ?? '')) ?>"></div>
