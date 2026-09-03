@@ -83,6 +83,24 @@ function gt_save_machine_uploads(PDO $pdo, int $machineId, int $userId, array $f
     return $count;
 }
 
+/**
+ * Return machine identifiers without using an arrow-function callback.
+ *
+ * Some production hosts still parse this page with a PHP runtime that does not
+ * recognise the `fn` token. Keeping this extraction as a regular function also
+ * makes the minimum syntax requirement explicit and prevents that parse error
+ * from being reintroduced during refactors.
+ */
+function gt_machine_ids(array $machines): array
+{
+    $machineIds = [];
+    foreach ($machines as $machine) {
+        $machineIds[] = (int) $machine['id'];
+    }
+
+    return $machineIds;
+}
+
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     if (!validate_csrf_or_abort(false)) {
         $flashError = 'Pedido inválido.';
@@ -152,10 +170,7 @@ if ($dep) { $where[] = 'm.department_id=?'; $args[] = $dep; }
 $st = $pdo->prepare('SELECT m.*,d.name department_name,u.name owner_name,(SELECT COUNT(*) FROM hr_machine_competencies c JOIN users uu ON uu.id=c.user_id WHERE c.machine_id=m.id AND c.level>=3 AND COALESCE(uu.is_active,1)=1 AND c.deleted_at IS NULL) autonomous FROM erp_machines m LEFT JOIN hr_departments d ON d.id=m.department_id LEFT JOIN users u ON u.id=m.owner_user_id WHERE ' . implode(' AND ', $where) . ' ORDER BY m.is_active DESC,m.code');
 $st->execute($args);
 $machines = $st->fetchAll(PDO::FETCH_ASSOC);
-$machineIds = [];
-foreach ($machines as $machineForAttachment) {
-    $machineIds[] = (int) $machineForAttachment['id'];
-}
+$machineIds = gt_machine_ids($machines);
 $attachmentsByMachine = [];
 if ($machineIds) {
     $placeholders = implode(',', array_fill(0, count($machineIds), '?'));
