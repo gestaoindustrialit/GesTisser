@@ -18,6 +18,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     } else {
         $allowNegativeStock = isset($_POST['allow_negative_stock']) && $_POST['allow_negative_stock'] === '1';
         $codePattern = trim((string) ($_POST['raw_material_code_pattern'] ?? ''));
+        $laborHourlyRateInput = str_replace(',', '.', trim((string) ($_POST['labor_hourly_rate'] ?? '')));
+        $laborHourlyRate = is_numeric($laborHourlyRateInput) ? (float) $laborHourlyRateInput : -1;
         $sequenceIds = (array) ($_POST['sequence_id'] ?? []);
         $prefixes = (array) ($_POST['sequence_prefix'] ?? []);
         $nextNumbers = (array) ($_POST['sequence_next_number'] ?? []);
@@ -26,12 +28,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
         if ($codePattern === '' || strpos($codePattern, '{seq}') === false) {
             $flashError = 'O padrão de código das matérias-primas deve incluir {seq}.';
+        } elseif ($laborHourlyRate < 0) {
+            $flashError = 'Indique um valor de mão de obra por hora válido.';
         } else {
             try {
                 $pdo->beginTransaction();
                 $saveSetting = $pdo->prepare('INSERT INTO erp_settings(key,value,updated_by,updated_at) VALUES (?,?,?,CURRENT_TIMESTAMP) ON CONFLICT(key) DO UPDATE SET value=excluded.value, updated_by=excluded.updated_by, updated_at=CURRENT_TIMESTAMP');
                 $saveSetting->execute(['allow_negative_stock', $allowNegativeStock ? '1' : '0', $userId]);
                 $saveSetting->execute(['raw_material_code_pattern', $codePattern, $userId]);
+                $saveSetting->execute(['labor_hourly_rate', number_format($laborHourlyRate, 2, '.', ''), $userId]);
 
                 $saveSequence = $pdo->prepare('UPDATE erp_number_sequences SET prefix=?, next_number=?, padding=?, suffix=?, updated_at=CURRENT_TIMESTAMP WHERE id=?');
                 foreach ($sequenceIds as $index => $rawId) {
@@ -46,7 +51,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                         $id,
                     ]);
                 }
-                erp_audit($pdo, $userId, 'update', 'erp_settings', null, [], ['allow_negative_stock' => $allowNegativeStock, 'raw_material_code_pattern' => $codePattern]);
+                erp_audit($pdo, $userId, 'update', 'erp_settings', null, [], ['allow_negative_stock' => $allowNegativeStock, 'raw_material_code_pattern' => $codePattern, 'labor_hourly_rate' => $laborHourlyRate]);
                 $pdo->commit();
                 $flashSuccess = 'Configuração do ERP atualizada com sucesso.';
             } catch (Throwable $exception) {
@@ -84,12 +89,20 @@ require __DIR__ . '/partials/header.php';
     <div class="card-body p-4">
         <h2 class="h5">Regras de stock e codificação</h2>
         <div class="row g-3 align-items-end">
-            <div class="col-lg-7">
+            <div class="col-lg-6">
                 <label class="form-label" for="raw-material-code-pattern">Padrão do código de matéria-prima</label>
                 <input class="form-control" id="raw-material-code-pattern" name="raw_material_code_pattern" required value="<?= h((string) ($settings['raw_material_code_pattern'] ?? '{tipo}{caracteristica}{largura}{gramagem}{seq}')) ?>">
                 <div class="form-text">Marcadores disponíveis: {tipo}, {caracteristica}, {largura}, {gramagem} e {seq}. O marcador {seq} é obrigatório.</div>
             </div>
-            <div class="col-lg-5 pb-2">
+            <div class="col-lg-3">
+                <label class="form-label" for="labor-hourly-rate">Mão de obra por hora</label>
+                <div class="input-group">
+                    <input class="form-control" type="number" min="0" step="0.01" id="labor-hourly-rate" name="labor_hourly_rate" required value="<?= h(number_format((float) ($settings['labor_hourly_rate'] ?? 0), 2, '.', '')) ?>">
+                    <span class="input-group-text">€/h</span>
+                </div>
+                <div class="form-text">Valor base aplicado ao cálculo dos custos de mão de obra.</div>
+            </div>
+            <div class="col-lg-3 pb-2">
                 <input type="hidden" name="allow_negative_stock" value="0">
                 <div class="form-check form-switch">
                     <input class="form-check-input" type="checkbox" role="switch" id="allow-negative-stock" name="allow_negative_stock" value="1" <?= ($settings['allow_negative_stock'] ?? '0') === '1' ? 'checked' : '' ?>>
