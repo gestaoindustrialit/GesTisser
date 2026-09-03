@@ -872,6 +872,34 @@ function taskforce_format_minutes_signed(int $minutes): string
     return sprintf('%s%02d:%02d', $prefix, intdiv($absMinutes, 60), $absMinutes % 60);
 }
 
+function taskforce_daily_hour_bank_minutes(int $workedMinutes, bool $isWorkday): int
+{
+    if (!$isWorkday) {
+        return 0;
+    }
+
+    return max(0, $workedMinutes) - (8 * 60);
+}
+
+function taskforce_pdf_image_data_uri(string $imagePath): string
+{
+    if ($imagePath === '' || !is_file($imagePath)) {
+        return '';
+    }
+
+    $imageBinary = @file_get_contents($imagePath);
+    $imageInfo = @getimagesize($imagePath);
+    $imageMime = is_array($imageInfo) ? trim((string) ($imageInfo['mime'] ?? '')) : '';
+    if ($imageMime === '' && strtolower((string) pathinfo($imagePath, PATHINFO_EXTENSION)) === 'svg') {
+        $imageMime = 'image/svg+xml';
+    }
+    if (!is_string($imageBinary) || $imageBinary === '' || !str_starts_with($imageMime, 'image/')) {
+        return '';
+    }
+
+    return 'data:' . $imageMime . ';base64,' . base64_encode($imageBinary);
+}
+
 function taskforce_month_label_pt(DateTimeImmutable $date): string
 {
     $months = [
@@ -1005,17 +1033,16 @@ function taskforce_generate_monthly_native_pdf(array $reportData): string
     }
 
     $content = "1 1 1 rg 0 0 595 842 re f\n";
-    $content .= "0.125 0.13 0.14 rg 0 754 595 88 re f\n";
-    $content .= "0.22 0.68 0.18 rg 0 748 595 6 re f\n";
-    $content .= $text(30, 800, strtoupper((string) ($reportData['company_name'] ?? 'TISSER')), 18, 'F2', '1 1 1');
-    $content .= $text(30, 780, 'RECURSOS HUMANOS  /  CONTROLO DE ASSIDUIDADE', 7, 'F2', '0.22 0.68 0.18');
+    $content .= "0.176 0.412 0.631 rg 0 748 595 6 re f\n";
+    $content .= $text(30, 800, 'TISSER', 18, 'F2', '0.176 0.412 0.631');
+    $content .= $text(30, 780, 'RECURSOS HUMANOS  /  CONTROLO DE ASSIDUIDADE', 7, 'F2', '0.176 0.412 0.631');
     if ($logoJpeg !== null) {
         $drawWidth = min(145, 54 * ($logoWidth / $logoHeight));
         $drawHeight = $drawWidth * ($logoHeight / $logoWidth);
         $content .= sprintf("q %.2F 0 0 %.2F %.2F %.2F cm /Logo Do Q\n", $drawWidth, $drawHeight, 565 - $drawWidth, 775);
     }
     $content .= $text(30, 720, 'Mapa mensal de picagens', 19, 'F2');
-    $content .= $text(30, 700, (string) ($reportData['month'] ?? ''), 10, 'F2', '0.22 0.68 0.18');
+    $content .= $text(30, 700, (string) ($reportData['month'] ?? ''), 10, 'F2', '0.176 0.412 0.631');
     $content .= $text(30, 680, 'Colaborador', 7, 'F2', '0.42 0.45 0.44');
     $content .= $text(30, 665, (string) ($reportData['employee'] ?? '-'), 10, 'F2');
     $content .= $text(260, 680, 'PERIODO', 7, 'F2', '0.42 0.45 0.44');
@@ -1028,7 +1055,7 @@ function taskforce_generate_monthly_native_pdf(array $reportData): string
         ['Picagens', 165, 220, 49], ['BH', 385, 42, 8], ['Justificacao', 427, 138, 27],
     ];
     $tableTop = 635;
-    $content .= "0.22 0.68 0.18 rg 30 {$tableTop} 535 20 re f\n";
+    $content .= "0.176 0.412 0.631 rg 30 {$tableTop} 535 20 re f\n";
     foreach ($columns as $column) {
         $content .= $text($column[1] + 5, $tableTop + 7, $column[0], 7, 'F2', '1 1 1');
     }
@@ -1275,7 +1302,7 @@ function taskforce_generate_monthly_attendance_fpdf_pdf(array $reportData)
     $pdf->SetAutoPageBreak(true, 12);
     $pdf->AddPage();
     $pdf->SetDrawColor(220, 226, 234);
-    $pdf->SetFillColor(245, 247, 250);
+    $pdf->SetFillColor(45, 105, 161);
     $pdf->SetTextColor(31, 41, 55);
 
     $companyName = (string) ($reportData['company_name'] ?? 'GesTisser');
@@ -1324,12 +1351,14 @@ function taskforce_generate_monthly_attendance_fpdf_pdf(array $reportData)
         ['Justificação', 59],
     ];
     $pdf->SetFont('Arial', 'B', 8.2);
+    $pdf->SetTextColor(255, 255, 255);
     foreach ($headers as list($label, $width)) {
         $pdf->Cell($width, 7, $toPdfText($label), 1, 0, 'L', true);
     }
     $pdf->Ln();
 
     $pdf->SetFont('Arial', '', 7.4);
+    $pdf->SetTextColor(31, 41, 55);
     $lineHeight = 5.4;
     foreach ((array) ($reportData['rows'] ?? []) as $row) {
         $slotsText = implode(' ', (array) ($row['slots'] ?? []));
@@ -1345,11 +1374,13 @@ function taskforce_generate_monthly_attendance_fpdf_pdf(array $reportData)
         if ($pdf->GetY() > 268) {
             $pdf->AddPage();
             $pdf->SetFont('Arial', 'B', 8.2);
+            $pdf->SetTextColor(255, 255, 255);
             foreach ($headers as list($label, $width)) {
                 $pdf->Cell($width, 7, $toPdfText($label), 1, 0, 'L', true);
             }
             $pdf->Ln();
             $pdf->SetFont('Arial', '', 7.4);
+            $pdf->SetTextColor(31, 41, 55);
         }
 
         foreach ($headers as $idx => $header) {
@@ -1658,28 +1689,6 @@ function taskforce_generate_monthly_attendance_report(PDO $pdo, array $user, Dat
         }
 
         $scheduleApplies = $schedule !== null && in_array((string) $weekday, array_filter(explode(',', (string) ($schedule['weekdays_mask'] ?? ''))), true);
-        $targetMinutes = 0;
-        if ($scheduleApplies) {
-            foreach ([['start_time', 'end_time'], ['second_start_time', 'second_end_time']] as $periodColumns) {
-                $shiftStart = trim((string) ($schedule[$periodColumns[0]] ?? ''));
-                $shiftEnd = trim((string) ($schedule[$periodColumns[1]] ?? ''));
-                if (preg_match('/^\d{2}:\d{2}$/', $shiftStart) !== 1 || preg_match('/^\d{2}:\d{2}$/', $shiftEnd) !== 1) {
-                    continue;
-                }
-
-                $shiftStartParts = array_map('intval', explode(':', $shiftStart));
-                $shiftEndParts = array_map('intval', explode(':', $shiftEnd));
-                $startHour = $shiftStartParts[0];
-                $startMinute = $shiftStartParts[1];
-                $endHour = $shiftEndParts[0];
-                $endMinute = $shiftEndParts[1];
-                $periodMinutes = (($endHour * 60) + $endMinute) - (($startHour * 60) + $startMinute);
-                if ($periodMinutes > 0) {
-                    $targetMinutes += $periodMinutes;
-                }
-            }
-            $targetMinutes = max(0, $targetMinutes - (int) ($schedule['break_minutes'] ?? 0));
-        }
 
         $justification = '';
         $typeLabel = count($dayEntries) >= 4 ? 'Normal' : (count($dayEntries) > 0 ? 'Parcial' : 'Folga');
@@ -1723,7 +1732,10 @@ function taskforce_generate_monthly_attendance_report(PDO $pdo, array $user, Dat
                 $justification = 'Ajuste BH: ' . (string) $overrideMap[$date]['reason'];
             }
         } elseif ($scheduleApplies || $dayEntries) {
-            $bhMinutes = $effectiveMinutes - $targetMinutes;
+            // O banco de horas diário é sempre apurado contra uma jornada de
+            // oito horas; o horário configurado serve apenas para identificar
+            // os dias de trabalho, não para alterar este limiar.
+            $bhMinutes = taskforce_daily_hour_bank_minutes($effectiveMinutes, true);
         }
 
         $totalWorkedMinutes += $effectiveMinutes;
@@ -1793,6 +1805,8 @@ function taskforce_generate_monthly_attendance_report(PDO $pdo, array $user, Dat
     $lines[] = '- Este relatório é informativo e reflete os registos validados/guardados no GesTisser.';
     $lines[] = '- Caso identifique alguma divergência, contacte RH para análise/retificação.';
 
+    // Reutilizar o logótipo configurado para relatórios, que é também o que
+    // acompanha o conteúdo HTML enviado por email.
     $logoPath = app_setting($pdo, 'logo_report_dark', '');
     $logoUrl = '';
     if ($logoPath !== '') {
@@ -1806,6 +1820,14 @@ function taskforce_generate_monthly_attendance_report(PDO $pdo, array $user, Dat
         }
     }
     $logoRenderSrc = $logoUrl;
+    if ($logoFilePath !== '') {
+        $embeddedLogo = taskforce_pdf_image_data_uri($logoFilePath);
+        if ($embeddedLogo !== '') {
+            // Incorporar a imagem no documento: os motores de PDF não têm de
+            // conseguir aceder ao URL público para renderizar o logótipo.
+            $logoRenderSrc = $embeddedLogo;
+        }
+    }
     if (
         $logoFilePath !== ''
         && function_exists('imagecreatetruecolor')
@@ -1919,15 +1941,16 @@ function taskforce_generate_monthly_attendance_report(PDO $pdo, array $user, Dat
     $htmlBody = '<!doctype html><html><head><meta charset="utf-8"><style>'
         . $ralewayFontCss
         . 'body{font-family:"Raleway",Arial,sans-serif;color:#1f2937;font-size:10.5px;margin:22px 24px 18px;}'
-        . '.pdf-header{width:100%;border-collapse:collapse;border-bottom:1px solid #dbe2ea;margin-bottom:12px;padding-bottom:6px;}'
-        . '.pdf-header td{vertical-align:top;padding-bottom:6px;}'
-        . '.brand-name{font-size:15px;font-weight:700;color:#0f172a;margin-bottom:3px;}'
+        . '.pdf-header{width:100%;border-collapse:collapse;border-bottom:4px solid #2D69A1;margin-bottom:12px;padding-bottom:8px;background:#fff;}'
+        . '.pdf-header td{vertical-align:middle;padding:6px 0 9px;}'
+        . '.brand-name{font-size:15px;font-weight:700;color:#2D69A1;margin-bottom:3px;}'
         . '.brand-contacts{color:#6b7280;font-size:9.2px;line-height:1.35;}'
         . '.header{width:100%;border-collapse:collapse;margin-bottom:4px;}'
         . '.header td{vertical-align:top;}'
         . '.logo{text-align:right;}'
         . '.pdf-header .logo img,.header .logo img{max-height:36px;max-width:220px;width:auto;height:auto;display:block;margin-left:auto;}'
-        . 'h1{font-size:16px;margin:0 0 6px;font-weight:700;}'
+        . 'h1{font-size:16px;margin:0 0 6px;font-weight:700;color:#212124;}'
+        . '.month-label{color:#2D69A1;font-size:11px;font-weight:700;margin:0 0 7px;}'
         . '.meta{margin:2px 0;}'
         . '.metric-grid{width:100%;border-collapse:separate;border-spacing:10px 0;margin:6px 0 14px;}'
         . '.metric-grid td{background:#f8fafc;border:1px solid #e5e7eb;border-radius:8px;padding:9px 10px;width:20%;}'
@@ -1935,7 +1958,7 @@ function taskforce_generate_monthly_attendance_report(PDO $pdo, array $user, Dat
         . '.metric-grid .value{display:block;color:#0f172a;font-size:12px;font-weight:700;margin-top:5px;}'
         . '.data-table{width:100%;border-collapse:collapse;margin-top:10px;font-size:10px;}'
         . '.data-table th,.data-table td{border:1px solid #d1d5db;padding:5px;vertical-align:top;}'
-        . '.data-table th{background:#f3f4f6;}'
+        . '.data-table th{background:#2D69A1;color:#fff;font-weight:700;}'
         . '.pdf-footer{margin-top:10px;padding-top:7px;border-top:1px solid #dbe2ea;color:#6b7280;font-size:8.8px;line-height:1.35;}'
         . '.pdf-footer .footer-title{display:block;color:#334155;font-weight:700;margin-bottom:2px;font-size:9px;}'
         . '</style></head><body>'
@@ -1945,6 +1968,7 @@ function taskforce_generate_monthly_attendance_report(PDO $pdo, array $user, Dat
         . '</td></tr></table>'
         . '<table class="header" role="presentation"><tr>'
         . '<td><h1>Mapa mensal de picagens</h1>'
+        . '<p class="month-label">' . h($reportMonthLabel) . '</p>'
         . '<p class="meta"><strong>Período:</strong> ' . h($periodStart->format('d/m/Y') . ' - ' . $periodEnd->format('d/m/Y')) . '</p>'
         . '<p class="meta"><strong>Colaborador:</strong> ' . h((string) ($user['name'] ?? '')) . '</p>'
         . '<p class="meta"><strong>Número:</strong> ' . h($userNumberLabel) . '</p>'
