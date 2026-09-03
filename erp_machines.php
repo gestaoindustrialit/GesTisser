@@ -204,21 +204,23 @@ $pageTitle = 'Máquinas e equipamentos';
 $bodyClass = 'machines-page';
 require __DIR__ . '/partials/header.php';
 ?>
-<div class="container-fluid py-4 machines-shell">
+<div class="machines-shell">
     <?php if ($flashSuccess): ?><div class="alert alert-success"><?= h($flashSuccess) ?></div><?php endif; ?>
     <?php if ($flashError): ?><div class="alert alert-danger"><?= h($flashError) ?></div><?php endif; ?>
-
-    <form class="machines-toolbar mb-3">
-        <input class="form-control" name="q" value="<?= h($q) ?>" placeholder="Pesquisar máquina, marca, modelo, setor ou fornecedor...">
-        <select class="form-select" name="status"><option value="">Todos os estados</option><?php foreach ($statusLabels as $k => $v): ?><option value="<?= h($k) ?>" <?= $status === $k ? 'selected' : '' ?>><?= h($v) ?></option><?php endforeach; ?></select>
-        <select class="form-select" name="department_id"><option value="">Todos os departamentos</option><?php foreach ($deps as $d): ?><option value="<?= (int) $d['id'] ?>" <?= $dep === (int) $d['id'] ? 'selected' : '' ?>><?= h($d['name']) ?></option><?php endforeach; ?></select>
-        <button class="btn btn-primary" type="submit">Filtrar</button>
-        <button class="btn btn-primary" type="button" data-bs-toggle="modal" data-bs-target="#machineModal">+ Máquina</button>
-    </form>
-
-    <div class="row g-3 mb-3"><?php foreach ($cards as $card): ?><div class="col-md-3"><article class="machine-stat-card"><span><?= h($card['label']) ?></span><strong><?= (int) $card['value'] ?></strong><small><?= h($card['hint']) ?></small></article></div><?php endforeach; ?></div>
-
-    <div class="machines-grid">
+    <div class="card shadow-sm soft-card machines-card">
+        <div class="card-header bg-white border-0 pt-4 px-4 d-flex justify-content-between align-items-center">
+            <h1 class="h4 mb-0">Máquinas e equipamentos</h1>
+            <button class="btn btn-sm btn-primary" type="button" data-bs-toggle="modal" data-bs-target="#machineModal"><i class="bi bi-plus-lg"></i> Nova máquina</button>
+        </div>
+        <div class="card-body px-4 pb-4">
+            <form class="machines-toolbar mb-3">
+                <label class="machines-search"><span>Pesquisar máquinas</span><input class="form-control form-control-sm" type="search" name="q" value="<?= h($q) ?>" placeholder="Código, designação, marca, modelo, setor ou fornecedor"></label>
+                <label><span>Estado</span><select class="form-select form-select-sm" name="status"><option value="">Todos</option><?php foreach ($statusLabels as $k => $v): ?><option value="<?= h($k) ?>" <?= $status === $k ? 'selected' : '' ?>><?= h($v) ?></option><?php endforeach; ?></select></label>
+                <label><span>Departamento</span><select class="form-select form-select-sm" name="department_id"><option value="">Todos</option><?php foreach ($deps as $d): ?><option value="<?= (int) $d['id'] ?>" <?= $dep === (int) $d['id'] ? 'selected' : '' ?>><?= h($d['name']) ?></option><?php endforeach; ?></select></label>
+                <div class="machines-filter-actions"><a class="btn btn-sm btn-outline-secondary" href="erp_machines.php">Limpar filtros</a><button class="btn btn-sm btn-primary" type="submit">Aplicar filtros</button></div>
+            </form>
+            <div class="row g-2 mb-3"><?php foreach ($cards as $card): ?><div class="col-6 col-lg-3"><article class="machine-stat-card"><span><?= h($card['label']) ?></span><strong><?= (int) $card['value'] ?></strong><small><?= h($card['hint']) ?></small></article></div><?php endforeach; ?></div>
+            <div class="machines-grid">
         <?php foreach ($machines as $m): ?>
             <article class="machine-card">
                 <div class="machine-card-head"><div><span class="machine-status-pill"><?= h($statusLabels[$m['status']] ?? $m['status']) ?></span><h2><?= h($m['code'] . ' · ' . $m['name']) ?></h2><p><?= h(trim(($m['brand'] ?? '') . ' ' . ($m['model'] ?? '')) ?: 'Marca e modelo por definir') ?></p></div><span class="criticality <?= h($m['criticality'] ?? 'medium') ?>"><?= h($criticalityLabels[$m['criticality']] ?? $m['criticality']) ?></span></div>
@@ -229,13 +231,15 @@ require __DIR__ . '/partials/header.php';
             </article>
         <?php endforeach; ?>
         <?php if (!$machines): ?><div class="machine-empty">Sem máquinas para os filtros selecionados.</div><?php endif; ?>
+            </div>
+        </div>
     </div>
 </div>
 
 <div class="modal fade machine-modal" id="machineModal" tabindex="-1" aria-labelledby="machineModalLabel" aria-hidden="true">
-    <div class="modal-dialog modal-dialog-centered modal-xl"><div class="modal-content"><form method="post" id="machineForm" enctype="multipart/form-data"><?= csrf_input() ?><input type="hidden" name="action" value="save"><input type="hidden" name="id" value="">
-        <div class="modal-header"><div><p>Ativos produtivos</p><h2 class="modal-title" id="machineModalLabel">Nova máquina</h2></div><button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Fechar"></button></div>
-        <div class="modal-body"><section class="machine-upload-panel"><div><span>Ficheiros da máquina</span><strong>Carregar manuais, fichas técnicas, certificados ou fotos</strong><small>PDF, imagens, Word, Excel, CSV ou TXT até 10 MB por ficheiro.</small></div><label class="machine-upload-drop"><i class="bi bi-cloud-arrow-up"></i><input class="form-control" type="file" name="machine_files[]" multiple><span>Selecionar ficheiros</span></label><div class="machine-existing-files" id="machineExistingFiles"></div></section><div class="machine-form-grid">
+    <div class="modal-dialog modal-dialog-centered modal-dialog-scrollable modal-xl"><div class="modal-content"><form method="post" id="machineForm" enctype="multipart/form-data"><?= csrf_input() ?><input type="hidden" name="action" value="save"><input type="hidden" name="id" value="">
+        <div class="modal-header"><h2 class="modal-title" id="machineModalLabel">Nova máquina</h2><button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Fechar"></button></div>
+        <div class="modal-body"><section class="machine-form-section"><h3 class="machine-form-section-title"><i class="bi bi-gear"></i> Dados da máquina</h3><div class="machine-form-grid">
             <label><span>Código interno</span><input class="form-control" type="text" name="code" required></label>
             <label><span>Designação</span><input class="form-control" type="text" name="name" required></label>
             <label><span>Marca</span><input class="form-control" type="text" name="brand"></label>
@@ -254,8 +258,8 @@ require __DIR__ . '/partials/header.php';
             <label><span>Data de aquisição</span><input class="form-control" type="date" name="purchase_date"></label>
             <label><span>Próxima manutenção</span><input class="form-control" type="date" name="next_maintenance_date"></label>
             <label class="full"><span>Manual / ligação documental</span><input class="form-control" type="url" name="manual_url"></label>
-            <label class="full"><span>Características, riscos, limitações e observações</span><textarea class="form-control" name="notes" rows="5"></textarea></label>
-        </div></div>
+            <label class="full"><span>Características, riscos, limitações e observações</span><textarea class="form-control" name="notes" rows="4"></textarea></label>
+        </div></section><section class="machine-form-section"><h3 class="machine-form-section-title"><i class="bi bi-paperclip"></i> Documentos da máquina</h3><div class="machine-upload-panel"><div><strong>Manuais, fichas técnicas, certificados ou fotos</strong><small>PDF, imagens, Word, Excel, CSV ou TXT até 10 MB por ficheiro.</small></div><label class="machine-upload-drop"><i class="bi bi-cloud-arrow-up"></i><input class="form-control form-control-sm" type="file" name="machine_files[]" multiple><span>Selecionar ficheiros</span></label><div class="machine-existing-files" id="machineExistingFiles"></div></div></section></div>
         <div class="modal-footer"><button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancelar</button><button class="btn btn-primary">Guardar</button></div>
     </form></div></div>
 </div>
