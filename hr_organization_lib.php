@@ -1,5 +1,8 @@
 <?php
-require_once __DIR__ . '/config.php';
+// Load the complete application helper layer. Loading config.php directly leaves
+// shared view helpers (for example, has_shopfloor_only_navigation()) undefined
+// when the organogram renders the global header.
+require_once __DIR__ . '/helpers.php';
 
 function gt_column_exists(PDO $pdo, string $table, string $column): bool { foreach ($pdo->query('PRAGMA table_info(' . $table . ')')->fetchAll(PDO::FETCH_ASSOC) as $r) { if (($r['name'] ?? '') === $column) return true; } return false; }
 function gt_table_exists(PDO $pdo, string $table): bool { $s=$pdo->prepare("SELECT 1 FROM sqlite_master WHERE type='table' AND name=? LIMIT 1"); $s->execute([$table]); return (bool)$s->fetchColumn(); }
