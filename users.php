@@ -88,7 +88,10 @@ function build_initials(string $name): string
 
 
 
-function save_user_document_upload(array $file, int $targetUserId, int $uploadedBy, string $documentType, string $notes): void
+// Do not add a void return type here: on the PHP 7.0 runtime still used in
+// production, "void" is interpreted as a class name and an implicit return
+// raises an error after the file and database record have already been saved.
+function save_user_document_upload(array $file, int $targetUserId, int $uploadedBy, string $documentType, string $notes)
 {
     if ($targetUserId <= 0) {
         throw new RuntimeException('Utilizador inválido para anexar documento.');
