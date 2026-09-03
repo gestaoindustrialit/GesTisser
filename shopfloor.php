@@ -1,5 +1,6 @@
 <?php
 require_once __DIR__ . '/helpers.php';
+require_once __DIR__ . '/app/Services/ShopfloorAttachment.php';
 require_login();
 
 $userId = (int) $_SESSION['user_id'];
@@ -332,39 +333,15 @@ $requestType,
         $hasAttachmentUpload = is_array($attachmentFile) && (($attachmentFile['error'] ?? UPLOAD_ERR_NO_FILE) !== UPLOAD_ERR_NO_FILE);
 
         if ($hasAttachmentUpload) {
-            $allowedAttachmentMimeTypes = [
-                'image/jpeg' => 'jpg',
-                'image/png' => 'png',
-                'image/webp' => 'webp',
-                'application/pdf' => 'pdf',
-            ];
-
             $uploadError = (int) ($attachmentFile['error'] ?? UPLOAD_ERR_NO_FILE);
             if ($uploadError !== UPLOAD_ERR_OK) {
                 $flashError = 'Não foi possível carregar o ficheiro da justificação.';
             } elseif (!isset($attachmentFile['tmp_name']) || !is_string($attachmentFile['tmp_name']) || !is_file($attachmentFile['tmp_name'])) {
                 $flashError = 'O ficheiro submetido é inválido.';
             } else {
-                $detectedMimeType = '';
-                if (function_exists('finfo_open')) {
-                    $finfo = finfo_open(FILEINFO_MIME_TYPE);
-                    if ($finfo !== false) {
-                        $finfoMimeType = finfo_file($finfo, (string) $attachmentFile['tmp_name']);
-                        if (is_string($finfoMimeType)) {
-                            $detectedMimeType = $finfoMimeType;
-                        }
-                        finfo_close($finfo);
-                    }
-                }
+                $attachmentExtension = ShopfloorAttachment::detectExtension((string) $attachmentFile['tmp_name']);
 
-                if ($detectedMimeType === '' && function_exists('mime_content_type')) {
-                    $mimeType = mime_content_type((string) $attachmentFile['tmp_name']);
-                    if (is_string($mimeType)) {
-                        $detectedMimeType = $mimeType;
-                    }
-                }
-
-                if (!isset($allowedAttachmentMimeTypes[$detectedMimeType])) {
+                if ($attachmentExtension === null) {
                     $flashError = 'Formato de ficheiro inválido. Use PDF, JPG, PNG ou WEBP.';
                 } else {
                     $uploadDir = __DIR__ . '/assets/uploads/justifications';
@@ -376,7 +353,7 @@ $requestType,
                         'justification_%d_%s.%s',
                         $userId,
                         bin2hex(random_bytes(6)),
-                        $allowedAttachmentMimeTypes[$detectedMimeType]
+                        $attachmentExtension
                     );
                     $targetPath = $uploadDir . '/' . $filename;
 
