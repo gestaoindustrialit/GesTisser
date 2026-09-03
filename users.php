@@ -1153,7 +1153,7 @@ if ($isAllPerPage) {
 
 $usersBaseSql = 'SELECT id, name, username, email, is_admin, access_profile, is_active, must_change_password, pin_only_login, created_at, user_type, user_number, title, short_name, initials, email_notifications_active, sms_notifications_active, profession, category, manager_name, department, department_id, schedule_id, hire_date, birth_date, termination_date, timezone, phone, mobile, notes, send_access_email, personal_email, tax_number, social_security_number, address, postal_code, parish, municipality, district, place_of_birth, nationality, citizen_card_number, citizen_card_expiry_date, marital_status, dependents_count FROM users'
     . $filtersWhereSql
-    . ' ORDER BY created_at DESC';
+    . ' ORDER BY CASE WHEN user_number IS NULL OR TRIM(user_number) = "" THEN 1 ELSE 0 END ASC, CAST(user_number AS INTEGER) ASC, user_number COLLATE NOCASE ASC, name COLLATE NOCASE ASC';
 if ($isAllPerPage) {
     $usersStmt = $pdo->prepare($usersBaseSql);
     foreach ($filterParams as $paramName => $paramValue) {
@@ -1161,12 +1161,15 @@ if ($isAllPerPage) {
     }
     $usersStmt->execute();
 } else {
-    $usersStmt = $pdo->prepare($usersBaseSql . ' LIMIT ? OFFSET ?');
+    // Keep pagination parameters named too: mixing named filter parameters with
+    // positional LIMIT/OFFSET parameters makes PDO SQLite bind the values to the
+    // wrong indexes and can result in a "datatype mismatch" error.
+    $usersStmt = $pdo->prepare($usersBaseSql . ' LIMIT :limit OFFSET :offset');
     foreach ($filterParams as $paramName => $paramValue) {
         $usersStmt->bindValue($paramName, $paramValue);
     }
-    $usersStmt->bindValue(1, $perPageLimit, PDO::PARAM_INT);
-    $usersStmt->bindValue(2, $offset, PDO::PARAM_INT);
+    $usersStmt->bindValue(':limit', $perPageLimit, PDO::PARAM_INT);
+    $usersStmt->bindValue(':offset', $offset, PDO::PARAM_INT);
     $usersStmt->execute();
 }
 $users = $usersStmt ? $usersStmt->fetchAll(PDO::FETCH_ASSOC) : [];
