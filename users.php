@@ -1088,9 +1088,14 @@ if ($searchTerm !== '') {
     $filterParams[':search'] = '%' . $searchTerm . '%';
 }
 
-if ($selectedDepartmentId > 0) {
-    $filterSqlParts[] = 'department_id = :department_id';
+if ($selectedDepartmentId > 0 && isset($departmentNameById[$selectedDepartmentId])) {
+    // Some older user records only have the textual department populated. Match
+    // both representations so the department filter also includes those users.
+    $filterSqlParts[] = '(department_id = :department_id OR LOWER(TRIM(department)) = LOWER(TRIM(:department_name)))';
     $filterParams[':department_id'] = $selectedDepartmentId;
+    $filterParams[':department_name'] = $departmentNameById[$selectedDepartmentId];
+} else {
+    $selectedDepartmentId = 0;
 }
 
 if ($selectedScheduleId > 0) {
@@ -1235,9 +1240,9 @@ require __DIR__ . '/partials/header.php';
                     >
                 </div>
                 <div class="col-6 col-md-2">
-                    <label for="departmentFilter" class="form-label small text-muted mb-1">Equipa</label>
+                    <label for="departmentFilter" class="form-label small text-muted mb-1">Departamento</label>
                     <select id="departmentFilter" name="department_id" class="form-select form-select-sm">
-                        <option value="">Todas</option>
+                        <option value="">Todos</option>
                         <?php foreach ($departmentOptions as $departmentOption): ?>
                             <option value="<?= (int) $departmentOption['id'] ?>" <?= $selectedDepartmentId === (int) $departmentOption['id'] ? 'selected' : '' ?>>
                                 <?= h((string) $departmentOption['name']) ?>
