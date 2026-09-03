@@ -20,6 +20,10 @@ $departmentNameById = [];
 foreach ($departmentOptions as $departmentOption) {
     $departmentNameById[(int) $departmentOption['id']] = (string) $departmentOption['name'];
 }
+$scheduleNameById = [];
+foreach ($scheduleOptions as $scheduleOption) {
+    $scheduleNameById[(int) $scheduleOption['id']] = (string) $scheduleOption['name'];
+}
 
 $flashSuccess = null;
 $flashError = null;
@@ -1311,22 +1315,21 @@ require __DIR__ . '/partials/header.php';
 
         <div class="table-responsive">
             <table class="table table-sm align-middle">
-                <thead><tr><th>N.º colaborador</th><th>Nome</th><th>Utilizador</th><th>Email</th><th>Perfil</th><th>Tipo</th><th>Estado</th><th>Segurança</th><th>Criado</th><th></th></tr></thead>
+                <thead><tr><th>N.º colaborador</th><th>Nome</th><th>Email</th><th>Departamento</th><th>Turno</th><th>Perfil</th><th>Tipo</th><th>Estado</th><th></th></tr></thead>
                 <tbody>
                 <?php foreach ($users as $user): ?>
                     <tr>
                         <td><?= h(trim((string) ($user['user_number'] ?? '')) !== '' ? (string) $user['user_number'] : '—') ?></td>
                         <td><?= h($user['name']) ?></td>
-                        <td><?= h((string) ($user['username'] ?? '')) ?></td>
                         <td><?= h($user['email']) ?></td>
+                        <td><?= h(trim((string) ($user['department'] ?? '')) !== '' ? (string) $user['department'] : '—') ?></td>
+                        <td><?= h($scheduleNameById[(int) ($user['schedule_id'] ?? 0)] ?? '—') ?></td>
                         <td>
                             <?= h((string) ($user['access_profile'] ?? 'Utilizador')) ?>
                             <?= (int) $user['is_admin'] === 1 ? '<span class="badge text-bg-dark ms-1">Admin</span>' : '' ?>
                         </td>
                         <td><?= h((string) ($user['user_type'] ?? 'Funcionário')) ?></td>
                         <td><?= (int) ($user['is_active'] ?? 1) === 1 ? '<span class="badge text-bg-success">Ativo</span>' : '<span class="badge text-bg-warning">Inativo</span>' ?></td>
-                        <td><?= (int) ($user['must_change_password'] ?? 0) === 1 ? '<span class="badge text-bg-info">Troca de senha pendente</span>' : '<span class="text-muted">—</span>' ?></td>
-                        <td><?= h(date('d/m/Y', strtotime((string) $user['created_at']))) ?></td>
                         <td><button class="btn btn-sm btn-outline-secondary" data-bs-toggle="modal" data-bs-target="#editUserModal<?= (int) $user['id'] ?>">Editar</button></td>
                     </tr>
                 <?php endforeach; ?>
