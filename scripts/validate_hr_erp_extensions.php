@@ -21,6 +21,25 @@ $organizationLevels = gt_org_levels([
 ok(count($organizationLevels) === 3 && (int) $organizationLevels[3][0]['id'] === 3, 'organograma calcula os níveis sem retorno void');
 ok(gt_org_role_label(['job_title' => '', 'title' => '', 'profession' => '', 'department' => 'Produção']) === 'Produção', 'organograma usa o departamento quando a função está vazia');
 ok(gt_org_shift_color('Prod 01') === '.93 .47 .12' && gt_org_shift_color('Prod 02') === '.18 .41 .63', 'organograma aplica as cores dos turnos de produção');
+$shiftPdf = gt_org_native_pdf([
+    1 => [[
+        'id' => 1,
+        'name' => 'Pessoa teste',
+        'schedule_name' => 'Prod 01',
+        'start_time' => '06:00:00',
+        'end_time' => '14:00:00',
+        'capacity_percent' => 100,
+    ]],
+], [], 'Teste', '04/09/2026');
+ok(substr_count($shiftPdf, '.93 .47 .12 rg') === 1, 'card do colaborador usa a cor do respetivo turno');
+ok(strpos($shiftPdf, '(100%)') !== false && strpos($shiftPdf, '06:00-14:00') === false && strpos($shiftPdf, 'Prod 01 |') === false, 'card indica apenas capacidade, sem nome ou horário do turno');
+ok(strpos(gt_org_native_pdf([1 => [['id' => 1, 'name' => 'João', 'department' => 'Direção']]], [], 'Produção', '04/09/2026'), 'Jo\\343o') !== false, 'PDF preserva caracteres portugueses com escapes WinAnsi');
+$brandPdf = gt_org_native_pdf([], [], 'Teste', '04/09/2026', '', 'Empresa Exemplo');
+ok(strpos($brandPdf, '(Empresa Exemplo)') !== false && strpos($brandPdf, '(TISSER)') === false, 'PDF não substitui um logótipo ausente pela marca antiga');
+$svgPath = sys_get_temp_dir() . '/gestisser_org_mime_' . getmypid() . '.svg';
+file_put_contents($svgPath, '<svg xmlns="http://www.w3.org/2000/svg" width="10" height="10"></svg>');
+ok(gt_org_image_mime($svgPath, false) === 'image/svg+xml', 'organograma reconhece logótipo SVG mesmo quando getimagesize não o suporta');
+@unlink($svgPath);
 if (function_exists('imagecreatetruecolor')) {
     $logoPath = sys_get_temp_dir() . '/gestisser_org_logo_' . getmypid() . '.png';
     $logo = imagecreatetruecolor(80, 30);
@@ -30,6 +49,7 @@ if (function_exists('imagecreatetruecolor')) {
     @mkdir($logoRoot . '/assets/uploads', 0777, true);
     copy($logoPath, $logoRoot . '/assets/uploads/report.png');
     ok(gt_org_brand_logo_path('/gestisser/assets/uploads/report.png', $logoRoot) === $logoRoot . '/assets/uploads/report.png', 'organograma resolve o caminho guardado do logótipo');
+    ok(gt_org_brand_logo_path('https://old.example.invalid/branding/report.png', $logoRoot) === $logoRoot . '/assets/uploads/report.png', 'organograma recupera o logótipo após mudança de URL da instalação');
     $logoPdf = gt_org_native_pdf($organizationLevels, [], 'Teste', '04/09/2026', $logoPath);
     ok(strpos($logoPdf, '/Logo Do') !== false && strpos($logoPdf, '/Subtype /Image') !== false, 'organograma incorpora o logótipo configurado');
     @unlink($logoPath);

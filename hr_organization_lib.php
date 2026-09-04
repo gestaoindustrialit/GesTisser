@@ -62,8 +62,15 @@ function gt_org_brand_logo_path(string $configuredPath, string $applicationRoot)
     if (is_string($urlPath) && $urlPath !== '') $path = rawurldecode($urlPath);
     $normalized = str_replace('\\', '/', $path);
     $candidates = [$path, rtrim($applicationRoot, '/\\') . '/' . ltrim($path, '/\\')];
-    $assetsPosition = strpos($normalized, 'assets/');
+    $assetsPosition = stripos($normalized, 'assets/');
     if ($assetsPosition !== false) $candidates[] = rtrim($applicationRoot, '/\\') . '/' . substr($normalized, $assetsPosition);
+    // Older installations may retain an absolute URL/path from the server on
+    // which the logo was uploaded. The upload filename is stable, so also look
+    // for it in this installation's branding upload directory.
+    $basename = basename($normalized);
+    if ($basename !== '' && $basename !== '.' && $basename !== '..') {
+        $candidates[] = rtrim($applicationRoot, '/\\') . '/assets/uploads/' . $basename;
+    }
     $documentRoot = trim((string) ($_SERVER['DOCUMENT_ROOT'] ?? ''));
     if ($documentRoot !== '') $candidates[] = rtrim($documentRoot, '/\\') . '/' . ltrim($path, '/\\');
     foreach (array_unique($candidates) as $candidate) {
@@ -80,6 +87,22 @@ function gt_org_shift_color(string $schedule): string
     if (strpos($normalized, 'PROD02') !== false || $normalized === 'T2') return '.18 .41 .63';
     if ($normalized === 'ADM') return '.12 .13 .14';
     return '.35 .68 .25';
+}
+
+function gt_org_image_mime(string $path, $imageInfo = null): string
+{
+    if (is_array($imageInfo) && !empty($imageInfo['mime'])) return (string) $imageInfo['mime'];
+    if (function_exists('finfo_open')) {
+        $info = finfo_open(FILEINFO_MIME_TYPE);
+        if ($info !== false) {
+            $detected = finfo_file($info, $path);
+            finfo_close($info);
+            if (is_string($detected) && strpos($detected, 'image/') === 0) return $detected;
+        }
+    }
+    $extension = strtolower((string) pathinfo($path, PATHINFO_EXTENSION));
+    $types = ['jpg' => 'image/jpeg', 'jpeg' => 'image/jpeg', 'png' => 'image/png', 'webp' => 'image/webp', 'svg' => 'image/svg+xml'];
+    return $types[$extension] ?? '';
 }
 
 /**
@@ -125,7 +148,7 @@ function gt_org_levels(array $people): array
 }
 
 /** Generate a dependency-free, landscape organogram PDF. */
-function gt_org_native_pdf(array $levels, array $shiftStats, string $filterText, string $generatedAt, string $logoPath = ''): string
+function gt_org_native_pdf(array $levels, array $shiftStats, string $filterText, string $generatedAt, string $logoPath = '', string $brandName = 'GesTisser'): string
 {
     $w = 1191.0; $h = 842.0; $margin = 30.0;
     $escape = static function (string $value): string {
@@ -134,7 +157,12 @@ function gt_org_native_pdf(array $levels, array $shiftStats, string $filterText,
             $converted = @iconv('UTF-8', 'windows-1252//TRANSLIT//IGNORE', $value);
             if ($converted !== false) $value = $converted;
         }
-        return str_replace(['\\', '(', ')'], ['\\\\', '\\(', '\\)'], $value);
+        $value = str_replace(['\\', '(', ')'], ['\\\\', '\\(', '\\)'], $value);
+        // Binary bytes inside PDF literal strings are interpreted inconsistently
+        // by some viewers. Octal escapes preserve all WinAnsi accents (ã, ç, ...).
+        return preg_replace_callback('/[\x80-\xFF]/', static function (array $match): string {
+            return sprintf('\\%03o', ord($match[0]));
+        }, $value) ?: $value;
     };
     $fit = static function (string $value, int $limit): string {
         if (function_exists('mb_strimwidth')) return mb_strimwidth(trim($value), 0, $limit, '...', 'UTF-8');
@@ -146,9 +174,27 @@ function gt_org_native_pdf(array $levels, array $shiftStats, string $filterText,
     $logoJpeg = null; $logoWidth = 0; $logoHeight = 0;
     if ($logoPath !== '' && is_file($logoPath)) {
         $logoInfo = @getimagesize($logoPath);
-        $mime = is_array($logoInfo) ? (string) ($logoInfo['mime'] ?? '') : '';
+        $mime = gt_org_image_mime($logoPath, $logoInfo);
         if ($mime === 'image/jpeg') {
             $logoJpeg = @file_get_contents($logoPath);
+        } elseif ($mime === 'image/svg+xml' && class_exists('Imagick')) {
+            // GD does not decode SVG. Use Imagick when available so an SVG
+            // selected in Empresa e Branding is not replaced by the fallback.
+            try {
+                $image = new Imagick();
+                $image->setBackgroundColor(new ImagickPixel('white'));
+                $image->readImage($logoPath);
+                $image->setImageBackgroundColor('white');
+                $image = $image->mergeImageLayers(Imagick::LAYERMETHOD_FLATTEN);
+                $image->setImageFormat('jpeg');
+                $image->setImageCompressionQuality(92);
+                $logoJpeg = $image->getImagesBlob();
+                $logoWidth = (int) $image->getImageWidth();
+                $logoHeight = (int) $image->getImageHeight();
+                $image->clear();
+            } catch (Throwable $exception) {
+                $logoJpeg = null;
+            }
         } elseif (function_exists('imagecreatetruecolor')) {
             $source = false;
             if ($mime === 'image/png' && function_exists('imagecreatefrompng')) $source = @imagecreatefrompng($logoPath);
@@ -163,7 +209,8 @@ function gt_org_native_pdf(array $levels, array $shiftStats, string $filterText,
             }
         }
         if (is_string($logoJpeg) && $logoJpeg !== '') {
-            $logoWidth = (int) ($logoInfo[0] ?? 0); $logoHeight = (int) ($logoInfo[1] ?? 0);
+            if ($logoWidth <= 0) $logoWidth = (int) ($logoInfo[0] ?? 0);
+            if ($logoHeight <= 0) $logoHeight = (int) ($logoInfo[1] ?? 0);
         } else {
             $logoJpeg = null;
         }
@@ -175,7 +222,9 @@ function gt_org_native_pdf(array $levels, array $shiftStats, string $filterText,
         $drawHeight = min(62.0, $drawWidth * $logoHeight / $logoWidth);
         $content .= sprintf("q %.2F 0 0 %.2F 30 %.2F cm /Logo Do Q\n", $drawWidth, $drawHeight, 770 + (42 - $drawHeight) / 2);
     } else {
-        $content .= "0.08 0.09 0.10 rg 30 770 142 42 re f\n" . $text(40, 782, 'TISSER', 23, true, '1 1 1');
+        // Never substitute the product's old TISSER mark for a missing company
+        // logo. Use the configured company name as a neutral fallback instead.
+        $content .= $text(30, 787, $fit($brandName !== '' ? $brandName : 'GesTisser', 24), 18, true);
     }
     $content .= $text(1015, 805, 'ESTRUTURA DA EMPRESA', 7, true, '.35 .68 .25');
     $content .= $text(1015, 786, 'Organograma', 17, true);
@@ -216,18 +265,18 @@ function gt_org_native_pdf(array $levels, array $shiftStats, string $filterText,
             $role = gt_org_role_label($person);
             $manager = trim((string) ($person['manager_name'] ?? $person['manager_name_resolved'] ?? '')) ?: 'Topo da estrutura';
             $schedule = trim((string) ($person['schedule_name'] ?? '')) ?: 'Sem turno';
-            $hours = substr((string) ($person['start_time'] ?? ''), 0, 5) . '-' . substr((string) ($person['end_time'] ?? ''), 0, 5);
-            $content .= ".86 .88 .90 RG .7 w {$x} {$cy} {$cardW} {$cardH} re S\n.35 .68 .25 rg {$x} {$cy} 4 {$cardH} re f\n";
+            $accent = gt_org_shift_color($schedule);
+            $content .= ".86 .88 .90 RG .7 w {$x} {$cy} {$cardW} {$cardH} re S\n{$accent} rg {$x} {$cy} 4 {$cardH} re f\n";
             $content .= $text($x + 10, $cy + 47, $fit((string) ($person['name'] ?? ''), 32), 8.5, true);
             $content .= $text($x + 10, $cy + 34, $fit($role, 38), 7, false, '.34 .38 .42');
-            $content .= $text($x + 10, $cy + 22, $fit($schedule . ' | ' . $hours . ' | ' . (int) ($person['capacity_percent'] ?? 100) . '%', 43), 6.5, false, '.38 .42 .47');
+            $content .= $text($x + 10, $cy + 22, (int) ($person['capacity_percent'] ?? 100) . '%', 6.5, false, '.38 .42 .47');
             $content .= $text($x + 10, $cy + 11, $fit('Reporta a: ' . $manager, 43), 6.3, true, '.38 .42 .47');
             $content .= $text($x + $cardW - 10 - min(70, strlen($department) * 4), $cy + 3, $fit(strtoupper($department), 18), 5.8, true, '.35 .68 .25');
         }
         $y -= $rows * ($cardH + 8) + 13;
         $content .= ".86 .88 .90 RG .6 w 30 {$y} m 1161 {$y} l S\n"; $y -= 21;
     }
-    $content .= $text(30, 22, 'TISSER  |  https://tisser.pt', 6.5, true);
+    $content .= $text(30, 22, $brandName !== '' ? $brandName : 'GesTisser', 6.5, true);
     $content .= $text(1040, 22, 'Documento interno - Organograma', 6.2, false, '.38 .42 .47');
 
     $contentObjectNumber = $logoJpeg !== null ? 7 : 6;
