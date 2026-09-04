@@ -97,16 +97,30 @@ function save_user_document_upload(array $file, int $targetUserId, int $uploaded
         throw new RuntimeException('Utilizador inválido para anexar documento.');
     }
 
-    if (($file['error'] ?? UPLOAD_ERR_NO_FILE) !== UPLOAD_ERR_OK) {
-        throw new RuntimeException('Selecione um documento válido para carregar.');
+    $originalName = trim((string) ($file['name'] ?? 'documento'));
+    $uploadError = (int) ($file['error'] ?? UPLOAD_ERR_NO_FILE);
+    if ($uploadError !== UPLOAD_ERR_OK) {
+        $uploadErrors = [
+            UPLOAD_ERR_INI_SIZE => 'O documento "' . $originalName . '" excede o limite de 10 MB permitido pelo servidor.',
+            UPLOAD_ERR_FORM_SIZE => 'O documento "' . $originalName . '" excede o limite de 10 MB permitido pelo formulário.',
+            UPLOAD_ERR_PARTIAL => 'O envio do documento "' . $originalName . '" ficou incompleto. Tente novamente.',
+            UPLOAD_ERR_NO_FILE => 'Selecione um documento para carregar.',
+            UPLOAD_ERR_NO_TMP_DIR => 'Não foi possível carregar o documento porque o servidor não tem uma pasta temporária disponível.',
+            UPLOAD_ERR_CANT_WRITE => 'Não foi possível gravar o documento no servidor. Tente novamente ou contacte o administrador.',
+            UPLOAD_ERR_EXTENSION => 'O envio do documento foi bloqueado pela configuração do servidor.',
+        ];
+        throw new RuntimeException($uploadErrors[$uploadError] ?? ('Não foi possível carregar o documento (erro ' . $uploadError . ').'));
     }
 
     $maxBytes = 10 * 1024 * 1024;
-    if ((int) ($file['size'] ?? 0) > $maxBytes) {
-        throw new RuntimeException('O documento não pode exceder 10 MB.');
+    $fileSize = (int) ($file['size'] ?? 0);
+    if ($fileSize <= 0) {
+        throw new RuntimeException('O documento "' . $originalName . '" está vazio ou não pôde ser lido.');
+    }
+    if ($fileSize > $maxBytes) {
+        throw new RuntimeException('O documento "' . $originalName . '" tem ' . number_format($fileSize / 1048576, 1, ',', ' ') . ' MB. O máximo permitido é 10 MB por ficheiro.');
     }
 
-    $originalName = trim((string) ($file['name'] ?? 'documento'));
     $extension = strtolower(pathinfo($originalName, PATHINFO_EXTENSION));
     $allowedExtensions = ['pdf', 'doc', 'docx', 'xls', 'xlsx', 'png', 'jpg', 'jpeg'];
     if (!in_array($extension, $allowedExtensions, true)) {
@@ -1655,7 +1669,7 @@ require __DIR__ . '/partials/header.php';
                     <div class="user-document-upload">
                         <div class="row g-3 align-items-end">
                             <div class="col-md-3"><label class="form-label">Tipo de documento</label><input class="form-control" name="document_type" placeholder="Ex.: Contrato"></div>
-                            <div class="col-md-5"><label class="form-label">Documentos</label><input class="form-control" type="file" name="documents[]" accept=".pdf,.doc,.docx,.xls,.xlsx,.png,.jpg,.jpeg" multiple></div>
+                            <div class="col-md-5"><label class="form-label">Documentos</label><input type="hidden" name="MAX_FILE_SIZE" value="10485760"><input class="form-control js-user-documents" type="file" name="documents[]" accept=".pdf,.doc,.docx,.xls,.xlsx,.png,.jpg,.jpeg" multiple><div class="form-text">PDF, Word, Excel ou imagem — máximo 10 MB por ficheiro.</div></div>
                             <div class="col-md-4"><label class="form-label">Notas comuns</label><input class="form-control" name="document_notes" placeholder="Notas opcionais"></div>
                             <div class="col-12 d-flex flex-wrap justify-content-between align-items-center gap-2">
                                 <span class="small text-muted">Pode selecionar vários ficheiros de uma só vez (máx. 10 MB por ficheiro).</span>
