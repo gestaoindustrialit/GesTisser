@@ -36,7 +36,7 @@ if ($query !== '') {
     }
 }
 
-$sql = 'SELECT u.*, s.name AS schedule_name, s.start_time, s.end_time, m.name AS manager_name
+$sql = 'SELECT u.*, s.name AS schedule_name, s.start_time, s.end_time, s.second_start_time, s.second_end_time, m.name AS manager_name
     FROM users u
     LEFT JOIN hr_schedules s ON s.id = u.schedule_id
     LEFT JOIN users m ON m.id = u.manager_user_id'
@@ -66,12 +66,18 @@ $shiftStats = [];
 foreach ($people as $person) {
     $key = (int) ($person['schedule_id'] ?? 0);
     $label = trim((string) ($person['schedule_name'] ?? '')) ?: 'Sem turno';
-    if (!isset($shiftStats[$key])) $shiftStats[$key] = ['schedule' => $label, 'people' => 0, 'fte' => 0.0];
+    $start = substr(trim((string) ($person['start_time'] ?? '')), 0, 5);
+    $endValue = trim((string) ($person['second_end_time'] ?? '')) ?: trim((string) ($person['end_time'] ?? ''));
+    $end = substr($endValue, 0, 5);
+    if (!isset($shiftStats[$key])) $shiftStats[$key] = ['schedule' => $label, 'people' => 0, 'fte' => 0.0, 'start' => $start, 'end' => $end];
     $shiftStats[$key]['people']++;
     $shiftStats[$key]['fte'] += (int) ($person['capacity_percent'] ?? 100) / 100;
+    if ($start !== '' && ($shiftStats[$key]['start'] === '' || $start < $shiftStats[$key]['start'])) $shiftStats[$key]['start'] = $start;
+    if ($end !== '' && ($shiftStats[$key]['end'] === '' || $end > $shiftStats[$key]['end'])) $shiftStats[$key]['end'] = $end;
 }
 $configuredLogo = trim((string) app_setting($pdo, 'logo_report_dark', ''));
-$logoPath = $configuredLogo !== '' ? __DIR__ . '/' . ltrim($configuredLogo, '/\\') : '';
+$logoPath = gt_org_brand_logo_path($configuredLogo, __DIR__);
+if ($logoPath === '') $logoPath = gt_org_brand_logo_path(trim((string) app_setting($pdo, 'logo_navbar_light', '')), __DIR__);
 $pdf = gt_org_native_pdf($levels, $shiftStats, $filterText, date('d/m/Y H:i'), $logoPath);
 
 header('Content-Type: application/pdf');

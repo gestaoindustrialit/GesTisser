@@ -54,6 +54,34 @@ function gt_org_role_label(array $person): string
     return $profile !== '' ? $profile : 'Sem departamento';
 }
 
+function gt_org_brand_logo_path(string $configuredPath, string $applicationRoot): string
+{
+    $path = trim($configuredPath);
+    if ($path === '') return '';
+    $urlPath = parse_url($path, PHP_URL_PATH);
+    if (is_string($urlPath) && $urlPath !== '') $path = rawurldecode($urlPath);
+    $normalized = str_replace('\\', '/', $path);
+    $candidates = [$path, rtrim($applicationRoot, '/\\') . '/' . ltrim($path, '/\\')];
+    $assetsPosition = strpos($normalized, 'assets/');
+    if ($assetsPosition !== false) $candidates[] = rtrim($applicationRoot, '/\\') . '/' . substr($normalized, $assetsPosition);
+    $documentRoot = trim((string) ($_SERVER['DOCUMENT_ROOT'] ?? ''));
+    if ($documentRoot !== '') $candidates[] = rtrim($documentRoot, '/\\') . '/' . ltrim($path, '/\\');
+    foreach (array_unique($candidates) as $candidate) {
+        if (is_file($candidate)) return $candidate;
+    }
+    return '';
+}
+
+function gt_org_shift_color(string $schedule): string
+{
+    $ascii = iconv('UTF-8', 'ASCII//TRANSLIT//IGNORE', $schedule);
+    $normalized = preg_replace('/[^A-Z0-9]/', '', strtoupper($ascii !== false ? $ascii : $schedule));
+    if (strpos($normalized, 'PROD01') !== false || $normalized === 'T1') return '.93 .47 .12';
+    if (strpos($normalized, 'PROD02') !== false || $normalized === 'T2') return '.18 .41 .63';
+    if ($normalized === 'ADM') return '.12 .13 .14';
+    return '.35 .68 .25';
+}
+
 /**
  * Build the hierarchy rows used by both the screen and the PDF export.
  * Managers hidden by a filter become roots in the filtered result.
@@ -160,16 +188,18 @@ function gt_org_native_pdf(array $levels, array $shiftStats, string $filterText,
         $gap = 8.0; $cardW = ($w - 2 * $margin - $gap * (count($stats) - 1)) / count($stats);
         foreach ($stats as $i => $stat) {
             $x = $margin + $i * ($cardW + $gap); $daily = (float) ($stat['fte'] ?? 0) * 8;
-            $content .= ".85 .87 .89 RG .7 w {$x} 696 {$cardW} 34 re S\n";
-            $accent = $i % 2 ? '.35 .68 .25' : '.18 .41 .63';
-            $content .= "{$accent} rg {$x} 696 4 34 re f\n";
+            $content .= ".85 .87 .89 RG .7 w {$x} 686 {$cardW} 44 re S\n";
+            $accent = gt_org_shift_color((string) ($stat['schedule'] ?? ''));
+            $content .= "{$accent} rg {$x} 686 4 44 re f\n";
             $content .= $text($x + 10, 718, (string) ($stat['schedule'] ?? 'Turno'), 7, true, $accent);
             $summary = (int) ($stat['people'] ?? 0) . ' pessoas | ' . number_format($daily, 0, ',', '.') . ' h/dia';
             $content .= $text($x + 10, 706, $summary, 7.5, true);
+            $start = trim((string) ($stat['start'] ?? '')); $end = trim((string) ($stat['end'] ?? ''));
+            if ($start !== '' || $end !== '') $content .= $text($x + 10, 694, ($start ?: '--:--') . '-' . ($end ?: '--:--'), 6.5, false, '.38 .42 .47');
         }
     }
 
-    $y = 670.0;
+    $y = 660.0;
     foreach ($levels as $level => $people) {
         if (!$people) continue;
         $count = count($people); $cols = min(5, max(1, $count)); $gap = 8.0;
