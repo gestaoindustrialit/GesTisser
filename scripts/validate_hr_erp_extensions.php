@@ -32,7 +32,14 @@ $shiftPdf = gt_org_native_pdf([
     ]],
 ], [], 'Teste', '04/09/2026');
 ok(substr_count($shiftPdf, '.93 .47 .12 rg') === 1, 'card do colaborador usa a cor do respetivo turno');
-ok(strpos($shiftPdf, '(06:00-14:00 | 100%)') !== false && strpos($shiftPdf, '(Prod 01 | 06:00-14:00') === false, 'card indica horário e capacidade sem repetir o nome do turno');
+ok(strpos($shiftPdf, '(100%)') !== false && strpos($shiftPdf, '06:00-14:00') === false && strpos($shiftPdf, 'Prod 01 |') === false, 'card indica apenas capacidade, sem nome ou horário do turno');
+ok(strpos(gt_org_native_pdf([1 => [['id' => 1, 'name' => 'João', 'department' => 'Direção']]], [], 'Produção', '04/09/2026'), 'Jo\\343o') !== false, 'PDF preserva caracteres portugueses com escapes WinAnsi');
+$brandPdf = gt_org_native_pdf([], [], 'Teste', '04/09/2026', '', 'Empresa Exemplo');
+ok(strpos($brandPdf, '(Empresa Exemplo)') !== false && strpos($brandPdf, '(TISSER)') === false, 'PDF não substitui um logótipo ausente pela marca antiga');
+$svgPath = sys_get_temp_dir() . '/gestisser_org_mime_' . getmypid() . '.svg';
+file_put_contents($svgPath, '<svg xmlns="http://www.w3.org/2000/svg" width="10" height="10"></svg>');
+ok(gt_org_image_mime($svgPath, false) === 'image/svg+xml', 'organograma reconhece logótipo SVG mesmo quando getimagesize não o suporta');
+@unlink($svgPath);
 if (function_exists('imagecreatetruecolor')) {
     $logoPath = sys_get_temp_dir() . '/gestisser_org_logo_' . getmypid() . '.png';
     $logo = imagecreatetruecolor(80, 30);

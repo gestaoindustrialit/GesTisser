@@ -78,7 +78,8 @@ foreach ($people as $person) {
 $configuredLogo = trim((string) app_setting($pdo, 'logo_report_dark', ''));
 $logoPath = gt_org_brand_logo_path($configuredLogo, __DIR__);
 if ($logoPath === '') $logoPath = gt_org_brand_logo_path(trim((string) app_setting($pdo, 'logo_navbar_light', '')), __DIR__);
-$pdf = gt_org_native_pdf($levels, $shiftStats, $filterText, date('d/m/Y H:i'), $logoPath);
+$companyName = trim((string) app_setting($pdo, 'company_name', 'GesTisser')) ?: 'GesTisser';
+$pdf = gt_org_native_pdf($levels, $shiftStats, $filterText, date('d/m/Y H:i'), $logoPath, $companyName);
 
 header('Content-Type: application/pdf');
 header('Content-Disposition: attachment; filename="organograma-' . date('Y-m-d') . '.pdf"');
