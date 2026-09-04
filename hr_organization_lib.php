@@ -28,3 +28,225 @@ function gt_is_hr_allowed(PDO $pdo,int $uid): bool { $stmt=$pdo->prepare('SELECT
 function gt_is_erp_allowed(PDO $pdo,array $u): bool { return (int)($u['is_admin']??0)===1 || in_array((string)($u['access_profile']??''), ['ERP','Admin','Gestão'], true); }
 function gt_prevents_cycle(PDO $pdo, int $userId, $managerId): bool { if (!$managerId) return true; if ($userId===$managerId) return false; $seen=[]; while($managerId){ if ($managerId===$userId || isset($seen[$managerId])) return false; $seen[$managerId]=1; $s=$pdo->prepare('SELECT manager_user_id FROM users WHERE id=?'); $s->execute([$managerId]); $managerId=(int)$s->fetchColumn(); } return true; }
 function gt_duty_risks(array $d): array { $r=[]; if (empty($d['backup_user_id'])) $r[]='Sem substituto principal'; if (!empty($d['review_date']) && $d['review_date'] < date('Y-m-d')) $r[]='Revisão vencida'; return $r; }
+
+/** The shopfloor account is a terminal/bot identity, not an employee. */
+function gt_org_employee_sql(string $alias = 'u'): string
+{
+    return "LOWER(TRIM(COALESCE({$alias}.username, ''))) <> 'shopfloor'"
+        . " AND LOWER(TRIM(COALESCE({$alias}.name, ''))) <> 'shopfloor'";
+}
+
+function gt_org_role_label(array $person): string
+{
+    foreach (['job_title', 'title', 'profession'] as $field) {
+        $value = trim((string) ($person[$field] ?? ''));
+        if ($value !== '') {
+            return $value;
+        }
+    }
+
+    $department = trim((string) ($person['department'] ?? ''));
+    if ($department !== '') {
+        return $department;
+    }
+
+    $profile = trim((string) ($person['access_profile'] ?? ''));
+    return $profile !== '' ? $profile : 'Sem departamento';
+}
+
+function gt_org_brand_logo_path(string $configuredPath, string $applicationRoot): string
+{
+    $path = trim($configuredPath);
+    if ($path === '') return '';
+    $urlPath = parse_url($path, PHP_URL_PATH);
+    if (is_string($urlPath) && $urlPath !== '') $path = rawurldecode($urlPath);
+    $normalized = str_replace('\\', '/', $path);
+    $candidates = [$path, rtrim($applicationRoot, '/\\') . '/' . ltrim($path, '/\\')];
+    $assetsPosition = strpos($normalized, 'assets/');
+    if ($assetsPosition !== false) $candidates[] = rtrim($applicationRoot, '/\\') . '/' . substr($normalized, $assetsPosition);
+    $documentRoot = trim((string) ($_SERVER['DOCUMENT_ROOT'] ?? ''));
+    if ($documentRoot !== '') $candidates[] = rtrim($documentRoot, '/\\') . '/' . ltrim($path, '/\\');
+    foreach (array_unique($candidates) as $candidate) {
+        if (is_file($candidate)) return $candidate;
+    }
+    return '';
+}
+
+function gt_org_shift_color(string $schedule): string
+{
+    $ascii = iconv('UTF-8', 'ASCII//TRANSLIT//IGNORE', $schedule);
+    $normalized = preg_replace('/[^A-Z0-9]/', '', strtoupper($ascii !== false ? $ascii : $schedule));
+    if (strpos($normalized, 'PROD01') !== false || $normalized === 'T1') return '.93 .47 .12';
+    if (strpos($normalized, 'PROD02') !== false || $normalized === 'T2') return '.18 .41 .63';
+    if ($normalized === 'ADM') return '.12 .13 .14';
+    return '.35 .68 .25';
+}
+
+/**
+ * Build the hierarchy rows used by both the screen and the PDF export.
+ * Managers hidden by a filter become roots in the filtered result.
+ */
+function gt_org_levels(array $people): array
+{
+    $peopleById = [];
+    foreach ($people as $person) {
+        $peopleById[(int) $person['id']] = $person;
+    }
+
+    $byManager = [];
+    foreach ($people as $person) {
+        $managerId = (int) ($person['manager_user_id'] ?? 0);
+        if ($managerId > 0 && !isset($peopleById[$managerId])) {
+            $managerId = 0;
+        }
+        $byManager[$managerId][] = $person;
+    }
+
+    $levels = [];
+    $visited = [];
+    // Do not declare a void return type here: production still supports PHP 7.0,
+    // where "void" is interpreted as a class name instead of a native type.
+    $walk = static function (int $managerId, int $level) use (&$walk, &$levels, &$visited, $byManager) {
+        foreach ($byManager[$managerId] ?? [] as $person) {
+            $id = (int) $person['id'];
+            if (isset($visited[$id])) continue;
+            $visited[$id] = true;
+            $levels[$level][] = $person;
+            $walk($id, $level + 1);
+        }
+    };
+    $walk(0, 1);
+    foreach ($people as $person) {
+        $id = (int) $person['id'];
+        if (!isset($visited[$id])) $levels[1][] = $person;
+    }
+    ksort($levels);
+    return $levels;
+}
+
+/** Generate a dependency-free, landscape organogram PDF. */
+function gt_org_native_pdf(array $levels, array $shiftStats, string $filterText, string $generatedAt, string $logoPath = ''): string
+{
+    $w = 1191.0; $h = 842.0; $margin = 30.0;
+    $escape = static function (string $value): string {
+        $value = preg_replace('/\s+/u', ' ', trim($value)) ?: trim($value);
+        if (function_exists('iconv')) {
+            $converted = @iconv('UTF-8', 'windows-1252//TRANSLIT//IGNORE', $value);
+            if ($converted !== false) $value = $converted;
+        }
+        return str_replace(['\\', '(', ')'], ['\\\\', '\\(', '\\)'], $value);
+    };
+    $fit = static function (string $value, int $limit): string {
+        if (function_exists('mb_strimwidth')) return mb_strimwidth(trim($value), 0, $limit, '...', 'UTF-8');
+        return strlen($value) > $limit ? substr($value, 0, $limit - 3) . '...' : $value;
+    };
+    $text = static function (float $x, float $y, string $value, float $size = 8, bool $bold = false, string $color = '.13 .14 .16') use ($escape): string {
+        return sprintf("BT /F%d %.2F Tf %s rg %.2F %.2F Td (%s) Tj ET\n", $bold ? 2 : 1, $size, $color, $x, $y, $escape($value));
+    };
+    $logoJpeg = null; $logoWidth = 0; $logoHeight = 0;
+    if ($logoPath !== '' && is_file($logoPath)) {
+        $logoInfo = @getimagesize($logoPath);
+        $mime = is_array($logoInfo) ? (string) ($logoInfo['mime'] ?? '') : '';
+        if ($mime === 'image/jpeg') {
+            $logoJpeg = @file_get_contents($logoPath);
+        } elseif (function_exists('imagecreatetruecolor')) {
+            $source = false;
+            if ($mime === 'image/png' && function_exists('imagecreatefrompng')) $source = @imagecreatefrompng($logoPath);
+            if ($mime === 'image/webp' && function_exists('imagecreatefromwebp')) $source = @imagecreatefromwebp($logoPath);
+            if ($source !== false) {
+                $canvas = imagecreatetruecolor(imagesx($source), imagesy($source));
+                $white = imagecolorallocate($canvas, 255, 255, 255);
+                imagefill($canvas, 0, 0, $white);
+                imagecopy($canvas, $source, 0, 0, 0, 0, imagesx($source), imagesy($source));
+                ob_start(); imagejpeg($canvas, null, 92); $logoJpeg = ob_get_clean();
+                imagedestroy($canvas); imagedestroy($source);
+            }
+        }
+        if (is_string($logoJpeg) && $logoJpeg !== '') {
+            $logoWidth = (int) ($logoInfo[0] ?? 0); $logoHeight = (int) ($logoInfo[1] ?? 0);
+        } else {
+            $logoJpeg = null;
+        }
+    }
+
+    $content = "1 1 1 rg 0 0 {$w} {$h} re f\n";
+    if ($logoJpeg !== null && $logoWidth > 0 && $logoHeight > 0) {
+        $drawWidth = min(180.0, 62.0 * $logoWidth / $logoHeight);
+        $drawHeight = min(62.0, $drawWidth * $logoHeight / $logoWidth);
+        $content .= sprintf("q %.2F 0 0 %.2F 30 %.2F cm /Logo Do Q\n", $drawWidth, $drawHeight, 770 + (42 - $drawHeight) / 2);
+    } else {
+        $content .= "0.08 0.09 0.10 rg 30 770 142 42 re f\n" . $text(40, 782, 'TISSER', 23, true, '1 1 1');
+    }
+    $content .= $text(1015, 805, 'ESTRUTURA DA EMPRESA', 7, true, '.35 .68 .25');
+    $content .= $text(1015, 786, 'Organograma', 17, true);
+    $content .= $text(1015, 771, 'Gerado em ' . $generatedAt, 7, false, '.38 .42 .47');
+    $content .= ".12 .13 .14 RG 1 w 30 748 m 1161 748 l S\n";
+    $content .= $text(30, 733, $filterText, 7, false, '.38 .42 .47');
+
+    $stats = array_values($shiftStats);
+    if ($stats) {
+        $gap = 8.0; $cardW = ($w - 2 * $margin - $gap * (count($stats) - 1)) / count($stats);
+        foreach ($stats as $i => $stat) {
+            $x = $margin + $i * ($cardW + $gap); $daily = (float) ($stat['fte'] ?? 0) * 8;
+            $content .= ".85 .87 .89 RG .7 w {$x} 686 {$cardW} 44 re S\n";
+            $accent = gt_org_shift_color((string) ($stat['schedule'] ?? ''));
+            $content .= "{$accent} rg {$x} 686 4 44 re f\n";
+            $content .= $text($x + 10, 718, (string) ($stat['schedule'] ?? 'Turno'), 7, true, $accent);
+            $summary = (int) ($stat['people'] ?? 0) . ' pessoas | ' . number_format($daily, 0, ',', '.') . ' h/dia';
+            $content .= $text($x + 10, 706, $summary, 7.5, true);
+            $start = trim((string) ($stat['start'] ?? '')); $end = trim((string) ($stat['end'] ?? ''));
+            if ($start !== '' || $end !== '') $content .= $text($x + 10, 694, ($start ?: '--:--') . '-' . ($end ?: '--:--'), 6.5, false, '.38 .42 .47');
+        }
+    }
+
+    $y = 660.0;
+    foreach ($levels as $level => $people) {
+        if (!$people) continue;
+        $count = count($people); $cols = min(5, max(1, $count)); $gap = 8.0;
+        $cardW = ($w - 2 * $margin - $gap * ($cols - 1)) / $cols;
+        $rows = (int) ceil($count / $cols); $cardH = 63.0;
+        $needed = 24 + $rows * ($cardH + 8);
+        if ($y - $needed < 42) break;
+        $label = $level === 1 ? 'DIREÇÃO' : 'NÍVEL ' . $level;
+        $content .= ".94 .95 .95 rg 30 " . ($y - 2) . " 54 13 re f\n" . $text(36, $y + 1, $label, 6.5, true, '.38 .42 .47');
+        $y -= 18;
+        foreach (array_values($people) as $i => $person) {
+            $col = $i % $cols; $row = intdiv($i, $cols); $x = $margin + $col * ($cardW + $gap); $cy = $y - ($row + 1) * $cardH - $row * 8;
+            $department = trim((string) ($person['department'] ?? '')) ?: 'Sem departamento';
+            $role = gt_org_role_label($person);
+            $manager = trim((string) ($person['manager_name'] ?? $person['manager_name_resolved'] ?? '')) ?: 'Topo da estrutura';
+            $schedule = trim((string) ($person['schedule_name'] ?? '')) ?: 'Sem turno';
+            $hours = substr((string) ($person['start_time'] ?? ''), 0, 5) . '-' . substr((string) ($person['end_time'] ?? ''), 0, 5);
+            $content .= ".86 .88 .90 RG .7 w {$x} {$cy} {$cardW} {$cardH} re S\n.35 .68 .25 rg {$x} {$cy} 4 {$cardH} re f\n";
+            $content .= $text($x + 10, $cy + 47, $fit((string) ($person['name'] ?? ''), 32), 8.5, true);
+            $content .= $text($x + 10, $cy + 34, $fit($role, 38), 7, false, '.34 .38 .42');
+            $content .= $text($x + 10, $cy + 22, $fit($schedule . ' | ' . $hours . ' | ' . (int) ($person['capacity_percent'] ?? 100) . '%', 43), 6.5, false, '.38 .42 .47');
+            $content .= $text($x + 10, $cy + 11, $fit('Reporta a: ' . $manager, 43), 6.3, true, '.38 .42 .47');
+            $content .= $text($x + $cardW - 10 - min(70, strlen($department) * 4), $cy + 3, $fit(strtoupper($department), 18), 5.8, true, '.35 .68 .25');
+        }
+        $y -= $rows * ($cardH + 8) + 13;
+        $content .= ".86 .88 .90 RG .6 w 30 {$y} m 1161 {$y} l S\n"; $y -= 21;
+    }
+    $content .= $text(30, 22, 'TISSER  |  https://tisser.pt', 6.5, true);
+    $content .= $text(1040, 22, 'Documento interno - Organograma', 6.2, false, '.38 .42 .47');
+
+    $contentObjectNumber = $logoJpeg !== null ? 7 : 6;
+    $logoResources = $logoJpeg !== null ? ' /XObject << /Logo 6 0 R >>' : '';
+    $objects = [
+        "1 0 obj\n<< /Type /Catalog /Pages 2 0 R >>\nendobj\n",
+        "2 0 obj\n<< /Type /Pages /Kids [3 0 R] /Count 1 >>\nendobj\n",
+        "3 0 obj\n<< /Type /Page /Parent 2 0 R /MediaBox [0 0 {$w} {$h}] /Resources << /Font << /F1 4 0 R /F2 5 0 R >>{$logoResources} >> /Contents {$contentObjectNumber} 0 R >>\nendobj\n",
+        "4 0 obj\n<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica /Encoding /WinAnsiEncoding >>\nendobj\n",
+        "5 0 obj\n<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica-Bold /Encoding /WinAnsiEncoding >>\nendobj\n",
+    ];
+    if ($logoJpeg !== null) {
+        $objects[] = "6 0 obj\n<< /Type /XObject /Subtype /Image /Width {$logoWidth} /Height {$logoHeight} /ColorSpace /DeviceRGB /BitsPerComponent 8 /Filter /DCTDecode /Length " . strlen($logoJpeg) . " >>\nstream\n{$logoJpeg}\nendstream\nendobj\n";
+    }
+    $objects[] = $contentObjectNumber . " 0 obj\n<< /Length " . strlen($content) . " >>\nstream\n{$content}endstream\nendobj\n";
+    $pdf = "%PDF-1.4\n"; $offsets = [0];
+    foreach ($objects as $object) { $offsets[] = strlen($pdf); $pdf .= $object; }
+    $objectCount = count($objects);
+    $xref = strlen($pdf); $pdf .= "xref\n0 " . ($objectCount + 1) . "\n0000000000 65535 f \n";
+    for ($i = 1; $i <= $objectCount; $i++) $pdf .= sprintf('%010d 00000 n ', $offsets[$i]) . "\n";
+    return $pdf . "trailer\n<< /Size " . ($objectCount + 1) . " /Root 1 0 R >>\nstartxref\n{$xref}\n%%EOF";
+}

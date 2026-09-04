@@ -17,6 +17,7 @@ $showInactive = (int) ($_GET['inactive'] ?? 0) === 1;
 
 $where = [];
 $parameters = [];
+$where[] = gt_org_employee_sql('u');
 if (!$showInactive) {
     $where[] = 'COALESCE(u.is_active, 1) = 1';
 }
@@ -35,7 +36,7 @@ if ($query !== '') {
     }
 }
 
-$sql = 'SELECT u.*, s.name AS schedule_name, s.start_time, s.end_time, m.name AS manager_name
+$sql = 'SELECT u.*, s.name AS schedule_name, s.start_time, s.end_time, s.second_start_time, s.second_end_time, m.name AS manager_name
     FROM users u
     LEFT JOIN hr_schedules s ON s.id = u.schedule_id
     LEFT JOIN users m ON m.id = u.manager_user_id'
@@ -44,24 +45,6 @@ $sql = 'SELECT u.*, s.name AS schedule_name, s.start_time, s.end_time, m.name AS
 $statement = $pdo->prepare($sql);
 $statement->execute($parameters);
 $people = $statement->fetchAll(PDO::FETCH_ASSOC);
-
-$roleLabel = static function (array $person): string {
-    foreach (['job_title', 'title', 'profession', 'access_profile'] as $field) {
-        $value = trim((string) ($person[$field] ?? ''));
-        if ($value !== '') {
-            return $value;
-        }
-    }
-    return 'Função por preencher';
-};
-$departmentLabel = static function (array $person): string {
-    $value = trim((string) ($person['department'] ?? ''));
-    return $value !== '' ? $value : 'Sem departamento';
-};
-$timeLabel = static function ($value): string {
-    $value = trim((string) $value);
-    return $value === '' ? '--:--' : substr($value, 0, 5);
-};
 
 $filterLabels = [];
 if ($department !== '') {
@@ -78,49 +61,24 @@ if ($showInactive) {
 }
 $filterText = $filterLabels ? implode(' · ', $filterLabels) : 'Todos os colaboradores ativos';
 
-$cards = '';
-$fallbackLines = ['GESTISSER - ORGANOGRAMA', $filterText, 'Gerado em ' . date('d/m/Y H:i'), ''];
+$levels = gt_org_levels($people);
+$shiftStats = [];
 foreach ($people as $person) {
-    $name = (string) ($person['name'] ?? '');
-    $role = $roleLabel($person);
-    $personDepartment = $departmentLabel($person);
-    $manager = trim((string) ($person['manager_name'] ?? '')) ?: 'Topo da estrutura';
-    $schedule = trim((string) ($person['schedule_name'] ?? '')) ?: 'Sem turno';
-    $hours = $timeLabel($person['start_time'] ?? '') . '-' . $timeLabel($person['end_time'] ?? '');
-    $capacity = (int) ($person['capacity_percent'] ?? 100);
-
-    $cards .= '<div class="person"><div class="department">' . h($personDepartment) . '</div>'
-        . '<h2>' . h($name) . '</h2><div class="role">' . h($role) . '</div>'
-        . '<table><tr><th>Reporta a</th><td>' . h($manager) . '</td></tr>'
-        . '<tr><th>Turno</th><td>' . h($schedule . ' · ' . $hours) . '</td></tr>'
-        . '<tr><th>Capacidade</th><td>' . $capacity . '%</td></tr></table></div>';
-    $fallbackLines[] = $name . ' | ' . $role . ' | ' . $personDepartment;
-    $fallbackLines[] = '  Reporta a: ' . $manager . ' | ' . $schedule . ' ' . $hours . ' | ' . $capacity . '%';
+    $key = (int) ($person['schedule_id'] ?? 0);
+    $label = trim((string) ($person['schedule_name'] ?? '')) ?: 'Sem turno';
+    $start = substr(trim((string) ($person['start_time'] ?? '')), 0, 5);
+    $endValue = trim((string) ($person['second_end_time'] ?? '')) ?: trim((string) ($person['end_time'] ?? ''));
+    $end = substr($endValue, 0, 5);
+    if (!isset($shiftStats[$key])) $shiftStats[$key] = ['schedule' => $label, 'people' => 0, 'fte' => 0.0, 'start' => $start, 'end' => $end];
+    $shiftStats[$key]['people']++;
+    $shiftStats[$key]['fte'] += (int) ($person['capacity_percent'] ?? 100) / 100;
+    if ($start !== '' && ($shiftStats[$key]['start'] === '' || $start < $shiftStats[$key]['start'])) $shiftStats[$key]['start'] = $start;
+    if ($end !== '' && ($shiftStats[$key]['end'] === '' || $end > $shiftStats[$key]['end'])) $shiftStats[$key]['end'] = $end;
 }
-if ($people === []) {
-    $cards = '<p class="empty">Não existem pessoas para os filtros selecionados.</p>';
-    $fallbackLines[] = 'Não existem pessoas para os filtros selecionados.';
-}
-
-$html = '<!doctype html><html lang="pt"><head><meta charset="utf-8"><style>
-    @page { margin: 13mm; } body { color: #24272d; font-family: sans-serif; font-size: 10pt; }
-    header { border-bottom: 3px solid #2d69a1; margin-bottom: 7mm; padding-bottom: 4mm; }
-    .eyebrow, .department { color: #58ad3e; font-size: 7pt; font-weight: bold; letter-spacing: 1.5px; text-transform: uppercase; }
-    h1 { font-size: 22pt; margin: 1mm 0; } .meta { color: #68727e; font-size: 8pt; }
-    .summary { background: #f3f6f8; border: 1px solid #dce2e8; margin-bottom: 5mm; padding: 3mm; }
-    .person { border: 1px solid #d7dde4; border-left: 4px solid #2d69a1; border-radius: 4px; display: inline-block; margin: 0 2% 4mm 0; padding: 4mm; vertical-align: top; width: 43%; page-break-inside: avoid; }
-    h2 { font-size: 12pt; margin: 1mm 0; } .role { color: #5f6974; margin-bottom: 3mm; }
-    table { border-collapse: collapse; width: 100%; } th, td { border-top: 1px solid #e4e8ed; padding: 1.5mm 0; text-align: left; }
-    th { color: #68727e; font-size: 7pt; text-transform: uppercase; width: 30%; } .empty { color: #68727e; }
-    footer { color: #68727e; font-size: 7pt; margin-top: 4mm; text-align: right; }
-    </style></head><body><header><div class="eyebrow">Pessoas e responsabilidades</div><h1>Organograma</h1><div class="meta">' . h($filterText) . '</div></header>'
-    . '<div class="summary"><strong>' . count($people) . '</strong> ' . (count($people) === 1 ? 'pessoa apresentada' : 'pessoas apresentadas') . '</div>'
-    . $cards . '<footer>Gerado em ' . date('d/m/Y H:i') . '</footer></body></html>';
-
-$pdf = taskforce_generate_pdf_from_html($html);
-if (!is_string($pdf) || strncmp($pdf, '%PDF', 4) !== 0) {
-    $pdf = taskforce_generate_basic_pdf($fallbackLines);
-}
+$configuredLogo = trim((string) app_setting($pdo, 'logo_report_dark', ''));
+$logoPath = gt_org_brand_logo_path($configuredLogo, __DIR__);
+if ($logoPath === '') $logoPath = gt_org_brand_logo_path(trim((string) app_setting($pdo, 'logo_navbar_light', '')), __DIR__);
+$pdf = gt_org_native_pdf($levels, $shiftStats, $filterText, date('d/m/Y H:i'), $logoPath);
 
 header('Content-Type: application/pdf');
 header('Content-Disposition: attachment; filename="organograma-' . date('Y-m-d') . '.pdf"');
