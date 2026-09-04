@@ -34,18 +34,6 @@ function gt_org_department_label(array $person): string
     return $profile !== '' ? $profile : 'Sem departamento';
 }
 
-function gt_org_role_label(array $person): string
-{
-    foreach (['job_title', 'title', 'profession', 'access_profile'] as $field) {
-        $value = trim((string) ($person[$field] ?? ''));
-        if ($value !== '') {
-            return $value;
-        }
-    }
-
-    return 'Função por preencher';
-}
-
 function gt_org_person_json(array $person): string
 {
     return h(json_encode([
@@ -107,6 +95,7 @@ $selectedId = (int) ($_GET['person_id'] ?? 0);
 
 $where = [];
 $args = [];
+$where[] = gt_org_employee_sql('u');
 if (!$showInactive) {
     $where[] = 'COALESCE(u.is_active, 1) = 1';
 }
@@ -146,28 +135,7 @@ foreach ($people as $person) {
     $byManager[$managerId][] = $person;
 }
 
-$levels = [];
-$visited = [];
-$walk = static function (int $managerId, int $level) use (&$walk, &$levels, &$visited, $byManager) {
-    foreach ($byManager[$managerId] ?? [] as $person) {
-        $pid = (int) $person['id'];
-        if (isset($visited[$pid])) {
-            continue;
-        }
-        $visited[$pid] = true;
-        $levels[$level][] = $person;
-        $walk($pid, $level + 1);
-    }
-};
-$walk(0, 1);
-foreach ($people as $person) {
-    $pid = (int) $person['id'];
-    if (!isset($visited[$pid])) {
-        $levels[1][] = $person;
-        $visited[$pid] = true;
-    }
-}
-ksort($levels);
+$levels = gt_org_levels($people);
 
 if ($selectedId <= 0 || !isset($peopleById[$selectedId])) {
     foreach ($levels as $levelPeople) {
