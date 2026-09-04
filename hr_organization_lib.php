@@ -62,8 +62,15 @@ function gt_org_brand_logo_path(string $configuredPath, string $applicationRoot)
     if (is_string($urlPath) && $urlPath !== '') $path = rawurldecode($urlPath);
     $normalized = str_replace('\\', '/', $path);
     $candidates = [$path, rtrim($applicationRoot, '/\\') . '/' . ltrim($path, '/\\')];
-    $assetsPosition = strpos($normalized, 'assets/');
+    $assetsPosition = stripos($normalized, 'assets/');
     if ($assetsPosition !== false) $candidates[] = rtrim($applicationRoot, '/\\') . '/' . substr($normalized, $assetsPosition);
+    // Older installations may retain an absolute URL/path from the server on
+    // which the logo was uploaded. The upload filename is stable, so also look
+    // for it in this installation's branding upload directory.
+    $basename = basename($normalized);
+    if ($basename !== '' && $basename !== '.' && $basename !== '..') {
+        $candidates[] = rtrim($applicationRoot, '/\\') . '/assets/uploads/' . $basename;
+    }
     $documentRoot = trim((string) ($_SERVER['DOCUMENT_ROOT'] ?? ''));
     if ($documentRoot !== '') $candidates[] = rtrim($documentRoot, '/\\') . '/' . ltrim($path, '/\\');
     foreach (array_unique($candidates) as $candidate) {
@@ -149,6 +156,24 @@ function gt_org_native_pdf(array $levels, array $shiftStats, string $filterText,
         $mime = is_array($logoInfo) ? (string) ($logoInfo['mime'] ?? '') : '';
         if ($mime === 'image/jpeg') {
             $logoJpeg = @file_get_contents($logoPath);
+        } elseif ($mime === 'image/svg+xml' && class_exists('Imagick')) {
+            // GD does not decode SVG. Use Imagick when available so an SVG
+            // selected in Empresa e Branding is not replaced by the fallback.
+            try {
+                $image = new Imagick();
+                $image->setBackgroundColor(new ImagickPixel('white'));
+                $image->readImage($logoPath);
+                $image->setImageBackgroundColor('white');
+                $image = $image->mergeImageLayers(Imagick::LAYERMETHOD_FLATTEN);
+                $image->setImageFormat('jpeg');
+                $image->setImageCompressionQuality(92);
+                $logoJpeg = $image->getImagesBlob();
+                $logoWidth = (int) $image->getImageWidth();
+                $logoHeight = (int) $image->getImageHeight();
+                $image->clear();
+            } catch (Throwable $exception) {
+                $logoJpeg = null;
+            }
         } elseif (function_exists('imagecreatetruecolor')) {
             $source = false;
             if ($mime === 'image/png' && function_exists('imagecreatefrompng')) $source = @imagecreatefrompng($logoPath);
@@ -163,7 +188,8 @@ function gt_org_native_pdf(array $levels, array $shiftStats, string $filterText,
             }
         }
         if (is_string($logoJpeg) && $logoJpeg !== '') {
-            $logoWidth = (int) ($logoInfo[0] ?? 0); $logoHeight = (int) ($logoInfo[1] ?? 0);
+            if ($logoWidth <= 0) $logoWidth = (int) ($logoInfo[0] ?? 0);
+            if ($logoHeight <= 0) $logoHeight = (int) ($logoInfo[1] ?? 0);
         } else {
             $logoJpeg = null;
         }
@@ -217,10 +243,11 @@ function gt_org_native_pdf(array $levels, array $shiftStats, string $filterText,
             $manager = trim((string) ($person['manager_name'] ?? $person['manager_name_resolved'] ?? '')) ?: 'Topo da estrutura';
             $schedule = trim((string) ($person['schedule_name'] ?? '')) ?: 'Sem turno';
             $hours = substr((string) ($person['start_time'] ?? ''), 0, 5) . '-' . substr((string) ($person['end_time'] ?? ''), 0, 5);
-            $content .= ".86 .88 .90 RG .7 w {$x} {$cy} {$cardW} {$cardH} re S\n.35 .68 .25 rg {$x} {$cy} 4 {$cardH} re f\n";
+            $accent = gt_org_shift_color($schedule);
+            $content .= ".86 .88 .90 RG .7 w {$x} {$cy} {$cardW} {$cardH} re S\n{$accent} rg {$x} {$cy} 4 {$cardH} re f\n";
             $content .= $text($x + 10, $cy + 47, $fit((string) ($person['name'] ?? ''), 32), 8.5, true);
             $content .= $text($x + 10, $cy + 34, $fit($role, 38), 7, false, '.34 .38 .42');
-            $content .= $text($x + 10, $cy + 22, $fit($schedule . ' | ' . $hours . ' | ' . (int) ($person['capacity_percent'] ?? 100) . '%', 43), 6.5, false, '.38 .42 .47');
+            $content .= $text($x + 10, $cy + 22, $fit($hours . ' | ' . (int) ($person['capacity_percent'] ?? 100) . '%', 43), 6.5, false, '.38 .42 .47');
             $content .= $text($x + 10, $cy + 11, $fit('Reporta a: ' . $manager, 43), 6.3, true, '.38 .42 .47');
             $content .= $text($x + $cardW - 10 - min(70, strlen($department) * 4), $cy + 3, $fit(strtoupper($department), 18), 5.8, true, '.35 .68 .25');
         }
