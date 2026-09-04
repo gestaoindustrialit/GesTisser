@@ -1,0 +1,6 @@
+<?php
+require_once dirname(__DIR__).'/bootstrap/app.php';require_once dirname(__DIR__).'/integrations_migrations.php';require_once dirname(__DIR__).'/includes/integrations/IntegrationSecurity.php';require_once dirname(__DIR__).'/includes/integrations/PayloadBuilder.php';integrations_migrate(db());
+$secret='segredo-'.uniqid();if(IntegrationSecurity::decrypt(IntegrationSecurity::encrypt($secret))!==$secret)throw new RuntimeException('Encryption failed');
+foreach(['http://127.0.0.1','http://localhost','http://169.254.169.254/latest']as$url)if(IntegrationSecurity::safeUrl($url))throw new RuntimeException('SSRF validation failed');
+$out=PayloadBuilder::build('{"reference":"{{product.reference}}"}',['product'=>['reference'=>'ABC']]);if($out!=='{"reference":"ABC"}')throw new RuntimeException('Payload failed');
+$tables=['integrations','integration_credentials','integration_headers','integration_flows','integration_flow_headers','integration_field_mappings','integration_mappings','integration_filters','integration_runs','integration_run_items'];foreach($tables as$t){$s=db()->prepare("SELECT 1 FROM sqlite_master WHERE type='table' AND name=?");$s->execute([$t]);if(!$s->fetchColumn())throw new RuntimeException('Missing '.$t);}echo "Integration module validation OK\n";
