@@ -3,7 +3,10 @@ declare(strict_types=1);
 
 final class ShopfloorAttachment
 {
-    public static function detectExtension(string $path): ?string
+    /**
+     * @return string|null
+     */
+    public static function detectExtension(string $path)
     {
         $header = file_get_contents($path, false, null, 0, 1024);
         if (is_string($header) && strpos($header, '%PDF-') !== false) {
