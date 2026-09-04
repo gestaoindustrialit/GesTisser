@@ -154,7 +154,9 @@ function gt_org_native_pdf(array $levels, array $shiftStats, string $filterText,
     $escape = static function (string $value): string {
         $value = preg_replace('/\s+/u', ' ', trim($value)) ?: trim($value);
         if (function_exists('iconv')) {
-            $converted = @iconv('UTF-8', 'windows-1252//TRANSLIT//IGNORE', $value);
+            // PDF literal strings use WinAnsi. This is an encoding operation,
+            // never transliteration: Portuguese text must remain unchanged.
+            $converted = @iconv('UTF-8', 'windows-1252', $value);
             if ($converted !== false) $value = $converted;
         }
         $value = str_replace(['\\', '(', ')'], ['\\\\', '\\(', '\\)'], $value);
