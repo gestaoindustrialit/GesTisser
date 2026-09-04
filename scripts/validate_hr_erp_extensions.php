@@ -9,6 +9,7 @@ $pdo->exec('CREATE TABLE hr_schedules(id INTEGER PRIMARY KEY AUTOINCREMENT,name 
 $pdo->exec('CREATE TABLE audit_logs(id INTEGER PRIMARY KEY AUTOINCREMENT,user_id INTEGER,action TEXT,details_json TEXT,created_at DATETIME DEFAULT CURRENT_TIMESTAMP)');
 gt_run_org_migrations($pdo);
 function ok($cond,$msg){ if(!$cond){fwrite(STDERR,"FAIL: $msg\n"); exit(1);} echo "OK: $msg\n"; }
+ok(strtoupper((string) $pdo->query('PRAGMA encoding')->fetchColumn()) === 'UTF-8', 'ligação SQLite mantém texto em UTF-8');
 $pdo->exec("INSERT INTO hr_departments(name) VALUES ('Produção')"); $dep=(int)$pdo->lastInsertId();
 $pdo->exec("INSERT INTO hr_schedules(name,start_time,end_time) VALUES ('T1','08:00','16:00')"); $sch=(int)$pdo->lastInsertId();
 $pdo->exec("INSERT INTO users(name,department,schedule_id) VALUES ('A','Produção',$sch),('B','Produção',$sch),('C','Produção',$sch)");
@@ -33,7 +34,17 @@ $shiftPdf = gt_org_native_pdf([
 ], [], 'Teste', '04/09/2026');
 ok(substr_count($shiftPdf, '.93 .47 .12 rg') === 1, 'card do colaborador usa a cor do respetivo turno');
 ok(strpos($shiftPdf, '(100%)') !== false && strpos($shiftPdf, '06:00-14:00') === false && strpos($shiftPdf, 'Prod 01 |') === false, 'card indica apenas capacidade, sem nome ou horário do turno');
-ok(strpos(gt_org_native_pdf([1 => [['id' => 1, 'name' => 'João', 'department' => 'Direção']]], [], 'Produção', '04/09/2026'), 'Jo\\343o') !== false, 'PDF preserva caracteres portugueses com escapes WinAnsi');
+$utf8Sample = 'DIREÇÃO | Gestão de Operações | Produção | Impressão | João | André | Conceição | 1.º Turno | € 1.250,00';
+$utf8Pdf = gt_org_native_pdf([1 => [['id' => 1, 'name' => 'João', 'job_title' => 'Gestão de Operações', 'department' => 'Produção', 'manager_name' => 'André']]], [], $utf8Sample, '04/09/2026', '', 'Conceição — € 1.250,00');
+ok(strpos($utf8Pdf, '/Encoding /WinAnsiEncoding') !== false, 'PDF declara a codificação compatível com os caracteres portugueses');
+$encodedSample = iconv('UTF-8', 'windows-1252', $utf8Sample);
+$pdfLiteralSample = preg_replace_callback('/[\x80-\xFF]/', static function (array $match): string { return sprintf('\\%03o', ord($match[0])); }, $encodedSample);
+ok(is_string($pdfLiteralSample) && strpos($utf8Pdf, '(' . $pdfLiteralSample . ')') !== false, 'PDF preserva exatamente a amostra obrigatória em português');
+$specialCharacters = 'á à â ã é ê í ó ô õ ú ç Á Ã Ç º ª € – —';
+$specialPdf = gt_org_native_pdf([], [], $specialCharacters, '04/09/2026');
+$encodedCharacters = iconv('UTF-8', 'windows-1252', $specialCharacters);
+$pdfLiteralCharacters = preg_replace_callback('/[\x80-\xFF]/', static function (array $match): string { return sprintf('\\%03o', ord($match[0])); }, $encodedCharacters);
+ok(is_string($pdfLiteralCharacters) && strpos($specialPdf, '(' . $pdfLiteralCharacters . ')') !== false, 'PDF suporta toda a lista de caracteres especiais requerida');
 $brandPdf = gt_org_native_pdf([], [], 'Teste', '04/09/2026', '', 'Empresa Exemplo');
 ok(strpos($brandPdf, '(Empresa Exemplo)') !== false && strpos($brandPdf, '(TISSER)') === false, 'PDF não substitui um logótipo ausente pela marca antiga');
 $svgPath = sys_get_temp_dir() . '/gestisser_org_mime_' . getmypid() . '.svg';
