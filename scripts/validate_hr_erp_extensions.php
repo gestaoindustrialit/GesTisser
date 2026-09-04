@@ -19,6 +19,16 @@ $organizationLevels = gt_org_levels([
     ['id' => 3, 'manager_user_id' => 2],
 ]);
 ok(count($organizationLevels) === 3 && (int) $organizationLevels[3][0]['id'] === 3, 'organograma calcula os níveis sem retorno void');
+ok(gt_org_role_label(['job_title' => '', 'title' => '', 'profession' => '', 'department' => 'Produção']) === 'Produção', 'organograma usa o departamento quando a função está vazia');
+if (function_exists('imagecreatetruecolor')) {
+    $logoPath = sys_get_temp_dir() . '/gestisser_org_logo_' . getmypid() . '.png';
+    $logo = imagecreatetruecolor(80, 30);
+    imagepng($logo, $logoPath);
+    imagedestroy($logo);
+    $logoPdf = gt_org_native_pdf($organizationLevels, [], 'Teste', '04/09/2026', $logoPath);
+    ok(strpos($logoPdf, '/Logo Do') !== false && strpos($logoPdf, '/Subtype /Image') !== false, 'organograma incorpora o logótipo configurado');
+    @unlink($logoPath);
+}
 $pdo->prepare('INSERT INTO erp_machines(code,name,department_id,operators_required,criticality) VALUES (?,?,?,?,?)')->execute(['M1','Máquina',$dep,1,'critical']); $mid=(int)$pdo->lastInsertId();
 try{$pdo->prepare('INSERT INTO erp_machines(code,name) VALUES (?,?)')->execute(['M1','Dup']); ok(false,'código único');}catch(Throwable $e){ok(true,'código único');}
 try{$pdo->prepare('INSERT INTO erp_machines(code,name,operators_required) VALUES (?,?,?)')->execute(['M2','Bad',-1]); ok(false,'operadores >= 0');}catch(Throwable $e){ok(true,'operadores >= 0');}

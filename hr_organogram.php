@@ -34,18 +34,6 @@ function gt_org_department_label(array $person): string
     return $profile !== '' ? $profile : 'Sem departamento';
 }
 
-function gt_org_role_label(array $person): string
-{
-    foreach (['job_title', 'title', 'profession', 'access_profile'] as $field) {
-        $value = trim((string) ($person[$field] ?? ''));
-        if ($value !== '') {
-            return $value;
-        }
-    }
-
-    return 'Função por preencher';
-}
-
 function gt_org_person_json(array $person): string
 {
     return h(json_encode([

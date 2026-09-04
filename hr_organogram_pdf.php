@@ -70,7 +70,9 @@ foreach ($people as $person) {
     $shiftStats[$key]['people']++;
     $shiftStats[$key]['fte'] += (int) ($person['capacity_percent'] ?? 100) / 100;
 }
-$pdf = gt_org_native_pdf($levels, $shiftStats, $filterText, date('d/m/Y H:i'));
+$configuredLogo = trim((string) app_setting($pdo, 'logo_report_dark', ''));
+$logoPath = $configuredLogo !== '' ? __DIR__ . '/' . ltrim($configuredLogo, '/\\') : '';
+$pdf = gt_org_native_pdf($levels, $shiftStats, $filterText, date('d/m/Y H:i'), $logoPath);
 
 header('Content-Type: application/pdf');
 header('Content-Disposition: attachment; filename="organograma-' . date('Y-m-d') . '.pdf"');

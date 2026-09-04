@@ -36,6 +36,24 @@ function gt_org_employee_sql(string $alias = 'u'): string
         . " AND LOWER(TRIM(COALESCE({$alias}.name, ''))) <> 'shopfloor'";
 }
 
+function gt_org_role_label(array $person): string
+{
+    foreach (['job_title', 'title', 'profession'] as $field) {
+        $value = trim((string) ($person[$field] ?? ''));
+        if ($value !== '') {
+            return $value;
+        }
+    }
+
+    $department = trim((string) ($person['department'] ?? ''));
+    if ($department !== '') {
+        return $department;
+    }
+
+    $profile = trim((string) ($person['access_profile'] ?? ''));
+    return $profile !== '' ? $profile : 'Sem departamento';
+}
+
 /**
  * Build the hierarchy rows used by both the screen and the PDF export.
  * Managers hidden by a filter become roots in the filtered result.
@@ -79,7 +97,7 @@ function gt_org_levels(array $people): array
 }
 
 /** Generate a dependency-free, landscape organogram PDF. */
-function gt_org_native_pdf(array $levels, array $shiftStats, string $filterText, string $generatedAt): string
+function gt_org_native_pdf(array $levels, array $shiftStats, string $filterText, string $generatedAt, string $logoPath = ''): string
 {
     $w = 1191.0; $h = 842.0; $margin = 30.0;
     $escape = static function (string $value): string {
@@ -97,8 +115,40 @@ function gt_org_native_pdf(array $levels, array $shiftStats, string $filterText,
     $text = static function (float $x, float $y, string $value, float $size = 8, bool $bold = false, string $color = '.13 .14 .16') use ($escape): string {
         return sprintf("BT /F%d %.2F Tf %s rg %.2F %.2F Td (%s) Tj ET\n", $bold ? 2 : 1, $size, $color, $x, $y, $escape($value));
     };
+    $logoJpeg = null; $logoWidth = 0; $logoHeight = 0;
+    if ($logoPath !== '' && is_file($logoPath)) {
+        $logoInfo = @getimagesize($logoPath);
+        $mime = is_array($logoInfo) ? (string) ($logoInfo['mime'] ?? '') : '';
+        if ($mime === 'image/jpeg') {
+            $logoJpeg = @file_get_contents($logoPath);
+        } elseif (function_exists('imagecreatetruecolor')) {
+            $source = false;
+            if ($mime === 'image/png' && function_exists('imagecreatefrompng')) $source = @imagecreatefrompng($logoPath);
+            if ($mime === 'image/webp' && function_exists('imagecreatefromwebp')) $source = @imagecreatefromwebp($logoPath);
+            if ($source !== false) {
+                $canvas = imagecreatetruecolor(imagesx($source), imagesy($source));
+                $white = imagecolorallocate($canvas, 255, 255, 255);
+                imagefill($canvas, 0, 0, $white);
+                imagecopy($canvas, $source, 0, 0, 0, 0, imagesx($source), imagesy($source));
+                ob_start(); imagejpeg($canvas, null, 92); $logoJpeg = ob_get_clean();
+                imagedestroy($canvas); imagedestroy($source);
+            }
+        }
+        if (is_string($logoJpeg) && $logoJpeg !== '') {
+            $logoWidth = (int) ($logoInfo[0] ?? 0); $logoHeight = (int) ($logoInfo[1] ?? 0);
+        } else {
+            $logoJpeg = null;
+        }
+    }
+
     $content = "1 1 1 rg 0 0 {$w} {$h} re f\n";
-    $content .= "0.08 0.09 0.10 rg 30 770 142 42 re f\n" . $text(40, 782, 'TISSER', 23, true, '1 1 1');
+    if ($logoJpeg !== null && $logoWidth > 0 && $logoHeight > 0) {
+        $drawWidth = min(180.0, 62.0 * $logoWidth / $logoHeight);
+        $drawHeight = min(62.0, $drawWidth * $logoHeight / $logoWidth);
+        $content .= sprintf("q %.2F 0 0 %.2F 30 %.2F cm /Logo Do Q\n", $drawWidth, $drawHeight, 770 + (42 - $drawHeight) / 2);
+    } else {
+        $content .= "0.08 0.09 0.10 rg 30 770 142 42 re f\n" . $text(40, 782, 'TISSER', 23, true, '1 1 1');
+    }
     $content .= $text(1015, 805, 'ESTRUTURA DA EMPRESA', 7, true, '.35 .68 .25');
     $content .= $text(1015, 786, 'Organograma', 17, true);
     $content .= $text(1015, 771, 'Gerado em ' . $generatedAt, 7, false, '.38 .42 .47');
@@ -133,7 +183,7 @@ function gt_org_native_pdf(array $levels, array $shiftStats, string $filterText,
         foreach (array_values($people) as $i => $person) {
             $col = $i % $cols; $row = intdiv($i, $cols); $x = $margin + $col * ($cardW + $gap); $cy = $y - ($row + 1) * $cardH - $row * 8;
             $department = trim((string) ($person['department'] ?? '')) ?: 'Sem departamento';
-            $role = trim((string) ($person['job_title'] ?? $person['title'] ?? $person['profession'] ?? '')) ?: 'Função por preencher';
+            $role = gt_org_role_label($person);
             $manager = trim((string) ($person['manager_name'] ?? $person['manager_name_resolved'] ?? '')) ?: 'Topo da estrutura';
             $schedule = trim((string) ($person['schedule_name'] ?? '')) ?: 'Sem turno';
             $hours = substr((string) ($person['start_time'] ?? ''), 0, 5) . '-' . substr((string) ($person['end_time'] ?? ''), 0, 5);
@@ -150,17 +200,23 @@ function gt_org_native_pdf(array $levels, array $shiftStats, string $filterText,
     $content .= $text(30, 22, 'TISSER  |  https://tisser.pt', 6.5, true);
     $content .= $text(1040, 22, 'Documento interno - Organograma', 6.2, false, '.38 .42 .47');
 
+    $contentObjectNumber = $logoJpeg !== null ? 7 : 6;
+    $logoResources = $logoJpeg !== null ? ' /XObject << /Logo 6 0 R >>' : '';
     $objects = [
         "1 0 obj\n<< /Type /Catalog /Pages 2 0 R >>\nendobj\n",
         "2 0 obj\n<< /Type /Pages /Kids [3 0 R] /Count 1 >>\nendobj\n",
-        "3 0 obj\n<< /Type /Page /Parent 2 0 R /MediaBox [0 0 {$w} {$h}] /Resources << /Font << /F1 4 0 R /F2 5 0 R >> >> /Contents 6 0 R >>\nendobj\n",
+        "3 0 obj\n<< /Type /Page /Parent 2 0 R /MediaBox [0 0 {$w} {$h}] /Resources << /Font << /F1 4 0 R /F2 5 0 R >>{$logoResources} >> /Contents {$contentObjectNumber} 0 R >>\nendobj\n",
         "4 0 obj\n<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica /Encoding /WinAnsiEncoding >>\nendobj\n",
         "5 0 obj\n<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica-Bold /Encoding /WinAnsiEncoding >>\nendobj\n",
-        "6 0 obj\n<< /Length " . strlen($content) . " >>\nstream\n{$content}endstream\nendobj\n",
     ];
+    if ($logoJpeg !== null) {
+        $objects[] = "6 0 obj\n<< /Type /XObject /Subtype /Image /Width {$logoWidth} /Height {$logoHeight} /ColorSpace /DeviceRGB /BitsPerComponent 8 /Filter /DCTDecode /Length " . strlen($logoJpeg) . " >>\nstream\n{$logoJpeg}\nendstream\nendobj\n";
+    }
+    $objects[] = $contentObjectNumber . " 0 obj\n<< /Length " . strlen($content) . " >>\nstream\n{$content}endstream\nendobj\n";
     $pdf = "%PDF-1.4\n"; $offsets = [0];
     foreach ($objects as $object) { $offsets[] = strlen($pdf); $pdf .= $object; }
-    $xref = strlen($pdf); $pdf .= "xref\n0 7\n0000000000 65535 f \n";
-    for ($i = 1; $i <= 6; $i++) $pdf .= sprintf('%010d 00000 n ', $offsets[$i]) . "\n";
-    return $pdf . "trailer\n<< /Size 7 /Root 1 0 R >>\nstartxref\n{$xref}\n%%EOF";
+    $objectCount = count($objects);
+    $xref = strlen($pdf); $pdf .= "xref\n0 " . ($objectCount + 1) . "\n0000000000 65535 f \n";
+    for ($i = 1; $i <= $objectCount; $i++) $pdf .= sprintf('%010d 00000 n ', $offsets[$i]) . "\n";
+    return $pdf . "trailer\n<< /Size " . ($objectCount + 1) . " /Root 1 0 R >>\nstartxref\n{$xref}\n%%EOF";
 }
