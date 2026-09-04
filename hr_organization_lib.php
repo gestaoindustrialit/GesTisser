@@ -58,7 +58,9 @@ function gt_org_levels(array $people): array
 
     $levels = [];
     $visited = [];
-    $walk = static function (int $managerId, int $level) use (&$walk, &$levels, &$visited, $byManager): void {
+    // Do not declare a void return type here: production still supports PHP 7.0,
+    // where "void" is interpreted as a class name instead of a native type.
+    $walk = static function (int $managerId, int $level) use (&$walk, &$levels, &$visited, $byManager) {
         foreach ($byManager[$managerId] ?? [] as $person) {
             $id = (int) $person['id'];
             if (isset($visited[$id])) continue;
