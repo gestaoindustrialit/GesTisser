@@ -20,7 +20,14 @@ $flashSuccess = $flashError = null;
 
 function gt_machine_upload_error_message(int $error): string
 {
-    if ($error === UPLOAD_ERR_INI_SIZE || $error === UPLOAD_ERR_FORM_SIZE) {
+    if ($error === UPLOAD_ERR_INI_SIZE) {
+        $serverLimit = trim((string) ini_get('upload_max_filesize'));
+
+        return 'O servidor rejeitou o ficheiro por causa do limite de upload configurado'
+            . ($serverLimit !== '' ? ' (' . $serverLimit . ')' : '')
+            . '. Contacte o administrador se o ficheiro tiver menos de 10 MB.';
+    }
+    if ($error === UPLOAD_ERR_FORM_SIZE) {
         return 'O ficheiro excede o limite de 10 MB permitido.';
     }
     if ($error === UPLOAD_ERR_PARTIAL) {

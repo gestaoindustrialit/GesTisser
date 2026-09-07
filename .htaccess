@@ -1,0 +1,18 @@
+# O PHP-FPM lê estes valores de .user.ini. Estas diretivas cobrem instalações
+# Apache com mod_php, nas quais .user.ini não altera os limites de upload.
+<IfModule mod_php.c>
+    php_value upload_max_filesize 10M
+    php_value post_max_size 64M
+</IfModule>
+<IfModule mod_php7.c>
+    php_value upload_max_filesize 10M
+    php_value post_max_size 64M
+</IfModule>
+<IfModule mod_php8.c>
+    php_value upload_max_filesize 10M
+    php_value post_max_size 64M
+</IfModule>
+<IfModule php_module>
+    php_value upload_max_filesize 10M
+    php_value post_max_size 64M
+</IfModule>
