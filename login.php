@@ -11,7 +11,14 @@ if (is_logged_in()) {
 }
 
 $error = null;
-$email = trim((string) ($_POST['email'] ?? ''));
+$rememberedEmail = trim((string) ($_COOKIE['gestisser_remembered_email'] ?? ''));
+if ($rememberedEmail !== '' && filter_var($rememberedEmail, FILTER_VALIDATE_EMAIL) === false) {
+    $rememberedEmail = '';
+}
+$email = trim((string) ($_POST['email'] ?? $rememberedEmail));
+$rememberLogin = $_SERVER['REQUEST_METHOD'] === 'POST'
+    ? isset($_POST['remember_login'])
+    : $rememberedEmail !== '';
 $loginMode = 'identify';
 $pendingUser = null;
 $requestIp = (string) ($_SERVER['REMOTE_ADDR'] ?? '0.0.0.0');
@@ -23,6 +30,26 @@ function safe_log_app_event(PDO $pdo, $userId, string $eventType, string $descri
     } catch (Throwable $exception) {
         error_log('[GesTisser] Não foi possível registar evento de login: ' . $exception->getMessage());
     }
+}
+
+function update_remembered_login(string $email, bool $remember)
+{
+    $expiresAt = $remember ? time() + (90 * 24 * 60 * 60) : time() - 3600;
+    $value = $remember ? $email : '';
+    $isSecure = !empty($_SERVER['HTTPS']) && strtolower((string) $_SERVER['HTTPS']) !== 'off';
+
+    if (PHP_VERSION_ID >= 70300) {
+        setcookie('gestisser_remembered_email', $value, [
+            'expires' => $expiresAt,
+            'path' => '/',
+            'secure' => $isSecure,
+            'httponly' => true,
+            'samesite' => 'Lax',
+        ]);
+        return;
+    }
+
+    setcookie('gestisser_remembered_email', $value, $expiresAt, '/; SameSite=Lax', '', $isSecure, true);
 }
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
@@ -51,6 +78,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             if ($action === 'login_password') {
                 $password = trim((string) ($_POST['password'] ?? ''));
                 if (password_verify($password, (string) ($pendingUser['password'] ?? ''))) {
+                    update_remembered_login($email, $rememberLogin);
                     session_regenerate_id(true);
                     $_SESSION['user_id'] = (int) $pendingUser['id'];
                     $_SESSION['login_at'] = date('Y-m-d H:i:s');
@@ -89,6 +117,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 }
 
                 if ($matchedPinUser) {
+                    update_remembered_login($email, $rememberLogin);
                     session_regenerate_id(true);
                     $_SESSION['user_id'] = (int) $matchedPinUser['id'];
                     $_SESSION['login_at'] = date('Y-m-d H:i:s');
@@ -145,9 +174,13 @@ require __DIR__ . '/partials/header.php';
                     <form method="post" class="vstack gap-3" id="identifyOrPasswordForm">
                         <?= csrf_input() ?>
                         <input type="hidden" name="action" value="identify_user" id="identifyActionInput">
-                        <input class="form-control form-control-lg" type="email" name="email" id="identifyEmailInput" placeholder="Email" value="<?= h((string) $email) ?>" required>
+                        <input class="form-control form-control-lg" type="email" name="email" id="identifyEmailInput" placeholder="Email" value="<?= h((string) $email) ?>" autocomplete="username" autofocus required>
                         <div id="identifyPasswordWrapper" class="d-none">
-                            <input class="form-control form-control-lg" type="password" name="password" id="identifyPasswordInput" placeholder="Password">
+                            <input class="form-control form-control-lg" type="password" name="password" id="identifyPasswordInput" placeholder="Password" autocomplete="current-password">
+                        </div>
+                        <div class="form-check auth-remember">
+                            <input class="form-check-input" type="checkbox" name="remember_login" value="1" id="identifyRememberLogin" <?= $rememberLogin ? 'checked' : '' ?>>
+                            <label class="form-check-label" for="identifyRememberLogin">Memorizar o meu email neste dispositivo</label>
                         </div>
                         <button class="btn btn-primary btn-lg" id="identifySubmitButton">Continuar</button>
                     </form>
@@ -178,8 +211,12 @@ require __DIR__ . '/partials/header.php';
                     <form method="post" class="vstack gap-3">
                         <?= csrf_input() ?>
                         <input type="hidden" name="action" value="login_password">
-                        <input class="form-control form-control-lg" type="email" name="email" value="<?= h((string) $email) ?>" readonly required>
-                        <input class="form-control form-control-lg" type="password" name="password" placeholder="Password" required>
+                        <input class="form-control form-control-lg" type="email" name="email" value="<?= h((string) $email) ?>" autocomplete="username" readonly required>
+                        <input class="form-control form-control-lg" type="password" name="password" placeholder="Password" autocomplete="current-password" autofocus required>
+                        <div class="form-check auth-remember">
+                            <input class="form-check-input" type="checkbox" name="remember_login" value="1" id="passwordRememberLogin" <?= $rememberLogin ? 'checked' : '' ?>>
+                            <label class="form-check-label" for="passwordRememberLogin">Memorizar o meu email neste dispositivo</label>
+                        </div>
                         <button class="btn btn-primary btn-lg">Login</button>
                     </form>
                     <div class="text-center mt-3"><a href="login.php" class="small">Trocar de utilizador</a></div>
@@ -188,6 +225,7 @@ require __DIR__ . '/partials/header.php';
                         <?= csrf_input() ?>
                         <input type="hidden" name="action" value="login_pin">
                         <input type="hidden" name="email" value="<?= h((string) $email) ?>">
+                        <?php if ($rememberLogin): ?><input type="hidden" name="remember_login" value="1"><?php endif; ?>
                         <input type="password" class="form-control form-control-lg text-center" name="pin" id="pinInput" inputmode="numeric" pattern="\d{6}" maxlength="6" placeholder="PIN de 6 dígitos" readonly required>
                         <div class="d-grid gap-2" style="grid-template-columns: repeat(3, 1fr); display:grid;">
                             <?php for ($digit = 1; $digit <= 9; $digit++): ?>
