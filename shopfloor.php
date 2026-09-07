@@ -18,8 +18,9 @@ if (!$isAdmin && !in_array($profile, ['Utilizador', 'Produção', 'Chefias', 'RH
 $flashSuccess = null;
 $flashError = null;
 $sessionLoginAt = trim((string) ($_SESSION['login_at'] ?? ''));
-$latestClockEntryTodayStmt = $pdo->prepare('SELECT entry_type FROM shopfloor_time_entries WHERE user_id = ? AND date(occurred_at, "localtime") = date("now", "localtime") ORDER BY occurred_at DESC LIMIT 1');
-$latestClockEntryTodayStmt->execute([$userId]);
+$todayLocalDate = date('Y-m-d');
+$latestClockEntryTodayStmt = $pdo->prepare('SELECT entry_type FROM shopfloor_time_entries WHERE user_id = ? AND date(occurred_at) = ? ORDER BY occurred_at DESC LIMIT 1');
+$latestClockEntryTodayStmt->execute([$userId, $todayLocalDate]);
 $latestClockEntryToday = (string) ($latestClockEntryTodayStmt->fetchColumn() ?: '');
 $hasOpenClockEntryToday = $latestClockEntryToday === 'entrada';
 if (isset($_GET['announcement_ack_required'])) {
@@ -280,8 +281,8 @@ $requestType,
                     $newStatus = 'Rejeitado';
                 }
             } elseif ($isRh) {
-                if (!in_array($currentStatus, ['Pendente Nível 2', 'Pendente'], true)) {
-                    $flashError = 'Este pedido já não está pendente do Nível 2.';
+                if (!in_array($currentStatus, ['Pendente Nível 1', 'Pendente Nível 2', 'Pendente'], true)) {
+                    $flashError = 'Este pedido já não está pendente de aprovação.';
                 } elseif ($decision === 'approve') {
                     $newStatus = 'Aprovado';
                 } else {
@@ -513,8 +514,8 @@ if (!$hourBank) {
     $hourBank = ['balance_hours' => 0, 'updated_at' => date('Y-m-d H:i:s')];
 }
 
-$todayEntriesStmt = $pdo->prepare('SELECT entry_type, note, datetime(occurred_at, "localtime") AS occurred_at FROM shopfloor_time_entries WHERE user_id = ? AND date(occurred_at, "localtime") = date("now", "localtime") ORDER BY occurred_at DESC');
-$todayEntriesStmt->execute([$userId]);
+$todayEntriesStmt = $pdo->prepare('SELECT entry_type, note, occurred_at FROM shopfloor_time_entries WHERE user_id = ? AND date(occurred_at) = ? ORDER BY occurred_at DESC');
+$todayEntriesStmt->execute([$userId, $todayLocalDate]);
 $todayEntries = $todayEntriesStmt->fetchAll(PDO::FETCH_ASSOC);
 
 $activeBreakEntryStmt = $pdo->prepare('SELECT b.id, b.break_reason_id, b.break_type, b.started_at, r.code, r.label, r.requires_comment FROM shopfloor_break_entries b INNER JOIN shopfloor_break_reasons r ON r.id = b.break_reason_id WHERE b.user_id = ? AND b.ended_at IS NULL ORDER BY b.started_at DESC LIMIT 1');
@@ -698,9 +699,7 @@ if ($isAdmin || $isRh) {
     $managedAnnouncements = $managedAnnouncementsStmt->fetchAll(PDO::FETCH_ASSOC);
 }
 
-$pendingVacationDaysStmt = $pdo->prepare('SELECT COALESCE(SUM(total_days), 0) FROM shopfloor_vacation_requests WHERE user_id = ? AND status IN ("Pendente", "Aprovado")');
-$pendingVacationDaysStmt->execute([$userId]);
-$pendingVacationDays = (float) $pendingVacationDaysStmt->fetchColumn();
+$availableVacationDays = max(0.0, $assignedVacationDays - $takenVacationDays);
 
 $targetMinutes = company_daily_objective_minutes($pdo);
 if (!empty($scheduleContext['start_time']) && !empty($scheduleContext['end_time'])) {
@@ -828,7 +827,7 @@ require __DIR__ . '/partials/header.php';
             </article>
             <article class="shopfloor-kpi-card shopfloor-kpi-card-compact">
                 <h2>Dias de férias</h2>
-                <strong><?= h(number_format($pendingVacationDays, 1, ',', '.')) ?></strong>
+                <strong><?= h(number_format($availableVacationDays, 1, ',', '.')) ?></strong>
             </article>
             <article class="shopfloor-kpi-card shopfloor-kpi-card-compact">
                 <h2>Pausas (dia)</h2>

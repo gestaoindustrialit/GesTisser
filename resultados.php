@@ -35,7 +35,7 @@ if ($endDate === '' || !DateTimeImmutable::createFromFormat('Y-m-d', $endDate) |
 
 $flashSuccess = null;
 $flashError = null;
-$dailyObjectiveMinutes = company_daily_objective_minutes($pdo);
+$dailyObjectiveMinutes = 8 * 60;
 $dailyObjectiveSeconds = $dailyObjectiveMinutes * 60;
 $dailyObjectiveLabel = format_minutes_hhmm($dailyObjectiveMinutes);
 
@@ -922,7 +922,7 @@ foreach ($daily as &$row) {
     $row['status'] = (!$row['has_pending_entries'] && $row['validated_entries_count'] === $row['entries_count'] && $row['entries_count'] > 0) ? 'Validado' : 'Em curso';
     $row['type_label'] = count($row['entries']) >= 4 ? 'Normal' : 'Parcial';
     $row['effective'] = sprintf('%02d:%02d', intdiv($row['seconds'], 3600), intdiv($row['seconds'] % 3600, 60));
-    $targetSeconds = $getScheduleTargetSeconds((int) $row['user_id'], (string) $row['date']);
+    $targetSeconds = $dailyObjectiveSeconds;
     $row['target_seconds'] = $targetSeconds;
     $row['target'] = sprintf('%02d:%02d', intdiv($targetSeconds, 3600), intdiv($targetSeconds % 3600, 60));
     $computedBhSeconds = $row['seconds'] - ($targetSeconds);
@@ -1114,6 +1114,13 @@ usort(
         return strcmp((string) ($b['date'] ?? ''), (string) ($a['date'] ?? ''));
     }
 );
+
+$resultsTotals = ['target_seconds' => 0, 'effective_seconds' => 0, 'bh_seconds' => 0];
+foreach ($daily as $resultRow) {
+    $resultsTotals['target_seconds'] += (int) ($resultRow['target_seconds'] ?? $dailyObjectiveSeconds);
+    $resultsTotals['effective_seconds'] += (int) ($resultRow['seconds'] ?? 0);
+    $resultsTotals['bh_seconds'] += (int) ($resultRow['bh_seconds'] ?? 0);
+}
 
 $exportRecords = [];
 $exportRecordKeys = [];
@@ -1474,7 +1481,7 @@ require __DIR__ . '/partials/header.php';
                                     <input type="hidden" class="form-control form-control-sm results-bh-reason" name="override_reason" value="<?= h((string) $row['bh_reason']) ?>" placeholder="Motivo" <?= $isPendingRow ? 'form="' . h($rowFormId) . '"' : '' ?>>
                                 </div>
                                 <?php if (!empty($row['absence_allocation'])): ?>
-                                    <div class="small text-muted mt-1 js-row-absence-summary">Ausência <?= h((string) ($row['absence_allocation']['absence_code'] ?? '')) ?> · <?= h(format_hhmm_from_minutes((int) ($row['absence_allocation']['allocated_minutes'] ?? 0))) ?></div>
+                                    <div class="small text-muted mt-1 js-row-absence-summary"><?= h((string) ($row['absence_allocation']['absence_code'] ?? '')) ?> · <?= h(format_hhmm_from_minutes((int) ($row['absence_allocation']['allocated_minutes'] ?? 0))) ?></div>
                                 <?php endif; ?>
                             <?php else: ?>
                                 <input type="text" class="form-control form-control-sm results-bh-input <?= $bhClass ?>" value="<?= h($row['bh']) ?>" readonly>
@@ -1523,6 +1530,17 @@ require __DIR__ . '/partials/header.php';
                     </tr>
                 <?php endforeach; ?>
                 </tbody>
+                <?php if ($daily): ?>
+                    <tfoot>
+                        <tr class="fw-semibold border-top">
+                            <td colspan="<?= 5 + $maxEntryCount ?>">Totais</td>
+                            <td><?= h(format_signed_hhmm($resultsTotals['target_seconds'])) ?></td>
+                            <td><?= h(format_signed_hhmm($resultsTotals['effective_seconds'])) ?></td>
+                            <td>BH <?= h(format_signed_hhmm($resultsTotals['bh_seconds'])) ?></td>
+                            <?php if ($canValidateResults): ?><td></td><?php endif; ?>
+                        </tr>
+                    </tfoot>
+                <?php endif; ?>
             </table>
         </div>
     </div>
@@ -1713,7 +1731,7 @@ require __DIR__ . '/partials/header.php';
             const summary = row.querySelector('.js-row-absence-summary');
             const hh = String(Math.floor(allocatedMinutes / 60)).padStart(2, '0');
             const mm = String(allocatedMinutes % 60).padStart(2, '0');
-            const summaryText = `Ausências ${(row.dataset.currentCode || '').trim()} · ${hh}:${mm}`;
+            const summaryText = `${(row.dataset.currentCode || '').trim()} · ${hh}:${mm}`;
             if (allocatedMinutes <= 0) {
                 row.dataset.currentCode = '';
                 row.dataset.currentMinutes = '0';
