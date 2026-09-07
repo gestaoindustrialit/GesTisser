@@ -35,7 +35,7 @@ if ($endDate === '' || !DateTimeImmutable::createFromFormat('Y-m-d', $endDate) |
 
 $flashSuccess = null;
 $flashError = null;
-$dailyObjectiveMinutes = company_daily_objective_minutes($pdo);
+$dailyObjectiveMinutes = 8 * 60;
 $dailyObjectiveSeconds = $dailyObjectiveMinutes * 60;
 $dailyObjectiveLabel = format_minutes_hhmm($dailyObjectiveMinutes);
 
@@ -541,8 +541,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $canValidateResults) {
             try {
                 $targetSeconds = $dailyObjectiveSeconds;
                 $effectiveSeconds = calculate_effective_seconds($entriesToReopen);
-                $absenceAllocatedSeconds = get_absence_allocated_seconds($pdo, $validateUserId, $validateDate);
-                $computedBhSeconds = ($effectiveSeconds - $targetSeconds) + $absenceAllocatedSeconds;
+                $computedBhSeconds = $effectiveSeconds - $targetSeconds;
                 $bhSeconds = get_override_bh_seconds($pdo, $validateUserId, $validateDate) ?? $computedBhSeconds;
 
                 apply_hour_bank_delta($pdo, $validateUserId, -$bhSeconds, $userId, $validateDate);
@@ -579,8 +578,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $canValidateResults) {
 
                 $targetSeconds = $dailyObjectiveSeconds;
                 $effectiveSeconds = calculate_effective_seconds($allEntries);
-                $absenceAllocatedSeconds = get_absence_allocated_seconds($pdo, $validateUserId, $validateDate);
-                $computedBhSeconds = ($effectiveSeconds - $targetSeconds) + $absenceAllocatedSeconds;
+                $computedBhSeconds = $effectiveSeconds - $targetSeconds;
                 $computedBhMinutes = (int) round($computedBhSeconds / 60);
 
                 if ($overrideBhValue !== '') {
@@ -661,8 +659,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $canValidateResults) {
                     $allEntriesStmt->execute([(int) $entryUserId, $validateDate]);
                     $allEntries = $allEntriesStmt->fetchAll(PDO::FETCH_ASSOC);
                     $effectiveSeconds = calculate_effective_seconds($allEntries);
-                    $absenceAllocatedSeconds = get_absence_allocated_seconds($pdo, (int) $entryUserId, $validateDate);
-                    $computedBhSeconds = ($effectiveSeconds - $targetSeconds) + $absenceAllocatedSeconds;
+                    $computedBhSeconds = $effectiveSeconds - $targetSeconds;
                     $bhSeconds = get_override_bh_seconds($pdo, (int) $entryUserId, $validateDate) ?? $computedBhSeconds;
                     apply_hour_bank_delta($pdo, (int) $entryUserId, $bhSeconds, $userId, $validateDate);
                 }
@@ -922,7 +919,7 @@ foreach ($daily as &$row) {
     $row['status'] = (!$row['has_pending_entries'] && $row['validated_entries_count'] === $row['entries_count'] && $row['entries_count'] > 0) ? 'Validado' : 'Em curso';
     $row['type_label'] = count($row['entries']) >= 4 ? 'Normal' : 'Parcial';
     $row['effective'] = sprintf('%02d:%02d', intdiv($row['seconds'], 3600), intdiv($row['seconds'] % 3600, 60));
-    $targetSeconds = $getScheduleTargetSeconds((int) $row['user_id'], (string) $row['date']);
+    $targetSeconds = $dailyObjectiveSeconds;
     $row['target_seconds'] = $targetSeconds;
     $row['target'] = sprintf('%02d:%02d', intdiv($targetSeconds, 3600), intdiv($targetSeconds % 3600, 60));
     $computedBhSeconds = $row['seconds'] - ($targetSeconds);
@@ -1096,7 +1093,7 @@ foreach ($daily as &$row) {
     $row['absence_allocation'] = $allocation;
     $allocationCode = $allocation ? (string) ($allocation['absence_code'] ?? '') : '';
     $row['absence_allocated_seconds'] = ($allocation && !should_exclude_absence_from_bank_credit($allocationCode)) ? ((int) ($allocation['allocated_minutes'] ?? 0) * 60) : 0;
-    $row['computed_bh_seconds'] = ((int) $row['seconds'] - ($dailyObjectiveSeconds)) + (int) $row['absence_allocated_seconds'];
+    $row['computed_bh_seconds'] = (int) $row['seconds'] - $dailyObjectiveSeconds;
     $override = $overrideMap[$rowKey] ?? null;
     $row['bh_seconds'] = $override ? (((int) $override['bh_minutes']) * 60) : (int) $row['computed_bh_seconds'];
     $row['bh'] = format_signed_hhmm((int) $row['bh_seconds']);
@@ -1114,6 +1111,13 @@ usort(
         return strcmp((string) ($b['date'] ?? ''), (string) ($a['date'] ?? ''));
     }
 );
+
+$resultsTotals = ['target_seconds' => 0, 'effective_seconds' => 0, 'bh_seconds' => 0];
+foreach ($daily as $resultRow) {
+    $resultsTotals['target_seconds'] += (int) ($resultRow['target_seconds'] ?? $dailyObjectiveSeconds);
+    $resultsTotals['effective_seconds'] += (int) ($resultRow['seconds'] ?? 0);
+    $resultsTotals['bh_seconds'] += (int) ($resultRow['bh_seconds'] ?? 0);
+}
 
 $exportRecords = [];
 $exportRecordKeys = [];
@@ -1464,7 +1468,7 @@ require __DIR__ . '/partials/header.php';
                             </td>
                         <?php endfor; ?>
                         <td class="js-results-target" data-target-seconds="<?= (int) ($row['target_seconds'] ?? $dailyObjectiveSeconds) ?>"><?= h($row['target']) ?></td>
-                        <td class="js-results-effective" data-effective-seconds="<?= (int) $row['seconds'] ?>"><?= h($row['effective']) ?></td>
+                        <td class="<?= $isPendingRow ? 'js-results-effective' : '' ?>" data-effective-seconds="<?= (int) $row['seconds'] ?>"><?= h($row['effective']) ?></td>
                         <td>
                             <?php $bhClass = $row['bh_seconds'] < 0 ? 'text-danger' : ($row['bh_seconds'] > 0 ? 'text-success' : 'text-muted'); ?>
                             <?php if ($canValidateResults): ?>
@@ -1474,7 +1478,7 @@ require __DIR__ . '/partials/header.php';
                                     <input type="hidden" class="form-control form-control-sm results-bh-reason" name="override_reason" value="<?= h((string) $row['bh_reason']) ?>" placeholder="Motivo" <?= $isPendingRow ? 'form="' . h($rowFormId) . '"' : '' ?>>
                                 </div>
                                 <?php if (!empty($row['absence_allocation'])): ?>
-                                    <div class="small text-muted mt-1 js-row-absence-summary">Ausência <?= h((string) ($row['absence_allocation']['absence_code'] ?? '')) ?> · <?= h(format_hhmm_from_minutes((int) ($row['absence_allocation']['allocated_minutes'] ?? 0))) ?></div>
+                                    <div class="small text-muted mt-1 js-row-absence-summary"><?= h((string) ($row['absence_allocation']['absence_code'] ?? '')) ?> · <?= h(format_hhmm_from_minutes((int) ($row['absence_allocation']['allocated_minutes'] ?? 0))) ?></div>
                                 <?php endif; ?>
                             <?php else: ?>
                                 <input type="text" class="form-control form-control-sm results-bh-input <?= $bhClass ?>" value="<?= h($row['bh']) ?>" readonly>
@@ -1523,6 +1527,17 @@ require __DIR__ . '/partials/header.php';
                     </tr>
                 <?php endforeach; ?>
                 </tbody>
+                <?php if ($daily): ?>
+                    <tfoot>
+                        <tr class="fw-semibold border-top">
+                            <td colspan="<?= 5 + $maxEntryCount ?>">Totais</td>
+                            <td><?= h(format_signed_hhmm($resultsTotals['target_seconds'])) ?></td>
+                            <td><?= h(format_signed_hhmm($resultsTotals['effective_seconds'])) ?></td>
+                            <td>BH <?= h(format_signed_hhmm($resultsTotals['bh_seconds'])) ?></td>
+                            <?php if ($canValidateResults): ?><td></td><?php endif; ?>
+                        </tr>
+                    </tfoot>
+                <?php endif; ?>
             </table>
         </div>
     </div>
@@ -1556,7 +1571,7 @@ require __DIR__ . '/partials/header.php';
                     </div>
                     <div class="js-row-validation-absence-list"></div>
                 </div>
-                <p class="small text-muted mt-2 mb-0 js-row-validation-absence-help d-none">O tempo associado é somado ao efectivo para reduzir o Tempo BH negativo.</p>
+                <p class="small text-muted mt-2 mb-0 js-row-validation-absence-help d-none">O tempo associado identifica a ausência, sem alterar o cálculo do Tempo BH.</p>
             </div>
             <div class="modal-footer">
                 <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancelar</button>
@@ -1675,7 +1690,7 @@ require __DIR__ . '/partials/header.php';
             if (!Array.isArray(dayOptions) || dayOptions.length === 0) {
                 absenceHelp.textContent = 'Sem ausência criada para este dia. Pode associar manualmente um motivo e tempo (HH:MM).';
             } else {
-                absenceHelp.textContent = 'O tempo associado é somado ao efectivo para reduzir o Tempo BH negativo.';
+                absenceHelp.textContent = 'O tempo associado identifica a ausência, sem alterar o cálculo do Tempo BH.';
             }
         };
 
@@ -1713,7 +1728,7 @@ require __DIR__ . '/partials/header.php';
             const summary = row.querySelector('.js-row-absence-summary');
             const hh = String(Math.floor(allocatedMinutes / 60)).padStart(2, '0');
             const mm = String(allocatedMinutes % 60).padStart(2, '0');
-            const summaryText = `Ausências ${(row.dataset.currentCode || '').trim()} · ${hh}:${mm}`;
+            const summaryText = `${(row.dataset.currentCode || '').trim()} · ${hh}:${mm}`;
             if (allocatedMinutes <= 0) {
                 row.dataset.currentCode = '';
                 row.dataset.currentMinutes = '0';
@@ -1871,7 +1886,7 @@ require __DIR__ . '/partials/header.php';
                     if (absenceSeconds > 0) {
                         const hours = Math.floor(absenceSeconds / 3600);
                         const minutes = Math.floor((absenceSeconds % 3600) / 60);
-                        absenceInfo.textContent = `Ausência comunicada para o dia: +${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')} no cálculo do Tempo BH.`;
+                        absenceInfo.textContent = `Ausência comunicada para o dia: ${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}.`;
                         absenceInfo.classList.remove('d-none');
                     } else {
                         absenceInfo.classList.add('d-none');

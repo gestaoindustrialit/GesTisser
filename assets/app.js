@@ -535,7 +535,7 @@ function initResultsPage() {
             return;
         }
 
-        const entryInputs = Array.from(row.querySelectorAll('.js-entry-time'));
+        const entryInputs = Array.from(row.querySelectorAll('.results-entry-input'));
         const effectiveCell = row.querySelector('.js-results-effective');
         const targetCell = row.querySelector('.js-results-target');
         const bhInput = row.querySelector('.js-results-bh-input');
@@ -579,8 +579,7 @@ function initResultsPage() {
         effectiveCell.textContent = formatHHMM(effectiveSeconds);
 
         const targetSeconds = Number(targetCell.dataset.targetSeconds || '0');
-        const absenceAllocatedSeconds = Number(row.dataset.absenceAllocatedSeconds || '0');
-        const bhSeconds = (effectiveSeconds - targetSeconds) + absenceAllocatedSeconds;
+        const bhSeconds = effectiveSeconds - targetSeconds;
         const autoBhValue = formatHHMM(bhSeconds, true);
         bhInput.dataset.autoBh = autoBhValue;
 
