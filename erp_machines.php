@@ -106,6 +106,80 @@ function gt_save_machine_uploads(PDO $pdo, int $machineId, int $userId, array $f
     return $count;
 }
 
+function gt_save_machine_chunk(PDO $pdo, int $machineId, int $userId, array $file, array $allowedMimeTypes): bool
+{
+    $uploadId = (string) ($_POST['upload_id'] ?? '');
+    $chunkIndex = (int) ($_POST['chunk_index'] ?? -1);
+    $chunkTotal = (int) ($_POST['chunk_total'] ?? 0);
+    if (!preg_match('/^[a-f0-9]{32}$/', $uploadId) || $chunkIndex < 0 || $chunkTotal < 1 || $chunkIndex >= $chunkTotal || $chunkTotal > 20) {
+        throw new RuntimeException('Pedido de upload inválido.');
+    }
+    if (($file['error'] ?? UPLOAD_ERR_NO_FILE) !== UPLOAD_ERR_OK || !is_uploaded_file((string) ($file['tmp_name'] ?? ''))) {
+        throw new RuntimeException(gt_machine_upload_error_message((int) ($file['error'] ?? UPLOAD_ERR_NO_FILE)));
+    }
+    $exists = $pdo->prepare('SELECT id FROM erp_machines WHERE id=? AND deleted_at IS NULL');
+    $exists->execute([$machineId]);
+    if (!$exists->fetchColumn()) {
+        throw new RuntimeException('Máquina não encontrada.');
+    }
+
+    $chunkDir = sys_get_temp_dir() . '/gestisser_machine_' . $userId . '_' . $uploadId;
+    if (!is_dir($chunkDir) && !mkdir($chunkDir, 0700, true) && !is_dir($chunkDir)) {
+        throw new RuntimeException('Não foi possível preparar o upload.');
+    }
+    if (!move_uploaded_file((string) $file['tmp_name'], $chunkDir . '/' . $chunkIndex)) {
+        throw new RuntimeException('Não foi possível guardar uma parte do ficheiro.');
+    }
+    if ($chunkIndex + 1 < $chunkTotal) {
+        return false;
+    }
+
+    $assembled = $chunkDir . '/complete';
+    $output = fopen($assembled, 'wb');
+    if ($output === false) {
+        throw new RuntimeException('Não foi possível concluir o upload.');
+    }
+    for ($index = 0; $index < $chunkTotal; $index++) {
+        $part = $chunkDir . '/' . $index;
+        $input = is_file($part) ? fopen($part, 'rb') : false;
+        if ($input === false) {
+            fclose($output);
+            throw new RuntimeException('Falta uma parte do ficheiro. Tente novamente.');
+        }
+        stream_copy_to_stream($input, $output);
+        fclose($input);
+        unlink($part);
+    }
+    fclose($output);
+    $size = (int) filesize($assembled);
+    $originalName = (string) ($_POST['file_name'] ?? 'documento');
+    // O ficheiro montado já não é reconhecido por is_uploaded_file; valide e mova-o aqui.
+    if ($size <= 0 || $size > 10 * 1024 * 1024) {
+        throw new RuntimeException('Cada ficheiro deve ter no máximo 10 MB.');
+    }
+    $finfo = finfo_open(FILEINFO_MIME_TYPE);
+    $mime = $finfo ? (string) finfo_file($finfo, $assembled) : '';
+    if ($finfo) {
+        finfo_close($finfo);
+    }
+    if (!in_array($mime, $allowedMimeTypes, true)) {
+        throw new RuntimeException('Tipo de ficheiro não permitido.');
+    }
+    $extension = strtolower(pathinfo($originalName, PATHINFO_EXTENSION));
+    $safeName = 'machine_' . $machineId . '_' . bin2hex(random_bytes(10)) . ($extension !== '' ? '.' . $extension : '');
+    $uploadDir = __DIR__ . '/storage/uploads/machines';
+    if (!is_dir($uploadDir) && !mkdir($uploadDir, 0775, true) && !is_dir($uploadDir)) {
+        throw new RuntimeException('Não foi possível preparar a pasta de uploads.');
+    }
+    if (!rename($assembled, $uploadDir . '/' . $safeName)) {
+        throw new RuntimeException('Não foi possível guardar o ficheiro.');
+    }
+    @rmdir($chunkDir);
+    $pdo->prepare('INSERT INTO erp_machine_attachments(machine_id, original_name, file_path, mime_type, file_size, uploaded_by) VALUES (?, ?, ?, ?, ?, ?)')
+        ->execute([$machineId, $originalName, 'storage/uploads/machines/' . $safeName, $mime, $size, $userId]);
+    return true;
+}
+
 /**
  * Return machine identifiers without using an arrow-function callback.
  *
@@ -130,7 +204,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     } else {
         try {
             $action = $_POST['action'] ?? '';
-            if ($action === 'save') {
+            if ($action === 'upload_chunk') {
+                $complete = gt_save_machine_chunk($pdo, (int) ($_POST['id'] ?? 0), $userId, $_FILES['chunk'] ?? [], $machineAttachmentMimeTypes);
+                header('Content-Type: application/json');
+                echo json_encode(['ok' => true, 'complete' => $complete]);
+                exit;
+            } elseif ($action === 'save') {
                 $id = (int) ($_POST['id'] ?? 0);
                 $year = (int) ($_POST['manufacturing_year'] ?? 0);
                 if ($year && ($year < 1900 || $year > (int) date('Y') + 1)) {
@@ -174,6 +253,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $flashSuccess = 'Máquina removida.';
             }
         } catch (Throwable $e) {
+            if (($_POST['action'] ?? '') === 'upload_chunk') {
+                header('Content-Type: application/json');
+                http_response_code(422);
+                echo json_encode(['ok' => false, 'error' => $e->getMessage()]);
+                exit;
+            }
             $flashError = 'Erro: ' . $e->getMessage();
         }
     }
@@ -325,6 +410,47 @@ document.addEventListener('DOMContentLoaded', function () {
         });
     };
     if (!modal || !form) return;
+    form.addEventListener('submit', function (event) {
+        const action = form.querySelector('[name="action"]');
+        const machineId = form.querySelector('[name="id"]');
+        const fileInput = form.querySelector('[name="machine_files[]"]');
+        if (!action || action.value !== 'save' || !machineId || !machineId.value || !fileInput || !fileInput.files.length || form.dataset.uploading === '1') return;
+        event.preventDefault();
+        form.dataset.uploading = '1';
+        const submitButton = form.querySelector('.modal-footer button[type="submit"], .modal-footer button:not([type])');
+        if (submitButton) submitButton.disabled = true;
+        const csrf = form.querySelector('[name="_token"]');
+        const chunkSize = 1024 * 1024;
+        const uploadFile = async function (file) {
+            const uploadId = Array.from(crypto.getRandomValues(new Uint8Array(16)), function (byte) { return byte.toString(16).padStart(2, '0'); }).join('');
+            const total = Math.ceil(file.size / chunkSize);
+            for (let index = 0; index < total; index++) {
+                const payload = new FormData();
+                payload.append('_token', csrf ? csrf.value : '');
+                payload.append('action', 'upload_chunk');
+                payload.append('id', machineId.value);
+                payload.append('upload_id', uploadId);
+                payload.append('chunk_index', String(index));
+                payload.append('chunk_total', String(total));
+                payload.append('file_name', file.name);
+                payload.append('chunk', file.slice(index * chunkSize, Math.min(file.size, (index + 1) * chunkSize)), 'chunk');
+                const response = await fetch(window.location.href, { method: 'POST', body: payload, credentials: 'same-origin' });
+                const result = await response.json();
+                if (!response.ok || !result.ok) throw new Error(result.error || 'Não foi possível carregar o ficheiro.');
+            }
+        };
+        (async function () {
+            try {
+                for (const file of Array.from(fileInput.files)) await uploadFile(file);
+                fileInput.value = '';
+                form.submit();
+            } catch (error) {
+                form.dataset.uploading = '0';
+                if (submitButton) submitButton.disabled = false;
+                window.alert(error.message || 'Não foi possível carregar o ficheiro.');
+            }
+        })();
+    });
     modal.addEventListener('show.bs.modal', function (event) {
         form.reset();
         form.querySelector('[name="id"]').value = '';
