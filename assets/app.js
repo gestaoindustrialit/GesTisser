@@ -535,7 +535,7 @@ function initResultsPage() {
             return;
         }
 
-        const entryInputs = Array.from(row.querySelectorAll('.js-entry-time'));
+        const entryInputs = Array.from(row.querySelectorAll('.results-entry-input'));
         const effectiveCell = row.querySelector('.js-results-effective');
         const targetCell = row.querySelector('.js-results-target');
         const bhInput = row.querySelector('.js-results-bh-input');
