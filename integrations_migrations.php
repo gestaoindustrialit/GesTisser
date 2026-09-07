@@ -3,14 +3,43 @@ declare(strict_types=1);
 
 function integrations_migrate(PDO $pdo): void
 {
-    static $done = false;
-    if ($done) return;
-    $done = true;
+    static $migratedConnections = [];
+    $connectionId = spl_object_hash($pdo);
+    if (isset($migratedConnections[$connectionId])) {
+        return;
+    }
+
+    $requiredObjects = [
+        'integrations',
+        'integration_credentials',
+        'integration_headers',
+        'integration_flows',
+        'integration_flow_headers',
+        'integration_field_mappings',
+        'integration_mappings',
+        'integration_filters',
+        'integration_runs',
+        'integration_run_items',
+        'idx_integration_flows_due',
+        'idx_integration_runs_date',
+    ];
+    $placeholders = implode(',', array_fill(0, count($requiredObjects), '?'));
+    $check = $pdo->prepare('SELECT name FROM sqlite_master WHERE name IN (' . $placeholders . ')');
+    $check->execute($requiredObjects);
+    $existingObjects = $check->fetchAll(PDO::FETCH_COLUMN);
+
+    // Avoid acquiring a SQLite write lock on every page load once the schema exists.
+    if (count(array_unique($existingObjects)) === count($requiredObjects)) {
+        $migratedConnections[$connectionId] = true;
+        return;
+    }
+
     $db = (string) app_config('db_path');
-    $marker = dirname($db) . '/storage/backups/integrations_schema_v1.done';
+    $backupDir = (string) app_config('paths.backups', dirname($db) . '/storage/backups');
+    $marker = $backupDir . '/integrations_schema_v1.done';
     if (!is_file($marker) && is_file($db)) {
-        @mkdir(dirname($marker), 0750, true);
-        @copy($db, dirname($marker) . '/pre_integrations_' . date('Ymd_His') . '.sqlite');
+        @mkdir($backupDir, 0750, true);
+        @copy($db, $backupDir . '/pre_integrations_' . date('Ymd_His') . '.sqlite');
     }
     $sql = [
         'CREATE TABLE IF NOT EXISTS integrations (id INTEGER PRIMARY KEY AUTOINCREMENT,name TEXT NOT NULL,slug TEXT NOT NULL UNIQUE,provider TEXT NOT NULL DEFAULT "generic",description TEXT,is_active INTEGER NOT NULL DEFAULT 0,environment TEXT NOT NULL DEFAULT "sandbox",base_url TEXT NOT NULL,timeout INTEGER NOT NULL DEFAULT 20,retries INTEGER NOT NULL DEFAULT 2,retry_delay INTEGER NOT NULL DEFAULT 2,verify_ssl INTEGER NOT NULL DEFAULT 1,auth_type TEXT NOT NULL DEFAULT "none",status TEXT NOT NULL DEFAULT "off",last_result TEXT,created_by INTEGER,updated_by INTEGER,created_at DATETIME DEFAULT CURRENT_TIMESTAMP,updated_at DATETIME DEFAULT CURRENT_TIMESTAMP)',
@@ -26,7 +55,18 @@ function integrations_migrate(PDO $pdo): void
         'CREATE INDEX IF NOT EXISTS idx_integration_flows_due ON integration_flows(is_active,next_run_at)',
         'CREATE INDEX IF NOT EXISTS idx_integration_runs_date ON integration_runs(started_at)'
     ];
-    $pdo->beginTransaction();
-    try { foreach ($sql as $q) $pdo->exec($q); $pdo->commit(); @touch($marker); }
-    catch (Throwable $e) { $pdo->rollBack(); throw $e; }
+    try {
+        $pdo->beginTransaction();
+        foreach ($sql as $query) {
+            $pdo->exec($query);
+        }
+        $pdo->commit();
+        $migratedConnections[$connectionId] = true;
+        @touch($marker);
+    } catch (Throwable $exception) {
+        if ($pdo->inTransaction()) {
+            $pdo->rollBack();
+        }
+        throw $exception;
+    }
 }
