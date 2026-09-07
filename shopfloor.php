@@ -1,6 +1,7 @@
 <?php
 require_once __DIR__ . '/helpers.php';
 require_once __DIR__ . '/app/Services/ShopfloorAttachment.php';
+require_once __DIR__ . '/app/Services/OperationChecklistService.php';
 require_once __DIR__ . '/hr_organization_lib.php';
 require_once __DIR__ . '/erp_migrations.php';
 require_login();
@@ -8,6 +9,7 @@ gt_run_org_migrations($pdo);
 erp_run_phase1_migrations($pdo);
 
 $userId = (int) $_SESSION['user_id'];
+$operationChecklistService = new OperationChecklistService($pdo);
 $user = current_user($pdo);
 $profile = (string) ($user['access_profile'] ?? 'Utilizador');
 $isAdmin = (int) ($user['is_admin'] ?? 0) === 1;
@@ -119,6 +121,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $pendingDocsStmt->execute([$poOperationId, $userId]);
         $openOpStmt = $pdo->prepare('SELECT id FROM erp_operation_time_entries WHERE user_id = ? AND ended_at IS NULL LIMIT 1');
         $openOpStmt->execute([$userId]);
+        $checklistRequired = $operation ? $operationChecklistService->isRequired($operation, $userId, 'start') : false;
+        if ($checklistRequired) {
+            try { $operationChecklistService->validateAndEncode((int) $operation['checklist_template_id'], (array) ($_POST['checklist'] ?? [])); }
+            catch (InvalidArgumentException $exception) { $flashError = $exception->getMessage(); }
+        }
         if ($flashError) {
         } elseif (!$operation) {
             $flashError = 'Etapa da OF inválida.';
@@ -133,6 +140,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         } else {
             $pdo->prepare('INSERT INTO erp_operation_time_entries(production_order_operation_id, user_id, selected_machine_id) VALUES (?, ?, ?)')->execute([$poOperationId, $userId,$machineId?:null]);
             $entry=(int)$pdo->lastInsertId();$pdo->prepare('INSERT OR IGNORE INTO erp_operation_execution_operators(time_entry_id,user_id) VALUES (?,?)')->execute([$entry,$userId]);
+            if ($checklistRequired) $operationChecklistService->save($operation, $userId, 'start', (array) ($_POST['checklist'] ?? []), $entry);
             $pdo->prepare('UPDATE erp_production_order_operations SET status = "Em curso" WHERE id = ?')->execute([$poOperationId]);
             $flashSuccess = 'Operação iniciada.';
         }
@@ -143,7 +151,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $good = (float) ($_POST['quantity_good'] ?? 0);
         $reject = (float) ($_POST['quantity_rejected'] ?? 0);
         $stmt = $pdo->prepare('UPDATE erp_operation_time_entries SET ended_at = CURRENT_TIMESTAMP, quantity_good = ?, quantity_rejected = ?, notes = ? WHERE id = ? AND user_id = ? AND ended_at IS NULL');
-        $qualityResult=trim((string)($_POST['quality_result']??''));$entryInfo=$pdo->prepare('SELECT opo.id,opo.quality_points,o.requires_quality FROM erp_operation_time_entries te JOIN erp_production_order_operations opo ON opo.id=te.production_order_operation_id JOIN erp_operations o ON o.id=opo.operation_id WHERE te.id=?');$entryInfo->execute([$entryId]);$entryInfo=$entryInfo->fetch(PDO::FETCH_ASSOC);$reason=trim((string)($_POST['waste_reason']??''));if($reject>0&&$reason===''){$flashError='Indique o motivo do desperdício/refugo.';}elseif($entryInfo&&((int)$entryInfo['requires_quality']||trim((string)$entryInfo['quality_points'])!=='')&&!in_array($qualityResult,['pass','fail','na'],true)){$flashError='Execute e registe o controlo de qualidade obrigatório.';}else{$stmt->execute([$good, $reject, trim((string)($_POST['notes'] ?? '')) ?: null, $entryId, $userId]);if($stmt->rowCount()>0){if($reject>0)$pdo->prepare('INSERT INTO erp_operation_waste(time_entry_id,quantity,reason,created_by) VALUES (?,?,?,?)')->execute([$entryId,$reject,$reason,$userId]);if($qualityResult!=='')$pdo->prepare('INSERT INTO erp_operation_quality_checks(production_order_operation_id,checkpoint,result,checked_by) VALUES (?,?,?,?)')->execute([(int)$entryInfo['id'],trim((string)$entryInfo['quality_points'])?:'Controlo obrigatório',$qualityResult,$userId]);$pdo->prepare('UPDATE erp_production_order_operations SET status="Concluída" WHERE id=(SELECT production_order_operation_id FROM erp_operation_time_entries WHERE id=?)')->execute([$entryId]);}$flashSuccess=$stmt->rowCount()>0?'Operação concluída e tempos registados na OF.':'Operação inválida.';}
+        $qualityResult=trim((string)($_POST['quality_result']??''));$entryInfo=$pdo->prepare('SELECT opo.*,o.requires_quality FROM erp_operation_time_entries te JOIN erp_production_order_operations opo ON opo.id=te.production_order_operation_id JOIN erp_operations o ON o.id=opo.operation_id WHERE te.id=? AND te.user_id=? AND te.ended_at IS NULL');$entryInfo->execute([$entryId,$userId]);$entryInfo=$entryInfo->fetch(PDO::FETCH_ASSOC);$reason=trim((string)($_POST['waste_reason']??''));
+        $endChecklistRequired=$entryInfo?$operationChecklistService->isRequired($entryInfo,$userId,'end'):false;
+        if($endChecklistRequired){try{$operationChecklistService->validateAndEncode((int)$entryInfo['checklist_template_id'],(array)($_POST['checklist']??[]));}catch(InvalidArgumentException$exception){$flashError=$exception->getMessage();}}
+        if($flashError){}elseif($reject>0&&$reason===''){$flashError='Indique o motivo do desperdício/refugo.';}elseif($entryInfo&&((int)$entryInfo['requires_quality']||trim((string)$entryInfo['quality_points'])!=='')&&!in_array($qualityResult,['pass','fail','na'],true)){$flashError='Execute e registe o controlo de qualidade obrigatório.';}else{$stmt->execute([$good, $reject, trim((string)($_POST['notes'] ?? '')) ?: null, $entryId, $userId]);if($stmt->rowCount()>0){if($endChecklistRequired)$operationChecklistService->save($entryInfo,$userId,'end',(array)($_POST['checklist']??[]),$entryId);if($reject>0)$pdo->prepare('INSERT INTO erp_operation_waste(time_entry_id,quantity,reason,created_by) VALUES (?,?,?,?)')->execute([$entryId,$reject,$reason,$userId]);if($qualityResult!=='')$pdo->prepare('INSERT INTO erp_operation_quality_checks(production_order_operation_id,checkpoint,result,checked_by) VALUES (?,?,?,?)')->execute([(int)$entryInfo['id'],trim((string)$entryInfo['quality_points'])?:'Controlo obrigatório',$qualityResult,$userId]);$pdo->prepare('UPDATE erp_production_order_operations SET status="Concluída" WHERE id=(SELECT production_order_operation_id FROM erp_operation_time_entries WHERE id=?)')->execute([$entryId]);}$flashSuccess=$stmt->rowCount()>0?'Operação concluída e tempos registados na OF.':'Operação inválida.';}
     }
 
     if (in_array($action,['pause_operation','resume_operation'],true)) {
@@ -907,7 +918,30 @@ require __DIR__ . '/partials/header.php';
             <div class="alert alert-info small"><strong><?= h($selectedOf['order_number']) ?></strong> — Quantidade planeada: <?= h((string)$selectedOf['planned_quantity']) ?> · Estado: <?= h($selectedOf['status']) ?></div>
             <h3 class="h6">Documentos obrigatórios</h3>
             <div class="list-group mb-3"><?php if (!$ofDocuments): ?><div class="list-group-item text-secondary">Sem documentos anexados.</div><?php endif; foreach ($ofDocuments as $doc): ?><div class="list-group-item d-flex justify-content-between gap-2"><div><strong><?= h($doc['title']) ?></strong><?php if (!empty($doc['document_url'])): ?> · <a target="_blank" href="<?= h($doc['document_url']) ?>">visualizar</a><?php endif; ?><div class="small text-secondary"><?= nl2br(h((string)$doc['body'])) ?></div></div><form method="post"><input type="hidden" name="action" value="ack_of_document"><input type="hidden" name="document_id" value="<?= (int)$doc['id'] ?>"><button class="btn btn-sm <?= (int)$doc['acknowledged']===1?'btn-success':'btn-outline-success' ?>"><?= (int)$doc['acknowledged']===1?'Confirmado':'Tomei conhecimento' ?></button></form></div><?php endforeach; ?></div>
-            <h3 class="h6">Operações</h3><div class="table-responsive"><table class="table table-sm shopfloor-table"><thead><tr><th>Seq.</th><th>Operação</th><th>Estado</th><th>Previsto / real</th><th>Ação</th></tr></thead><tbody><?php foreach ($ofOperations as $op): ?><tr><td><?= (int)$op['sequence_no'] ?></td><td><?= h($op['code'].' - '.$op['name']) ?></td><td><?= h($op['status']) ?><div class="small text-secondary"><?= nl2br(h((string)($op['instructions']??''))) ?></div></td><td><?= h(number_format((float)($op['planned_minutes']??0),1,',','.')) ?> / <?= h(number_format((float)($op['actual_minutes']??0),1,',','.')) ?> min</td><td><?php if ((int)($op['open_entry_id'] ?? 0)>0): ?><form method="post" class="row g-1"><input type="hidden" name="action" value="stop_of_operation"><input type="hidden" name="entry_id" value="<?= (int)$op['open_entry_id'] ?>"><div class="col"><input class="form-control form-control-sm" type="number" step="0.001" name="quantity_good" placeholder="Qtd. OK"></div><div class="col"><input class="form-control form-control-sm" type="number" step="0.001" name="quantity_rejected" placeholder="Refugo"></div><div class="col"><input class="form-control form-control-sm" name="waste_reason" placeholder="Motivo refugo"></div><div class="col"><select class="form-select form-select-sm" name="quality_result"><option value="">Qualidade…</option><option value="pass">Conforme</option><option value="fail">Não conforme</option><option value="na">N/A</option></select></div><div class="col"><button class="btn btn-danger btn-sm w-100">Parar</button></div></form><?php else: ?><form method="post"><input type="hidden" name="action" value="start_of_operation"><input type="hidden" name="po_operation_id" value="<?= (int)$op['id'] ?>"><button class="btn btn-success btn-sm">Arrancar</button></form><?php endif; ?></td></tr><?php endforeach; ?></tbody></table></div>
+            <h3 class="h6">Operações</h3>
+            <div class="table-responsive"><table class="table table-sm shopfloor-table"><thead><tr><th>Seq.</th><th>Operação</th><th>Estado</th><th>Previsto / real</th><th>Ação</th></tr></thead><tbody>
+            <?php foreach ($ofOperations as $op):
+                $isOpen = (int) ($op['open_entry_id'] ?? 0) > 0;
+                $checklistPhase = $isOpen ? 'end' : 'start';
+                $showChecklist = $operationChecklistService->isRequired($op, $userId, $checklistPhase);
+                $operationChecklistItems = $showChecklist ? $operationChecklistService->items((int) $op['checklist_template_id']) : [];
+            ?>
+                <tr><td><?= (int)$op['sequence_no'] ?></td><td><?= h($op['code'].' - '.$op['name']) ?></td><td><?= h($op['status']) ?><div class="small text-secondary"><?= nl2br(h((string)($op['instructions']??''))) ?></div></td><td><?= h(number_format((float)($op['planned_minutes']??0),1,',','.')) ?> / <?= h(number_format((float)($op['actual_minutes']??0),1,',','.')) ?> min</td><td style="min-width:22rem">
+                <form method="post" class="row g-2">
+                    <input type="hidden" name="action" value="<?= $isOpen ? 'stop_of_operation' : 'start_of_operation' ?>">
+                    <?php if ($isOpen): ?><input type="hidden" name="entry_id" value="<?= (int)$op['open_entry_id'] ?>"><?php else: ?><input type="hidden" name="po_operation_id" value="<?= (int)$op['id'] ?>"><?php endif; ?>
+                    <?php if ($showChecklist): ?><div class="col-12 border rounded bg-light p-2"><div class="fw-semibold mb-2"><?= ($op['checklist_timing'] ?? '') === 'first' ? 'Checklist · primeira execução nesta OF' : 'Checklist · '.($isOpen ? 'fim' : 'início') ?></div>
+                        <?php foreach ($operationChecklistItems as $checkItem): $fieldId='checklist-'.$op['id'].'-'.$checkItem['id'];$fieldType=(string)($checkItem['field_type']?:'checkbox');$required=(int)$checkItem['is_required']===1; ?>
+                            <div class="mb-2"><label class="form-label small mb-1" for="<?=h($fieldId)?>"><?=h($checkItem['content'])?><?=$required?' *':''?></label>
+                            <?php if($fieldType==='checkbox'): ?><div><input class="form-check-input" id="<?=h($fieldId)?>" type="checkbox" name="checklist[<?=(int)$checkItem['id']?>]" value="1" <?=$required?'required':''?>></div>
+                            <?php elseif($fieldType==='textarea'): ?><textarea class="form-control form-control-sm" id="<?=h($fieldId)?>" name="checklist[<?=(int)$checkItem['id']?>]" <?=$required?'required':''?>></textarea>
+                            <?php elseif($fieldType==='select'): ?><select class="form-select form-select-sm" id="<?=h($fieldId)?>" name="checklist[<?=(int)$checkItem['id']?>]" <?=$required?'required':''?>><option value="">Escolher…</option><?php foreach(json_decode((string)$checkItem['options_json'],true)?:[] as$option):?><option value="<?=h($option)?>"><?=h($option)?></option><?php endforeach;?></select>
+                            <?php else: ?><input class="form-control form-control-sm" id="<?=h($fieldId)?>" type="<?=in_array($fieldType,['number','date'],true)?$fieldType:'text'?>" name="checklist[<?=(int)$checkItem['id']?>]" <?=$fieldType==='number'?'step="any"':''?> <?=$required?'required':''?>><?php endif; ?></div>
+                        <?php endforeach; ?></div><?php endif; ?>
+                    <?php if ($isOpen): ?><div class="col"><input class="form-control form-control-sm" type="number" step="0.001" name="quantity_good" placeholder="Qtd. OK"></div><div class="col"><input class="form-control form-control-sm" type="number" step="0.001" name="quantity_rejected" placeholder="Refugo"></div><div class="col"><input class="form-control form-control-sm" name="waste_reason" placeholder="Motivo refugo"></div><div class="col"><select class="form-select form-select-sm" name="quality_result"><option value="">Qualidade…</option><option value="pass">Conforme</option><option value="fail">Não conforme</option><option value="na">N/A</option></select></div><?php endif; ?>
+                    <div class="col-12"><button class="btn <?= $isOpen ? 'btn-danger' : 'btn-success' ?> btn-sm w-100"><?= $isOpen ? 'Concluir operação' : 'Arrancar' ?></button></div>
+                </form></td></tr>
+            <?php endforeach; ?></tbody></table></div>
         <?php endif; ?>
     </div>
     <div class="shopfloor-panel mb-4">

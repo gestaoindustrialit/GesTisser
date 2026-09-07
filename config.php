@@ -1133,6 +1133,17 @@ $pdo->exec(
     )'
 );
 
+$checklistTemplateItemColumns = $pdo->query('PRAGMA table_info(checklist_template_items)')->fetchAll(PDO::FETCH_COLUMN, 1);
+if (!in_array('field_type', $checklistTemplateItemColumns, true)) {
+    $pdo->exec('ALTER TABLE checklist_template_items ADD COLUMN field_type TEXT NOT NULL DEFAULT "checkbox"');
+}
+if (!in_array('options_json', $checklistTemplateItemColumns, true)) {
+    $pdo->exec('ALTER TABLE checklist_template_items ADD COLUMN options_json TEXT');
+}
+if (!in_array('is_required', $checklistTemplateItemColumns, true)) {
+    $pdo->exec('ALTER TABLE checklist_template_items ADD COLUMN is_required INTEGER NOT NULL DEFAULT 1');
+}
+
 $pdo->exec(
     'CREATE TABLE IF NOT EXISTS team_forms (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
