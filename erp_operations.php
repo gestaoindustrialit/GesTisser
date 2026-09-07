@@ -1,10 +1,35 @@
 <?php
-require_once __DIR__.'/helpers.php'; require_once __DIR__.'/hr_organization_lib.php'; require_once __DIR__.'/erp_migrations.php'; require_once __DIR__.'/app/Services/RoutingService.php';
+require_once __DIR__.'/helpers.php'; require_once __DIR__.'/hr_organization_lib.php'; require_once __DIR__.'/erp_migrations.php'; require_once __DIR__.'/app/Services/RoutingService.php'; require_once __DIR__.'/app/Services/UploadService.php';
 require_login(); gt_run_org_migrations($pdo); erp_run_phase1_migrations($pdo); $user=current_user($pdo)?:[];$uid=(int)$user['id'];
 if(!erp_user_can($pdo,$user,'erp.operations.view')){http_response_code(403);exit('Sem permissão para consultar operações.');}
 $service=new RoutingService($pdo);$ok=$error=null;
-if($_SERVER['REQUEST_METHOD']==='POST'&&validate_csrf_or_abort(false)){try{if(!erp_user_can($pdo,$user,'erp.operations.manage'))throw new RuntimeException('Sem permissão para gerir operações.');$service->saveOperation($_POST,(array)($_POST['machine_ids']??[]),$uid);$ok='Operação guardada com sucesso.';}catch(Throwable$e){$error=$e->getMessage();}}
+if($_SERVER['REQUEST_METHOD']==='POST'&&validate_csrf_or_abort(false)){try{
+    if(!erp_user_can($pdo,$user,'erp.operations.manage'))throw new RuntimeException('Sem permissão para gerir operações.');
+    if(($_POST['action']??'')==='delete_instruction_file'){
+        $documentId=(int)($_POST['document_id']??$_GET['document_id']??0);$operationId=(int)($_POST['id']??0);
+        $stmt=$pdo->prepare('SELECT * FROM erp_operation_documents WHERE id=? AND operation_id=?');$stmt->execute([$documentId,$operationId]);$document=$stmt->fetch(PDO::FETCH_ASSOC);
+        if(!$document)throw new RuntimeException('Anexo inexistente.');
+        $pdo->prepare('DELETE FROM erp_operation_documents WHERE id=?')->execute([$documentId]);
+        $path=__DIR__.'/'.ltrim((string)$document['file_url'],'/');if(strpos((string)$document['file_url'],'storage/uploads/')===0&&is_file($path))@unlink($path);
+        $ok='Anexo removido com sucesso.';
+    }else{
+        $operationId=$service->saveOperation($_POST,(array)($_POST['machine_ids']??[]),$uid);
+        $allowed=['pdf'=>['application/pdf'],'jpg'=>['image/jpeg'],'jpeg'=>['image/jpeg'],'png'=>['image/png'],'webp'=>['image/webp'],'gif'=>['image/gif'],'mp4'=>['video/mp4'],'webm'=>['video/webm'],'ogv'=>['video/ogg']];
+        if(!empty($_FILES['instruction_files']['name'])&&is_array($_FILES['instruction_files']['name'])){
+            $insert=$pdo->prepare('INSERT INTO erp_operation_documents(operation_id,title,file_url,mime_type,created_by) VALUES (?,?,?,?,?)');
+            foreach($_FILES['instruction_files']['name'] as $index=>$originalName){
+                if((int)($_FILES['instruction_files']['error'][$index]??UPLOAD_ERR_NO_FILE)===UPLOAD_ERR_NO_FILE)continue;
+                $extension=strtolower((string)pathinfo((string)$originalName,PATHINFO_EXTENSION));if(!isset($allowed[$extension]))throw new RuntimeException('O ficheiro "'.basename((string)$originalName).'" não tem um formato permitido.');
+                $file=['name'=>$originalName,'type'=>$_FILES['instruction_files']['type'][$index]??'','tmp_name'=>$_FILES['instruction_files']['tmp_name'][$index]??'','error'=>$_FILES['instruction_files']['error'][$index]??UPLOAD_ERR_NO_FILE,'size'=>$_FILES['instruction_files']['size'][$index]??0];
+                $url=UploadService::secureUpload($file,$allowed[$extension],52428800);if(!$url)throw new RuntimeException('Não foi possível carregar "'.basename((string)$originalName).'". O limite é 50 MB por ficheiro.');
+                $insert->execute([$operationId,basename((string)$originalName),$url,$allowed[$extension][0],$uid]);
+            }
+        }
+        $ok='Operação guardada com sucesso.';
+    }
+}catch(Throwable$e){$error=$e->getMessage();}}
 $q=trim((string)($_GET['q']??''));$sector=(int)($_GET['sector']??0);$machine=(int)($_GET['machine']??0);$state=(string)($_GET['state']??'');$where=['1=1'];$args=[];if($q!==''){$where[]='(o.code LIKE ? OR o.name LIKE ? OR o.description LIKE ?)';array_push($args,"%$q%","%$q%","%$q%");}if($sector){$where[]='o.default_work_center_id=?';$args[]=$sector;}if($machine){$where[]='EXISTS(SELECT 1 FROM erp_operation_machines om WHERE om.operation_id=o.id AND om.machine_id=?)';$args[]=$machine;}if($state!==''){$where[]='o.is_active=?';$args[]=$state==='active'?1:0;}$st=$pdo->prepare('SELECT o.*,w.name work_center_name,(SELECT group_concat(m.code,", ") FROM erp_operation_machines om JOIN erp_machines m ON m.id=om.machine_id WHERE om.operation_id=o.id) machines FROM erp_operations o LEFT JOIN erp_work_centers w ON w.id=o.default_work_center_id WHERE '.implode(' AND ',$where).' ORDER BY o.is_active DESC,o.code');$st->execute($args);$rows=$st->fetchAll(PDO::FETCH_ASSOC);$machines=$pdo->query('SELECT id,code,name FROM erp_machines WHERE is_active=1 AND deleted_at IS NULL ORDER BY code')->fetchAll(PDO::FETCH_ASSOC);$centers=$pdo->query('SELECT id,code,name FROM erp_work_centers WHERE is_active=1 ORDER BY code')->fetchAll(PDO::FETCH_ASSOC);$edit=null;$selected=[];if(isset($_GET['id'])){$s=$pdo->prepare('SELECT * FROM erp_operations WHERE id=?');$s->execute([(int)$_GET['id']]);$edit=$s->fetch(PDO::FETCH_ASSOC);$s=$pdo->prepare('SELECT machine_id FROM erp_operation_machines WHERE operation_id=?');$s->execute([(int)$_GET['id']]);$selected=array_map('intval',$s->fetchAll(PDO::FETCH_COLUMN));}
+$documents=[];if($edit&&!empty($edit['id'])){$s=$pdo->prepare('SELECT * FROM erp_operation_documents WHERE operation_id=? ORDER BY created_at,id');$s->execute([(int)$edit['id']]);$documents=$s->fetchAll(PDO::FETCH_ASSOC);}
 $operationTypeLabels=['production'=>'Produção','control'=>'Controlo','transport'=>'Transporte','wait'=>'Espera','subcontract'=>'Subcontratação','other'=>'Outro'];
 $productionUnitLabels=['unit'=>'Unidades','units'=>'Unidades','unidade'=>'Unidades','unidades'=>'Unidades','piece'=>'Peças','pieces'=>'Peças','kg'=>'Quilogramas','kilogram'=>'Quilogramas','kilograms'=>'Quilogramas','m'=>'Metros','meter'=>'Metros','meters'=>'Metros','l'=>'Litros','liter'=>'Litros','liters'=>'Litros','litro'=>'Litros','litros'=>'Litros','t'=>'Toneladas','ton'=>'Toneladas','tons'=>'Toneladas'];
 $currentProductionUnit=(string)($edit['production_unit']??'unit');
