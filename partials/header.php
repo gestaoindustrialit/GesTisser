@@ -69,7 +69,7 @@ $hrFiles = [
     'hr_bank.php', 'hr_absences.php', 'hr_vacations.php', 'hr_alerts.php',
     'hr_evaluations.php', 'hr_evaluation_rules.php', 'hr_evaluation_history.php',
     'resultados.php', 'shopfloor_absence_reasons.php', 'shopfloor_break_reasons.php',
-    'shopfloor_break_dashboard.php', 'hr_raffle.php', 'hr_organogram.php', 'hr_job_descriptions.php', 'hr_skills.php'
+    'shopfloor_break_dashboard.php', 'hr_raffle.php', 'hr_organogram.php', 'hr_job_descriptions.php', 'hr_skills.php', 'payroll.php'
 ];
 $adminFiles = ['company_profile.php', 'erp_settings.php', 'requests.php', 'checklists.php', 'app_logs.php', 'integrations.php', 'integration_edit.php', 'integration_flow_edit.php', 'integration_logs.php'];
 $isCurrentFile = static function ($file) use ($currentFile) {
@@ -164,6 +164,7 @@ header('Content-Type: text/html; charset=UTF-8');
                             <a class="<?= $isCurrentFile('hr_calendar.php') ? 'is-active' : '' ?>" href="hr_calendar.php">Calendário</a>
                             <a class="<?= $isCurrentFile('hr_absences.php') ? 'is-active' : '' ?>" href="hr_absences.php">Ausências</a>
                             <a class="<?= $isCurrentFile('hr_vacations.php') ? 'is-active' : '' ?>" href="hr_vacations.php">Férias</a>
+                            <a class="<?= $isCurrentFile('payroll.php') ? 'is-active' : '' ?>" href="payroll.php">Export Payroll</a>
                             <a class="<?= $isCurrentFile('hr_bank.php') ? 'is-active' : '' ?>" href="hr_bank.php">Banco de horas</a>
                             <a class="<?= $isCurrentFile('hr_alerts.php') ? 'is-active' : '' ?>" href="hr_alerts.php">Alertas RH</a>
                             <a class="<?= $isCurrentFile('hr_evaluations.php') ? 'is-active' : '' ?>" href="hr_evaluations.php">Avaliações</a>

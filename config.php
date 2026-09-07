@@ -718,6 +718,24 @@ $pdo->exec(
         updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
     )'
 );
+
+// Payroll is deliberately stored separately from live attendance: a closed
+// processing keeps an immutable JSON snapshot while manual variables retain a
+// complete author/update trail.
+$pdo->exec('CREATE TABLE IF NOT EXISTS payroll_permissions (code TEXT PRIMARY KEY, label TEXT NOT NULL)');
+$pdo->exec('CREATE TABLE IF NOT EXISTS payroll_user_permissions (user_id INTEGER NOT NULL, permission_code TEXT NOT NULL, is_allowed INTEGER NOT NULL DEFAULT 1, updated_by INTEGER, updated_at DATETIME DEFAULT CURRENT_TIMESTAMP, PRIMARY KEY(user_id, permission_code), FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE, FOREIGN KEY(updated_by) REFERENCES users(id) ON DELETE SET NULL)');
+$payrollPermissionStmt = $pdo->prepare('INSERT OR IGNORE INTO payroll_permissions(code,label) VALUES (?,?)');
+foreach ([
+    'payroll.view' => 'Consultar Payroll', 'payroll.edit' => 'Editar Payroll',
+    'payroll.export' => 'Exportar Payroll', 'payroll.close' => 'Fechar Payroll',
+    'payroll.reopen' => 'Reabrir Payroll',
+] as $payrollPermissionCode => $payrollPermissionLabel) {
+    $payrollPermissionStmt->execute([$payrollPermissionCode, $payrollPermissionLabel]);
+}
+$pdo->exec('CREATE TABLE IF NOT EXISTS payroll_runs (id INTEGER PRIMARY KEY AUTOINCREMENT, payroll_year INTEGER NOT NULL, payroll_month INTEGER NOT NULL, status TEXT NOT NULL DEFAULT "Rascunho", filters_json TEXT, snapshot_json TEXT, validated_by INTEGER, validated_at DATETIME, closed_by INTEGER, closed_at DATETIME, reopened_by INTEGER, reopened_at DATETIME, updated_at DATETIME DEFAULT CURRENT_TIMESTAMP, created_at DATETIME DEFAULT CURRENT_TIMESTAMP, UNIQUE(payroll_year,payroll_month), FOREIGN KEY(validated_by) REFERENCES users(id) ON DELETE SET NULL, FOREIGN KEY(closed_by) REFERENCES users(id) ON DELETE SET NULL, FOREIGN KEY(reopened_by) REFERENCES users(id) ON DELETE SET NULL)');
+$pdo->exec('CREATE TABLE IF NOT EXISTS payroll_variables (id INTEGER PRIMARY KEY AUTOINCREMENT, user_id INTEGER NOT NULL, payroll_year INTEGER NOT NULL, payroll_month INTEGER NOT NULL, variable_type TEXT NOT NULL, value REAL NOT NULL DEFAULT 0, observation TEXT, updated_by INTEGER NOT NULL, created_at DATETIME DEFAULT CURRENT_TIMESTAMP, updated_at DATETIME DEFAULT CURRENT_TIMESTAMP, UNIQUE(user_id,payroll_year,payroll_month,variable_type), FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE, FOREIGN KEY(updated_by) REFERENCES users(id) ON DELETE RESTRICT)');
+$pdo->exec('CREATE TABLE IF NOT EXISTS payroll_audit_log (id INTEGER PRIMARY KEY AUTOINCREMENT, payroll_run_id INTEGER NOT NULL, action TEXT NOT NULL, user_id INTEGER, details TEXT, created_at DATETIME DEFAULT CURRENT_TIMESTAMP, FOREIGN KEY(payroll_run_id) REFERENCES payroll_runs(id) ON DELETE CASCADE, FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE SET NULL)');
+$pdo->exec('CREATE INDEX IF NOT EXISTS idx_payroll_variables_period ON payroll_variables(payroll_year,payroll_month,user_id)');
 $breakReasonSeedKey = 'shopfloor_break_reasons_seeded';
 $breakReasonSeedStmt = $pdo->prepare('SELECT setting_value FROM app_settings WHERE setting_key = ? LIMIT 1');
 $breakReasonSeedStmt->execute([$breakReasonSeedKey]);

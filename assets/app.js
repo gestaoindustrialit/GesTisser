@@ -95,6 +95,22 @@ document.querySelectorAll('.js-collapse-toggle').forEach((button) => {
     target.addEventListener('hidden.bs.collapse', () => syncCollapseToggleIcon(button, false));
 });
 
+const sidebarNavigationGroups = Array.from(document.querySelectorAll('.gt-nav > details.gt-nav-group'));
+
+sidebarNavigationGroups.forEach((group) => {
+    group.addEventListener('toggle', () => {
+        if (!group.open) {
+            return;
+        }
+
+        sidebarNavigationGroups.forEach((otherGroup) => {
+            if (otherGroup !== group) {
+                otherGroup.open = false;
+            }
+        });
+    });
+});
+
 
 
 function initHrAlertsPage() {

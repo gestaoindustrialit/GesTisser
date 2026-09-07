@@ -15,6 +15,9 @@ $companyName = '';
 $companyAddress = '';
 $companyEmail = '';
 $companyPhone = '';
+$companyTaxNumber = '';
+$payrollNightStart = '22:00';
+$payrollNightEnd = '07:00';
 $smtpHost = '';
 $smtpPort = '587';
 $smtpSecure = 'tls';
@@ -63,6 +66,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $companyAddress = trim((string) ($_POST['company_address'] ?? ''));
         $companyEmail = trim((string) ($_POST['company_email'] ?? ''));
         $companyPhone = trim((string) ($_POST['company_phone'] ?? ''));
+        $companyTaxNumber = trim((string) ($_POST['company_tax_number'] ?? ''));
+        $payrollNightStart = trim((string) ($_POST['payroll_night_start'] ?? '22:00'));
+        $payrollNightEnd = trim((string) ($_POST['payroll_night_end'] ?? '07:00'));
         $smtpHost = trim((string) ($_POST['smtp_host'] ?? ''));
         $smtpPort = (int) ($_POST['smtp_port'] ?? 587);
         $smtpSecure = strtolower(trim((string) ($_POST['smtp_secure'] ?? 'tls')));
@@ -89,7 +95,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $hrAlertsCronRunsPerDay = 1440;
         }
 
-        if (preg_match('/^(\d{1,2}):(\d{2})$/', $companyDailyObjective, $dailyObjectiveMatches) !== 1 || (int) $dailyObjectiveMatches[1] > 23 || (int) $dailyObjectiveMatches[2] > 59) {
+        if (preg_match('/^([01]\d|2[0-3]):[0-5]\d$/', $payrollNightStart) !== 1 || preg_match('/^([01]\d|2[0-3]):[0-5]\d$/', $payrollNightEnd) !== 1) {
+            $flashError = 'Indique horas válidas para o início e fim do horário noturno.';
+        } elseif ($companyTaxNumber !== '' && preg_match('/^\d{9}$/', $companyTaxNumber) !== 1) {
+            $flashError = 'O NIF da empresa deve conter 9 algarismos.';
+        } elseif (preg_match('/^(\d{1,2}):(\d{2})$/', $companyDailyObjective, $dailyObjectiveMatches) !== 1 || (int) $dailyObjectiveMatches[1] > 23 || (int) $dailyObjectiveMatches[2] > 59) {
             $flashError = 'Indique um objetivo diário válido no formato HH:MM.';
         } elseif ($companyEmail !== '' && filter_var($companyEmail, FILTER_VALIDATE_EMAIL) === false) {
             $flashError = 'Indique um email válido para a empresa.';
@@ -104,6 +114,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             set_app_setting($pdo, 'company_address', $companyAddress);
             set_app_setting($pdo, 'company_email', $companyEmail);
             set_app_setting($pdo, 'company_phone', $companyPhone);
+            set_app_setting($pdo, 'company_tax_number', $companyTaxNumber);
+            set_app_setting($pdo, 'payroll_night_start', $payrollNightStart);
+            set_app_setting($pdo, 'payroll_night_end', $payrollNightEnd);
             set_app_setting($pdo, 'smtp_host', $smtpHost);
             set_app_setting($pdo, 'smtp_port', (string) $smtpPort);
             set_app_setting($pdo, 'smtp_secure', $smtpSecure);
@@ -213,6 +226,9 @@ $companyName = (string) app_setting($pdo, 'company_name', '');
 $companyAddress = (string) app_setting($pdo, 'company_address', '');
 $companyEmail = (string) app_setting($pdo, 'company_email', '');
 $companyPhone = (string) app_setting($pdo, 'company_phone', '');
+$companyTaxNumber = (string) app_setting($pdo, 'company_tax_number', '');
+$payrollNightStart = (string) app_setting($pdo, 'payroll_night_start', '22:00');
+$payrollNightEnd = (string) app_setting($pdo, 'payroll_night_end', '07:00');
 $smtpHost = (string) app_setting($pdo, 'smtp_host', '');
 $smtpPort = (string) app_setting($pdo, 'smtp_port', '587');
 $smtpSecure = (string) app_setting($pdo, 'smtp_secure', 'tls');
@@ -265,6 +281,13 @@ require __DIR__ . '/partials/header.php';
                 <label class="form-label">Morada</label>
                 <input class="form-control" name="company_address" value="<?= h($companyAddress) ?>" <?= !$isAdmin ? 'readonly' : '' ?>>
             </div>
+            <div class="col-md-6">
+                <label class="form-label">NIF da empresa</label>
+                <input class="form-control" name="company_tax_number" inputmode="numeric" maxlength="9" value="<?= h($companyTaxNumber) ?>" <?= !$isAdmin ? 'readonly' : '' ?>>
+            </div>
+            <div class="col-12"><hr><h2 class="h5">Configuração Payroll / Assiduidade</h2><p class="small text-muted mb-0">O intervalo noturno pode atravessar a meia-noite.</p></div>
+            <div class="col-md-3"><label class="form-label">Início do horário noturno</label><input class="form-control" type="time" name="payroll_night_start" value="<?= h($payrollNightStart) ?>" required></div>
+            <div class="col-md-3"><label class="form-label">Fim do horário noturno</label><input class="form-control" type="time" name="payroll_night_end" value="<?= h($payrollNightEnd) ?>" required></div>
             <div class="col-12">
                 <hr>
                 <label class="form-label mb-0">Configuração de envio de email (SMTP)</label>
