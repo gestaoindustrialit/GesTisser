@@ -543,6 +543,22 @@ body {
     box-shadow: 0 8px 20px rgba(37, 99, 235, 0.25);
 }
 
+.auth-remember {
+    color: #475569;
+    font-size: 0.875rem;
+    line-height: 1.35;
+    text-align: left;
+}
+
+.auth-remember .form-check-input {
+    border-color: rgba(100, 116, 139, 0.55);
+    cursor: pointer;
+}
+
+.auth-remember .form-check-label {
+    cursor: pointer;
+}
+
 @media (max-width: 1399.98px) {
     .controls-row-main {
         flex-wrap: wrap;
