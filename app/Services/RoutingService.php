@@ -3,7 +3,8 @@ declare(strict_types=1);
 
 final class RoutingService
 {
-    private PDO $pdo;
+    /** @var PDO */
+    private $pdo;
     public function __construct(PDO $pdo) { $this->pdo = $pdo; }
 
     public function saveOperation(array $data, array $machineIds, int $userId): int
