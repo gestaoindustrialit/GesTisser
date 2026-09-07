@@ -124,7 +124,7 @@ header('Content-Type: text/html; charset=UTF-8');
                     <i class="bi bi-speedometer2"></i><span>Shopfloor</span>
                 </a>
 
-                <details class="gt-nav-group"<?= $isCurrentFile('erp.php') ? ' open' : '' ?>>
+                <details class="gt-nav-group"<?= ($isCurrentFile('erp.php') || $isCurrentFile('erp_operations.php') || $isCurrentFile('erp_routing.php')) ? ' open' : '' ?>>
                     <summary><span><i class="bi bi-boxes"></i>ERP industrial</span><i class="bi bi-chevron-down gt-nav-chevron"></i></summary>
                     <div class="gt-nav-submenu">
                         <?php
@@ -139,10 +139,11 @@ header('Content-Type: text/html; charset=UTF-8');
                             'quality' => 'Qualidade',
                             'costs' => 'Custos e margens',
                             'machines' => 'Máquinas e equipamentos',
+                            'operations' => 'Operações',
                         ];
                         ?>
                         <?php foreach ($erpMenuItems as $erpKey => $erpLabel): ?>
-                            <a class="<?= $isCurrentFile('erp.php') && $currentErpPage === $erpKey ? 'is-active' : '' ?>" href="<?= $erpKey === 'overview' ? h(route_url('erp', 'erp.php')) : 'erp.php?page=' . h($erpKey) ?>"><?= h($erpLabel) ?></a>
+                            <a class="<?= $isCurrentFile('erp.php') && $currentErpPage === $erpKey ? 'is-active' : '' ?>" href="<?= $erpKey === 'overview' ? h(route_url('erp', 'erp.php')) : ($erpKey === 'operations' ? 'erp_operations.php' : 'erp.php?page=' . h($erpKey)) ?>"><?= h($erpLabel) ?></a>
                         <?php endforeach; ?>
                     </div>
                 </details>
