@@ -579,8 +579,7 @@ function initResultsPage() {
         effectiveCell.textContent = formatHHMM(effectiveSeconds);
 
         const targetSeconds = Number(targetCell.dataset.targetSeconds || '0');
-        const absenceAllocatedSeconds = Number(row.dataset.absenceAllocatedSeconds || '0');
-        const bhSeconds = (effectiveSeconds - targetSeconds) + absenceAllocatedSeconds;
+        const bhSeconds = effectiveSeconds - targetSeconds;
         const autoBhValue = formatHHMM(bhSeconds, true);
         bhInput.dataset.autoBh = autoBhValue;
 

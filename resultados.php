@@ -541,8 +541,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $canValidateResults) {
             try {
                 $targetSeconds = $dailyObjectiveSeconds;
                 $effectiveSeconds = calculate_effective_seconds($entriesToReopen);
-                $absenceAllocatedSeconds = get_absence_allocated_seconds($pdo, $validateUserId, $validateDate);
-                $computedBhSeconds = ($effectiveSeconds - $targetSeconds) + $absenceAllocatedSeconds;
+                $computedBhSeconds = $effectiveSeconds - $targetSeconds;
                 $bhSeconds = get_override_bh_seconds($pdo, $validateUserId, $validateDate) ?? $computedBhSeconds;
 
                 apply_hour_bank_delta($pdo, $validateUserId, -$bhSeconds, $userId, $validateDate);
@@ -579,8 +578,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $canValidateResults) {
 
                 $targetSeconds = $dailyObjectiveSeconds;
                 $effectiveSeconds = calculate_effective_seconds($allEntries);
-                $absenceAllocatedSeconds = get_absence_allocated_seconds($pdo, $validateUserId, $validateDate);
-                $computedBhSeconds = ($effectiveSeconds - $targetSeconds) + $absenceAllocatedSeconds;
+                $computedBhSeconds = $effectiveSeconds - $targetSeconds;
                 $computedBhMinutes = (int) round($computedBhSeconds / 60);
 
                 if ($overrideBhValue !== '') {
@@ -661,8 +659,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $canValidateResults) {
                     $allEntriesStmt->execute([(int) $entryUserId, $validateDate]);
                     $allEntries = $allEntriesStmt->fetchAll(PDO::FETCH_ASSOC);
                     $effectiveSeconds = calculate_effective_seconds($allEntries);
-                    $absenceAllocatedSeconds = get_absence_allocated_seconds($pdo, (int) $entryUserId, $validateDate);
-                    $computedBhSeconds = ($effectiveSeconds - $targetSeconds) + $absenceAllocatedSeconds;
+                    $computedBhSeconds = $effectiveSeconds - $targetSeconds;
                     $bhSeconds = get_override_bh_seconds($pdo, (int) $entryUserId, $validateDate) ?? $computedBhSeconds;
                     apply_hour_bank_delta($pdo, (int) $entryUserId, $bhSeconds, $userId, $validateDate);
                 }
@@ -1096,7 +1093,7 @@ foreach ($daily as &$row) {
     $row['absence_allocation'] = $allocation;
     $allocationCode = $allocation ? (string) ($allocation['absence_code'] ?? '') : '';
     $row['absence_allocated_seconds'] = ($allocation && !should_exclude_absence_from_bank_credit($allocationCode)) ? ((int) ($allocation['allocated_minutes'] ?? 0) * 60) : 0;
-    $row['computed_bh_seconds'] = ((int) $row['seconds'] - ($dailyObjectiveSeconds)) + (int) $row['absence_allocated_seconds'];
+    $row['computed_bh_seconds'] = (int) $row['seconds'] - $dailyObjectiveSeconds;
     $override = $overrideMap[$rowKey] ?? null;
     $row['bh_seconds'] = $override ? (((int) $override['bh_minutes']) * 60) : (int) $row['computed_bh_seconds'];
     $row['bh'] = format_signed_hhmm((int) $row['bh_seconds']);
@@ -1471,7 +1468,7 @@ require __DIR__ . '/partials/header.php';
                             </td>
                         <?php endfor; ?>
                         <td class="js-results-target" data-target-seconds="<?= (int) ($row['target_seconds'] ?? $dailyObjectiveSeconds) ?>"><?= h($row['target']) ?></td>
-                        <td class="js-results-effective" data-effective-seconds="<?= (int) $row['seconds'] ?>"><?= h($row['effective']) ?></td>
+                        <td class="<?= $isPendingRow ? 'js-results-effective' : '' ?>" data-effective-seconds="<?= (int) $row['seconds'] ?>"><?= h($row['effective']) ?></td>
                         <td>
                             <?php $bhClass = $row['bh_seconds'] < 0 ? 'text-danger' : ($row['bh_seconds'] > 0 ? 'text-success' : 'text-muted'); ?>
                             <?php if ($canValidateResults): ?>
@@ -1574,7 +1571,7 @@ require __DIR__ . '/partials/header.php';
                     </div>
                     <div class="js-row-validation-absence-list"></div>
                 </div>
-                <p class="small text-muted mt-2 mb-0 js-row-validation-absence-help d-none">O tempo associado é somado ao efectivo para reduzir o Tempo BH negativo.</p>
+                <p class="small text-muted mt-2 mb-0 js-row-validation-absence-help d-none">O tempo associado identifica a ausência, sem alterar o cálculo do Tempo BH.</p>
             </div>
             <div class="modal-footer">
                 <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancelar</button>
@@ -1693,7 +1690,7 @@ require __DIR__ . '/partials/header.php';
             if (!Array.isArray(dayOptions) || dayOptions.length === 0) {
                 absenceHelp.textContent = 'Sem ausência criada para este dia. Pode associar manualmente um motivo e tempo (HH:MM).';
             } else {
-                absenceHelp.textContent = 'O tempo associado é somado ao efectivo para reduzir o Tempo BH negativo.';
+                absenceHelp.textContent = 'O tempo associado identifica a ausência, sem alterar o cálculo do Tempo BH.';
             }
         };
 
@@ -1889,7 +1886,7 @@ require __DIR__ . '/partials/header.php';
                     if (absenceSeconds > 0) {
                         const hours = Math.floor(absenceSeconds / 3600);
                         const minutes = Math.floor((absenceSeconds % 3600) / 60);
-                        absenceInfo.textContent = `Ausência comunicada para o dia: +${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')} no cálculo do Tempo BH.`;
+                        absenceInfo.textContent = `Ausência comunicada para o dia: ${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}.`;
                         absenceInfo.classList.remove('d-none');
                     } else {
                         absenceInfo.classList.add('d-none');
