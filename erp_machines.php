@@ -18,13 +18,36 @@ $machineAttachmentMimeTypes = [
 ];
 $flashSuccess = $flashError = null;
 
+function gt_machine_upload_error_message(int $error): string
+{
+    if ($error === UPLOAD_ERR_INI_SIZE) {
+        $serverLimit = trim((string) ini_get('upload_max_filesize'));
+
+        return 'O servidor rejeitou o ficheiro por causa do limite de upload configurado'
+            . ($serverLimit !== '' ? ' (' . $serverLimit . ')' : '')
+            . '. Contacte o administrador se o ficheiro tiver menos de 10 MB.';
+    }
+    if ($error === UPLOAD_ERR_FORM_SIZE) {
+        return 'O ficheiro excede o limite de 10 MB permitido.';
+    }
+    if ($error === UPLOAD_ERR_PARTIAL) {
+        return 'O ficheiro foi recebido apenas parcialmente. Tente carregá-lo novamente.';
+    }
+    if ($error === UPLOAD_ERR_NO_TMP_DIR || $error === UPLOAD_ERR_CANT_WRITE || $error === UPLOAD_ERR_EXTENSION) {
+        return 'O servidor não conseguiu guardar o ficheiro. Contacte o administrador.';
+    }
+
+    return 'Não foi possível carregar um dos ficheiros.';
+}
+
 function gt_save_machine_upload(PDO $pdo, int $machineId, int $userId, array $file, array $allowedMimeTypes): void
 {
     if (($file['error'] ?? UPLOAD_ERR_NO_FILE) === UPLOAD_ERR_NO_FILE) {
         return;
     }
-    if (($file['error'] ?? UPLOAD_ERR_OK) !== UPLOAD_ERR_OK) {
-        throw new RuntimeException('Não foi possível carregar um dos ficheiros.');
+    $uploadError = (int) ($file['error'] ?? UPLOAD_ERR_OK);
+    if ($uploadError !== UPLOAD_ERR_OK) {
+        throw new RuntimeException(gt_machine_upload_error_message($uploadError));
     }
     $size = (int) ($file['size'] ?? 0);
     if ($size <= 0 || $size > 10 * 1024 * 1024) {
@@ -259,7 +282,7 @@ require __DIR__ . '/partials/header.php';
             <label><span>Próxima manutenção</span><input class="form-control" type="date" name="next_maintenance_date"></label>
             <label class="full"><span>Manual / ligação documental</span><input class="form-control" type="url" name="manual_url"></label>
             <label class="full"><span>Características, riscos, limitações e observações</span><textarea class="form-control" name="notes" rows="4"></textarea></label>
-        </div></section><section class="machine-form-section"><h3 class="machine-form-section-title"><i class="bi bi-paperclip"></i> Documentos da máquina</h3><div class="machine-upload-panel"><div><strong>Manuais, fichas técnicas, certificados ou fotos</strong><small>PDF, imagens, Word, Excel, CSV ou TXT até 10 MB por ficheiro.</small></div><label class="machine-upload-drop"><i class="bi bi-cloud-arrow-up"></i><input class="form-control form-control-sm" type="file" name="machine_files[]" multiple><span>Selecionar ficheiros</span></label><div class="machine-existing-files" id="machineExistingFiles"></div></div></section></div>
+        </div></section><section class="machine-form-section"><h3 class="machine-form-section-title"><i class="bi bi-paperclip"></i> Documentos da máquina</h3><div class="machine-upload-panel"><div><strong>Manuais, fichas técnicas, certificados ou fotos</strong><small>PDF, imagens, Word, Excel, CSV ou TXT até 10 MB por ficheiro.</small></div><label class="machine-upload-drop"><i class="bi bi-cloud-arrow-up"></i><input type="hidden" name="MAX_FILE_SIZE" value="10485760"><input class="form-control form-control-sm" type="file" name="machine_files[]" accept=".pdf,.jpg,.jpeg,.png,.webp,.txt,.csv,.doc,.docx,.xls,.xlsx" multiple><span>Selecionar ficheiros</span></label><div class="machine-existing-files" id="machineExistingFiles"></div></div></section></div>
         <div class="modal-footer"><button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancelar</button><button class="btn btn-primary">Guardar</button></div>
     </form></div></div>
 </div>
