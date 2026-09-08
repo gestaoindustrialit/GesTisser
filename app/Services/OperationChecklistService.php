@@ -3,7 +3,8 @@ declare(strict_types=1);
 
 final class OperationChecklistService
 {
-    private PDO $pdo;
+    /** @var PDO */
+    private $pdo;
 
     public function __construct(PDO $pdo) { $this->pdo = $pdo; }
 
@@ -45,10 +46,15 @@ final class OperationChecklistService
             }
             $responses[] = ['item_id' => $id, 'label' => (string) $item['content'], 'type' => $type, 'value' => $value];
         }
-        return (string) json_encode($responses, JSON_UNESCAPED_UNICODE | JSON_THROW_ON_ERROR);
+        $json = json_encode($responses, JSON_UNESCAPED_UNICODE);
+        if ($json === false) {
+            throw new RuntimeException('Não foi possível codificar as respostas da checklist: ' . json_last_error_msg());
+        }
+        return $json;
     }
 
-    public function save(array $operation, int $userId, string $phase, array $submitted, ?int $timeEntryId): void
+    /** @param int|null $timeEntryId */
+    public function save(array $operation, int $userId, string $phase, array $submitted, $timeEntryId)
     {
         $templateId = (int) $operation['checklist_template_id'];
         $storedPhase = (string) $operation['checklist_timing'] === 'first' ? 'first' : $phase;
