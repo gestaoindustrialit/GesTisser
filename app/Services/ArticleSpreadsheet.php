@@ -33,7 +33,12 @@ final class ArticleSpreadsheet
     public static function readWithColumns(string $path, string $extension, array $columns, array $required): array
     {
         $matrix = strtolower($extension) === 'xlsx' ? self::readXlsxMatrix($path) : self::readCsvMatrix($path);
-        $headers = array_shift($matrix) ?: [];
+        $headerIndex = self::findHeaderRow($matrix, $required);
+        if ($headerIndex === null) {
+            throw new RuntimeException('O ficheiro deve incluir as colunas '.implode(' e ',$required).'.');
+        }
+        $headers = $matrix[$headerIndex];
+        $matrix = array_slice($matrix, $headerIndex + 1);
         return self::combine($headers, $matrix, $columns, $required);
     }
 
@@ -54,8 +59,15 @@ final class ArticleSpreadsheet
         $sheetXml=$zip->getFromName($sheetPath); $zip->close();
         if ($sheetXml===false) { throw new RuntimeException('A primeira folha do Excel não foi encontrada.'); }
         $sheetXml=preg_replace('/\sxmlns="[^"]+"/','',$sheetXml,1); $xml=simplexml_load_string($sheetXml); $matrix=[];
-        foreach ($xml->sheetData->row as $row) { $values=[]; $sequentialIndex=0; foreach ($row->c as $cell) { preg_match('/[A-Z]+/',(string)$cell['r'],$m); $index=isset($m[0])?self::columnIndex($m[0]):$sequentialIndex; $type=(string)$cell['t']; $value=$type==='inlineStr'?(string)$cell->is->t:(string)$cell->v; if ($type==='s') { $value=$shared[(int)$value]??''; } $values[$index]=$value; $sequentialIndex=$index+1; } if ($values) { $matrix[]=array_replace(array_fill(0,max(array_keys($values))+1,''),$values); } }
+        foreach ($xml->sheetData->row as $row) { $values=[]; $sequentialIndex=0; foreach ($row->c as $cell) { preg_match('/[A-Z]+/',(string)$cell['r'],$m); $index=isset($m[0])?self::columnIndex($m[0]):$sequentialIndex; $type=(string)$cell['t']; $value=$type==='inlineStr'?self::inlineString($cell):(string)$cell->v; if ($type==='s') { $value=$shared[(int)$value]??''; } $values[$index]=$value; $sequentialIndex=$index+1; } if ($values) { $matrix[]=array_replace(array_fill(0,max(array_keys($values))+1,''),$values); } }
         return $matrix;
+    }
+
+    private static function inlineString(SimpleXMLElement $cell): string
+    {
+        $parts=[];
+        foreach ($cell->xpath('.//t') ?: [] as $text) { $parts[]=(string)$text; }
+        return implode('', $parts);
     }
 
     private static function firstWorksheetPath(ZipArchive $zip): string
@@ -89,11 +101,33 @@ final class ArticleSpreadsheet
 
     private static function combine(array $headers, array $rows, array $columns, array $required): array
     {
-        $headers=array_map(static function($v){ return strtolower(trim((string)$v)); },$headers);
+        $headers=array_map([self::class, 'normalizeHeader'], $headers);
         foreach ($required as $header) { if (!in_array($header,$headers,true)) { throw new RuntimeException('O ficheiro deve incluir as colunas '.implode(' e ',$required).'.'); } }
         foreach ($headers as $header) { if (!isset($columns[$header])) { throw new RuntimeException('Coluna desconhecida: '.$header); } }
         $result=[]; foreach ($rows as $row) { if (!array_filter($row,static function($v){return trim((string)$v)!=='';})) continue; $row=array_pad($row,count($headers),''); $result[]=array_combine($headers,array_slice($row,0,count($headers))); }
         return $result;
+    }
+
+    private static function findHeaderRow(array $matrix, array $required): ?int
+    {
+        foreach ($matrix as $index => $row) {
+            $headers=array_map([self::class, 'normalizeHeader'], $row);
+            if (!array_diff($required, $headers)) { return $index; }
+        }
+        return null;
+    }
+
+    private static function normalizeHeader($value): string
+    {
+        $header=trim(str_replace(["\xEF\xBB\xBF", "\xC2\xA0"], ['', ' '], (string)$value));
+        $header=strtr($header, [
+            'Á'=>'A','À'=>'A','Â'=>'A','Ã'=>'A','Ä'=>'A','á'=>'a','à'=>'a','â'=>'a','ã'=>'a','ä'=>'a',
+            'É'=>'E','È'=>'E','Ê'=>'E','Ë'=>'E','é'=>'e','è'=>'e','ê'=>'e','ë'=>'e',
+            'Í'=>'I','Ì'=>'I','Î'=>'I','Ï'=>'I','í'=>'i','ì'=>'i','î'=>'i','ï'=>'i',
+            'Ó'=>'O','Ò'=>'O','Ô'=>'O','Õ'=>'O','Ö'=>'O','ó'=>'o','ò'=>'o','ô'=>'o','õ'=>'o','ö'=>'o',
+            'Ú'=>'U','Ù'=>'U','Û'=>'U','Ü'=>'U','ú'=>'u','ù'=>'u','û'=>'u','ü'=>'u','Ç'=>'C','ç'=>'c',
+        ]);
+        return strtolower($header);
     }
 
     private static function columnIndex(string $letters): int
