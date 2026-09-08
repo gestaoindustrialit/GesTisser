@@ -75,16 +75,16 @@ function taskforce_suggest_evaluation_counts(PDO $pdo, int $userId, int $awardYe
     $punctualityStmt = $pdo->prepare(
         'SELECT COUNT(*)
          FROM (
-            SELECT date(te.occurred_at, "localtime") AS work_date,
-                   MIN(datetime(te.occurred_at, "localtime")) AS first_entry_at,
+            SELECT date(te.occurred_at) AS work_date,
+                   MIN(datetime(te.occurred_at)) AS first_entry_at,
                    s.start_time
             FROM shopfloor_time_entries te
             INNER JOIN users u ON u.id = te.user_id
             INNER JOIN hr_schedules s ON s.id = u.schedule_id
             WHERE te.user_id = ?
               AND te.entry_type = "entrada"
-              AND date(te.occurred_at, "localtime") BETWEEN date(?) AND date(?)
-            GROUP BY date(te.occurred_at, "localtime")
+              AND date(te.occurred_at) BETWEEN date(?) AND date(?)
+            GROUP BY date(te.occurred_at)
          ) days
          WHERE trim(COALESCE(start_time, "")) <> ""
            AND datetime(first_entry_at) > datetime(work_date || " " || substr(start_time, 1, 5) || ":00")'
