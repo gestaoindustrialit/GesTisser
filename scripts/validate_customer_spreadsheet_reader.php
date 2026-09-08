@@ -45,6 +45,36 @@ try {
     unlink($tmp);
 }
 
+$tmp=tempnam(sys_get_temp_dir(), 'customer_unlinked_sheet_');
+$zip=new ZipArchive();$zip->open($tmp, ZipArchive::CREATE | ZipArchive::OVERWRITE);
+$zip->addFromString('xl/worksheets/customers.xml', '<?xml version="1.0"?><worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><sheetData><row>'.test_xlsx_cell('codigo').test_xlsx_cell('codigo cliente').test_xlsx_cell('nome').'</row><row>'.test_xlsx_cell('CLI-003').test_xlsx_cell('IGNORAR').test_xlsx_cell('Cliente Três').'</row></sheetData></worksheet>');
+$zip->close();
+try {
+    $customers=CustomerSpreadsheet::read($tmp, 'xlsx');
+    if (count($customers)!==1 || $customers[0]['codigo']!=='CLI-003' || isset($customers[0]['codigo_cliente'])) {
+        throw new RuntimeException('A folha sem relações ou com colunas equivalentes não foi lida corretamente.');
+    }
+    echo "Leitura de folha sem relações e deduplicação de colunas equivalentes: OK.\n";
+} finally {
+    unlink($tmp);
+}
+
+$templateHeaders=CustomerSpreadsheet::templateColumns();
+if (count($templateHeaders)!==count(array_unique(array_values(CustomerSpreadsheet::columns())))) {
+    throw new RuntimeException('O modelo de clientes contém cabeçalhos equivalentes duplicados.');
+}
+echo "Cabeçalhos do modelo de clientes sem aliases duplicados: OK.\n";
+
+$tmp=tempnam(sys_get_temp_dir(), 'customer_utf16_csv_');
+$utf16Source="codigo\tnome\tnif\r\n004\tCliente UTF-16\t500000004\r\n";
+$utf16=function_exists('mb_convert_encoding')?mb_convert_encoding($utf16Source,'UTF-16LE','UTF-8'):iconv('UTF-8','UTF-16LE',$utf16Source);
+file_put_contents($tmp,"\xFF\xFE".$utf16);
+try {
+    $customers=CustomerSpreadsheet::read($tmp, 'csv');
+    if(count($customers)!==1||$customers[0]['codigo']!=='004'||$customers[0]['nome']!=='Cliente UTF-16'){throw new RuntimeException('O CSV UTF-16 não foi lido corretamente.');}
+    echo "Leitura de CSV UTF-16 separado por tabulações: OK.\n";
+} finally { unlink($tmp); }
+
 $tmp=tempnam(sys_get_temp_dir(), 'customer_csv_');
 file_put_contents($tmp, "Exportação de clientes\nCódigo Cliente,Nome Fiscal,NIF,\nCLI-002,Cliente Dois,500000001,\n");
 try {

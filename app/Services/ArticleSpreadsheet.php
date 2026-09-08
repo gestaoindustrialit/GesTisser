@@ -33,7 +33,9 @@ final class ArticleSpreadsheet
     public static function readWithColumns(string $path, string $extension, array $columns, array $required): array
     {
         $matrices = strtolower($extension) === 'xlsx' ? self::readXlsxMatrices($path) : [self::readCsvMatrix($path)];
+        $diagnostics=[];
         foreach ($matrices as $matrix) {
+            $known=[];$widths=[];foreach(array_slice($matrix,0,20) as $row){$widths[]=count($row);foreach($row as $value){$header=self::normalizeHeader($value);if(isset($columns[$header])){$known[$header]=true;}}}$diagnostics[]=['rows'=>count($matrix),'sample_widths'=>$widths,'recognized_headers'=>array_keys($known)];
             $headerIndex = self::findHeaderRow($matrix, $columns, $required);
             if ($headerIndex !== null) {
                 $headers = $matrix[$headerIndex];
@@ -41,17 +43,32 @@ final class ArticleSpreadsheet
                 return self::combine($headers, $matrix, $columns, $required);
             }
         }
+        if (function_exists('safe_log')) { safe_log('Spreadsheet header not found',['extension'=>strtolower($extension),'required'=>$required,'sheets'=>$diagnostics]); }
         throw new RuntimeException('O ficheiro deve incluir as colunas '.implode(' e ',$required).'.');
     }
 
     private static function readCsvMatrix(string $path): array
     {
-        $handle=fopen($path,'rb'); if (!$handle) { throw new RuntimeException('Não foi possível ler o ficheiro.'); }
+        $contents=file_get_contents($path);if($contents===false){throw new RuntimeException('Não foi possível ler o ficheiro.');}$contents=self::csvToUtf8($contents);
+        $handle=fopen('php://temp','w+b');if(!$handle){throw new RuntimeException('Não foi possível preparar o ficheiro para leitura.');}fwrite($handle,$contents);rewind($handle);
         $sample=[]; while (count($sample)<20 && ($line=fgets($handle))!==false) { $sample[]=$line; } if (!$sample) { fclose($handle); return []; }
         $delimiter=';'; $bestCount=0; foreach ([';', ',', "\t"] as $candidate) { $count=0;foreach($sample as $line){$count=max($count,count(str_getcsv($line,$candidate)));}if($count>$bestCount){$bestCount=$count;$delimiter=$candidate;} }
         rewind($handle); $headers=fgetcsv($handle,0,$delimiter); if ($headers && isset($headers[0])) { $headers[0]=ltrim($headers[0], "\xEF\xBB\xBF"); }
         $rows=[]; while (($row=fgetcsv($handle,0,$delimiter))!==false) { $rows[]=$row; } fclose($handle);
         array_unshift($rows, $headers ?: []); return $rows;
+    }
+
+    private static function csvToUtf8(string $contents): string
+    {
+        $encoding='';
+        if (substr($contents,0,2)==="\xFF\xFE") {$encoding='UTF-16LE';$contents=substr($contents,2);}
+        elseif(substr($contents,0,2)==="\xFE\xFF"){$encoding='UTF-16BE';$contents=substr($contents,2);}
+        elseif(substr($contents,0,3)==="\xEF\xBB\xBF") { return substr($contents,3); }
+        elseif(strpos(substr($contents,0,200),"\0")!==false){$even=$odd=0;$sample=substr($contents,0,200);for($i=0,$length=strlen($sample);$i<$length;$i++){if($sample[$i]==="\0"){if($i%2===0)$even++;else$odd++;}}$encoding=$odd>=$even?'UTF-16LE':'UTF-16BE';}
+        if($encoding===''){return $contents;}
+        if(function_exists('mb_convert_encoding')){return mb_convert_encoding($contents,'UTF-8',$encoding);}
+        if(function_exists('iconv')){$converted=iconv($encoding,'UTF-8//IGNORE',$contents);if($converted!==false)return $converted;}
+        throw new RuntimeException('O CSV está em '.$encoding.', mas o servidor não possui suporte para converter a codificação.');
     }
 
     private static function readXlsxMatrices(string $path): array
@@ -60,7 +77,7 @@ final class ArticleSpreadsheet
         $shared=[]; $sharedXml=$zip->getFromName('xl/sharedStrings.xml');
         if ($sharedXml!==false) { $sharedXml=preg_replace('/\sxmlns="[^"]+"/','',$sharedXml,1); $xml=simplexml_load_string($sharedXml); foreach ($xml->si as $si) { $parts=[]; foreach ($si->xpath('.//t') as $text) { $parts[]=(string)$text; } $shared[]=implode('',$parts); } }
         $matrices=[]; foreach (self::worksheetPaths($zip) as $sheetPath) { $sheetXml=$zip->getFromName($sheetPath); if ($sheetXml===false) { continue; }
-            $sheetXml=preg_replace('/\sxmlns="[^"]+"/','',$sheetXml,1); $xml=simplexml_load_string($sheetXml); $matrix=[];
+            $sheetXml=preg_replace('/\sxmlns="[^"]+"/','',$sheetXml,1); $xml=simplexml_load_string($sheetXml); if ($xml===false) { continue; } $matrix=[];
             foreach ($xml->sheetData->row as $row) { $values=[];$sequentialIndex=0;foreach ($row->c as $cell) { preg_match('/[A-Z]+/i',(string)$cell['r'],$m);$index=isset($m[0])?self::columnIndex(strtoupper($m[0])):$sequentialIndex;$type=(string)$cell['t'];$value=$type==='inlineStr'?self::inlineString($cell):(string)$cell->v;if($type==='s'){$value=$shared[(int)$value]??'';}$values[$index]=$value;$sequentialIndex=$index+1;}if($values){$matrix[]=array_replace(array_fill(0,max(array_keys($values))+1,''),$values);} }
             $matrices[]=$matrix;
         } $zip->close(); if (!$matrices) { throw new RuntimeException('Não foram encontradas folhas no ficheiro Excel.'); } return $matrices;
@@ -77,13 +94,13 @@ final class ArticleSpreadsheet
     {
         $workbookXml=$zip->getFromName('xl/workbook.xml');
         $relationshipsXml=$zip->getFromName('xl/_rels/workbook.xml.rels');
-        if ($workbookXml===false || $relationshipsXml===false) { return ['xl/worksheets/sheet1.xml']; }
+        if ($workbookXml===false || $relationshipsXml===false) { return self::archiveWorksheetPaths($zip); }
 
         $workbookXml=preg_replace('/\sxmlns="[^"]+"/','',$workbookXml,1);
         $relationshipsXml=preg_replace('/\sxmlns="[^"]+"/','',$relationshipsXml,1);
         $workbook=simplexml_load_string($workbookXml);
         $relationships=simplexml_load_string($relationshipsXml);
-        if ($workbook===false || $relationships===false) { return ['xl/worksheets/sheet1.xml']; }
+        if ($workbook===false || $relationships===false) { return self::archiveWorksheetPaths($zip); }
         $targets=[]; foreach ($relationships->Relationship as $relationship) { $targets[(string)$relationship['Id']]=(string)$relationship['Target']; }
         $paths=[]; foreach ($workbook->sheets->sheet ?? [] as $sheet) {
             $attributes=$sheet->attributes('http://schemas.openxmlformats.org/officeDocument/2006/relationships');
@@ -93,6 +110,16 @@ final class ArticleSpreadsheet
             while (strpos($target,'../')===0) { $target=substr($target,3); }
             $paths[]=strpos($target,'xl/')===0?$target:'xl/'.$target;
         }
+        // Some spreadsheet generators omit or damage the workbook relationship
+        // metadata.  The worksheet XML is still usable, so also inspect every
+        // worksheet stored in the archive instead of silently missing its header.
+        foreach (self::archiveWorksheetPaths($zip) as $entry) { if (!in_array($entry,$paths,true)) { $paths[]=$entry; } }
+        return $paths ?: ['xl/worksheets/sheet1.xml'];
+    }
+
+    private static function archiveWorksheetPaths(ZipArchive $zip): array
+    {
+        $paths=[];for ($index=0; $index<$zip->numFiles; $index++) {$entry=$zip->getNameIndex($index);if($entry!==false&&preg_match('#^xl/worksheets/[^/]+\.xml$#i',$entry)){$paths[]=$entry;}}
         return $paths ?: ['xl/worksheets/sheet1.xml'];
     }
 
@@ -101,7 +128,7 @@ final class ArticleSpreadsheet
         $headers=array_map([self::class, 'normalizeHeader'], $headers);
         foreach ($required as $header) { $target=$columns[$header];$found=false;foreach($headers as $candidate){if(isset($columns[$candidate])&&$columns[$candidate]===$target){$found=true;break;}}if(!$found){throw new RuntimeException('O ficheiro deve incluir as colunas '.implode(' e ',$required).'.');} }
         foreach ($headers as $header) { if ($header!==''&&!isset($columns[$header])) { throw new RuntimeException('Coluna desconhecida: '.$header); } }
-        $result=[]; foreach ($rows as $row) { if (!array_filter($row,static function($v){return trim((string)$v)!=='';})) continue;$combined=[];foreach($headers as $index=>$header){if($header!==''){$combined[$header]=$row[$index]??'';}}$result[]=$combined; }
+        $result=[]; foreach ($rows as $row) { if (!array_filter($row,static function($v){return trim((string)$v)!=='';})) continue;$combined=[];$mappedTargets=[];foreach($headers as $index=>$header){if($header==='')continue;$target=$columns[$header];if(isset($mappedTargets[$target]))continue;$mappedTargets[$target]=true;$combined[$header]=$row[$index]??'';}$result[]=$combined; }
         return $result;
     }
 
