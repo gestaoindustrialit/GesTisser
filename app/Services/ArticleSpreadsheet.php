@@ -108,7 +108,8 @@ final class ArticleSpreadsheet
         return $result;
     }
 
-    private static function findHeaderRow(array $matrix, array $required): ?int
+    /** @return int|null */
+    private static function findHeaderRow(array $matrix, array $required)
     {
         foreach ($matrix as $index => $row) {
             $headers=array_map([self::class, 'normalizeHeader'], $row);

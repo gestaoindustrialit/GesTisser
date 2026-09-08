@@ -3,6 +3,11 @@ declare(strict_types=1);
 
 require_once dirname(__DIR__).'/app/Services/CustomerSpreadsheet.php';
 
+$readerSource=file_get_contents(dirname(__DIR__).'/app/Services/ArticleSpreadsheet.php');
+if ($readerSource===false || preg_match('/function\s+findHeaderRow\s*\([^)]*\)\s*:\s*\?/', $readerSource)) {
+    throw new RuntimeException('O leitor contém um tipo de retorno nullable incompatível com o PHP do servidor.');
+}
+
 function test_xlsx_cell(string $value, bool $richText = false): string
 {
     if ($richText) {
