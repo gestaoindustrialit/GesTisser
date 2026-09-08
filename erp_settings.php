@@ -70,6 +70,8 @@ $sequenceLabels = [
     'customer' => 'Clientes',
     'finished_product' => 'Produtos acabados',
     'raw_material' => 'Matérias-primas',
+    'subsidiary' => 'Produtos subsidiários',
+    'consumable' => 'Produtos consumíveis',
     'stock_movement' => 'Movimentos de stock',
     'supplier' => 'Fornecedores',
     'work_order' => 'Ordens de fabrico',
@@ -112,6 +114,14 @@ require __DIR__ . '/partials/header.php';
         </div>
 
         <hr class="my-4">
+        <h2 class="h5">Grupos de produtos de produção</h2>
+        <p class="small text-muted">Estes grupos ficam disponíveis no cadastro e na definição dos materiais necessários a cada operação.</p>
+        <div class="row g-3 mb-4">
+            <?php foreach ([['raw_material','Matérias-primas','Materiais incorporados diretamente no artigo.'],['subsidiary','Subsidiários','Produtos auxiliares necessários ao processo produtivo.'],['consumable','Consumíveis','Produtos consumidos durante a execução das operações.']] as $group): ?>
+                <div class="col-md-4"><div class="border rounded p-3 h-100"><div class="d-flex justify-content-between gap-2"><strong><?= h($group[1]) ?></strong><code><?= h($group[0]) ?></code></div><div class="small text-muted mt-2"><?= h($group[2]) ?></div></div></div>
+            <?php endforeach; ?>
+        </div>
+
         <h2 class="h5">Sequências de numeração</h2>
         <p class="small text-muted">O próximo número é usado no documento seguinte. A largura adiciona zeros à esquerda.</p>
         <div class="table-responsive">
