@@ -89,11 +89,24 @@ final class ArticleSpreadsheet
 
     private static function combine(array $headers, array $rows, array $columns, array $required): array
     {
-        $headers=array_map(static function($v){ return strtolower(trim((string)$v)); },$headers);
+        $headers=array_map([self::class, 'normalizeHeader'], $headers);
         foreach ($required as $header) { if (!in_array($header,$headers,true)) { throw new RuntimeException('O ficheiro deve incluir as colunas '.implode(' e ',$required).'.'); } }
         foreach ($headers as $header) { if (!isset($columns[$header])) { throw new RuntimeException('Coluna desconhecida: '.$header); } }
         $result=[]; foreach ($rows as $row) { if (!array_filter($row,static function($v){return trim((string)$v)!=='';})) continue; $row=array_pad($row,count($headers),''); $result[]=array_combine($headers,array_slice($row,0,count($headers))); }
         return $result;
+    }
+
+    private static function normalizeHeader($value): string
+    {
+        $header=trim(str_replace(["\xEF\xBB\xBF", "\xC2\xA0"], ['', ' '], (string)$value));
+        $header=strtr($header, [
+            'Á'=>'A','À'=>'A','Â'=>'A','Ã'=>'A','Ä'=>'A','á'=>'a','à'=>'a','â'=>'a','ã'=>'a','ä'=>'a',
+            'É'=>'E','È'=>'E','Ê'=>'E','Ë'=>'E','é'=>'e','è'=>'e','ê'=>'e','ë'=>'e',
+            'Í'=>'I','Ì'=>'I','Î'=>'I','Ï'=>'I','í'=>'i','ì'=>'i','î'=>'i','ï'=>'i',
+            'Ó'=>'O','Ò'=>'O','Ô'=>'O','Õ'=>'O','Ö'=>'O','ó'=>'o','ò'=>'o','ô'=>'o','õ'=>'o','ö'=>'o',
+            'Ú'=>'U','Ù'=>'U','Û'=>'U','Ü'=>'U','ú'=>'u','ù'=>'u','û'=>'u','ü'=>'u','Ç'=>'C','ç'=>'c',
+        ]);
+        return strtolower($header);
     }
 
     private static function columnIndex(string $letters): int
