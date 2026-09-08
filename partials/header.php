@@ -12,6 +12,19 @@ if (is_file($bootstrapPath)) {
 $user = current_user($pdo);
 $navbarLogo = app_setting($pdo, 'logo_navbar_light');
 $showHrMenu = $user && ((int) ($user['is_admin'] ?? 0) === 1 || (string) ($user['access_profile'] ?? '') === 'RH');
+$showBiMenu = $user && (int)($user['is_admin'] ?? 0) === 1;
+if ($user && !$showBiMenu) {
+    if (function_exists('erp_user_can')) {
+        $showBiMenu = erp_user_can($pdo, $user, 'erp.bi.view');
+    } else {
+        $biPermissionTable = $pdo->query("SELECT 1 FROM sqlite_master WHERE type='table' AND name='erp_user_permissions'")->fetchColumn();
+        if ($biPermissionTable) {
+            $biPermission = $pdo->prepare('SELECT COALESCE((SELECT is_allowed FROM erp_user_permissions WHERE user_id=? AND permission_code="erp.bi.view"),(SELECT 1 FROM erp_role_permissions WHERE profile=? AND permission_code="erp.bi.view"))');
+            $biPermission->execute([(int)$user['id'], (string)($user['access_profile'] ?? '')]);
+            $showBiMenu = (int)$biPermission->fetchColumn() === 1;
+        }
+    }
+}
 $isShopfloorOnlyNavigation = $user && has_shopfloor_only_navigation($user);
 
 if ($user && !isset($navbarClockControl)) {
@@ -120,6 +133,11 @@ header('Content-Type: text/html; charset=UTF-8');
                 <a class="gt-nav-link<?= $isCurrentFile('dashboard.php') ? ' is-active' : '' ?>" href="<?= h(route_url('home', 'dashboard.php')) ?>">
                     <i class="bi bi-grid-1x2"></i><span>Visão geral</span>
                 </a>
+                <?php if ($showBiMenu): ?>
+                    <a class="gt-nav-link<?= $isCurrentFile('business_intelligence.php') ? ' is-active' : '' ?>" href="business_intelligence.php">
+                        <i class="bi bi-bar-chart-line"></i><span>Business Intelligence</span>
+                    </a>
+                <?php endif; ?>
                 <a class="gt-nav-link<?= $isCurrentFile('shopfloor.php') ? ' is-active' : '' ?>" href="<?= h(route_url('shopfloor', 'shopfloor.php')) ?>">
                     <i class="bi bi-speedometer2"></i><span>Shopfloor</span>
                 </a>

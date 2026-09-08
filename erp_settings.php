@@ -20,6 +20,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $codePattern = trim((string) ($_POST['raw_material_code_pattern'] ?? ''));
         $laborHourlyRateInput = str_replace(',', '.', trim((string) ($_POST['labor_hourly_rate'] ?? '')));
         $laborHourlyRate = is_numeric($laborHourlyRateInput) ? (float) $laborHourlyRateInput : -1;
+        $biSettings = [];
+        foreach (['bi_tv_refresh_seconds','bi_tv_rotate_seconds','bi_target_deadline_percent','bi_warning_deadline_percent','bi_target_waste_percent','bi_warning_waste_percent'] as $biKey) {
+            $biSettings[$biKey] = (float) str_replace(',', '.', (string)($_POST[$biKey] ?? '0'));
+        }
         $sequenceIds = (array) ($_POST['sequence_id'] ?? []);
         $prefixes = (array) ($_POST['sequence_prefix'] ?? []);
         $nextNumbers = (array) ($_POST['sequence_next_number'] ?? []);
@@ -30,6 +34,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $flashError = 'O padrão de código das matérias-primas deve incluir {seq}.';
         } elseif ($laborHourlyRate < 0) {
             $flashError = 'Indique um valor de mão de obra por hora válido.';
+        } elseif ($biSettings['bi_tv_refresh_seconds'] < 30 || $biSettings['bi_tv_rotate_seconds'] < 5 || $biSettings['bi_target_deadline_percent'] < $biSettings['bi_warning_deadline_percent'] || $biSettings['bi_warning_waste_percent'] < $biSettings['bi_target_waste_percent']) {
+            $flashError = 'Reveja os limites do BI: atualização mínima de 30 s, rotação mínima de 5 s e limites de aviso coerentes.';
         } else {
             try {
                 $pdo->beginTransaction();
@@ -37,6 +43,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $saveSetting->execute(['allow_negative_stock', $allowNegativeStock ? '1' : '0', $userId]);
                 $saveSetting->execute(['raw_material_code_pattern', $codePattern, $userId]);
                 $saveSetting->execute(['labor_hourly_rate', number_format($laborHourlyRate, 2, '.', ''), $userId]);
+                foreach ($biSettings as $biKey => $biValue) $saveSetting->execute([$biKey, (string)$biValue, $userId]);
 
                 $saveSequence = $pdo->prepare('UPDATE erp_number_sequences SET prefix=?, next_number=?, padding=?, suffix=?, updated_at=CURRENT_TIMESTAMP WHERE id=?');
                 foreach ($sequenceIds as $index => $rawId) {
@@ -51,7 +58,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                         $id,
                     ]);
                 }
-                erp_audit($pdo, $userId, 'update', 'erp_settings', null, [], ['allow_negative_stock' => $allowNegativeStock, 'raw_material_code_pattern' => $codePattern, 'labor_hourly_rate' => $laborHourlyRate]);
+                erp_audit($pdo, $userId, 'update', 'erp_settings', null, [], ['allow_negative_stock' => $allowNegativeStock, 'raw_material_code_pattern' => $codePattern, 'labor_hourly_rate' => $laborHourlyRate, 'business_intelligence' => $biSettings]);
                 $pdo->commit();
                 $flashSuccess = 'Configuração do ERP atualizada com sucesso.';
             } catch (Throwable $exception) {
@@ -109,6 +116,15 @@ require __DIR__ . '/partials/header.php';
                     <label class="form-check-label" for="allow-negative-stock">Permitir movimentos que originem stock negativo</label>
                 </div>
             </div>
+        </div>
+
+        <hr class="my-4">
+        <h2 class="h5">Business Intelligence e modo TV</h2>
+        <p class="small text-muted">Os limites determinam automaticamente as cores verde, amarela e vermelha. Não são atribuídas cores aleatórias.</p>
+        <div class="row g-3">
+            <?php $biFields=['bi_tv_refresh_seconds'=>['Atualizar a cada','segundos',30],'bi_tv_rotate_seconds'=>['Alternar secção a cada','segundos',5],'bi_target_deadline_percent'=>['Prazo: meta verde','%',0],'bi_warning_deadline_percent'=>['Prazo: mínimo amarelo','%',0],'bi_target_waste_percent'=>['Desperdício: máximo verde','%',0],'bi_warning_waste_percent'=>['Desperdício: máximo amarelo','%',0]]; foreach($biFields as $key=>$meta): ?>
+            <div class="col-md-4 col-xl-2"><label class="form-label" for="<?=h($key)?>"><?=h($meta[0])?></label><div class="input-group"><input class="form-control" id="<?=h($key)?>" name="<?=h($key)?>" type="number" step="1" min="<?=$meta[2]?>" required value="<?=h((string)($settings[$key]??0))?>"><span class="input-group-text"><?=h($meta[1])?></span></div></div>
+            <?php endforeach; ?>
         </div>
 
         <hr class="my-4">
