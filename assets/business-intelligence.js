@@ -16,10 +16,17 @@
   document.querySelector('[data-bi-search]').addEventListener('input',e=>{query=e.target.value;page=1;renderTable();});document.querySelector('[data-bi-pagination]').addEventListener('click',e=>{const b=e.target.closest('[data-page]');if(b){page=Number(b.dataset.page);renderTable();}});document.querySelectorAll('[data-sort]').forEach(x=>x.addEventListener('click',()=>{sortAsc=sortKey===x.dataset.sort?!sortAsc:true;sortKey=x.dataset.sort;renderTable();}));
   document.querySelector('[data-bi-export]').addEventListener('click',()=>{const p=new URLSearchParams(new FormData(form));p.set('format','csv');location.href='business_intelligence.php?'+p;});
   const iso=d=>{const z=new Date(d.getTime()-d.getTimezoneOffset()*60000);return z.toISOString().slice(0,10)};document.querySelectorAll('[data-range]').forEach(b=>b.addEventListener('click',()=>{const now=new Date(),start=new Date(now);if(b.dataset.range==='week')start.setDate(now.getDate()-((now.getDay()+6)%7));if(b.dataset.range==='month')start.setDate(1);if(b.dataset.range==='quarter'){start.setMonth(Math.floor(now.getMonth()/3)*3,1)}if(b.dataset.range==='year')start.setMonth(0,1);if(b.dataset.range==='12months'){start.setFullYear(now.getFullYear()-1);start.setDate(start.getDate()+1)}form.from.value=iso(start);form.to.value=iso(now);document.querySelectorAll('[data-range]').forEach(x=>x.classList.toggle('active',x===b));refresh();}));
-  function tvScrollPositions(){const rootBox=root.getBoundingClientRect();const cardBar=root.querySelector('[data-bi-kpis]');const offset=(cardBar?cardBar.getBoundingClientRect().height:0)+32;const tops=Array.from(root.querySelectorAll('.bi-grid .bi-panel:not(.is-data-empty), .bi-alerts')).map(el=>Math.max(0,Math.round(el.getBoundingClientRect().top-rootBox.top+root.scrollTop-offset)));return [0].concat(tops.filter((top,index,list)=>top>0&&(index===0||Math.abs(top-list[index-1])>24)));}
-  function advanceTvScroll(){const positions=tvScrollPositions();if(positions.length<2)return;slide=(slide+1)%positions.length;root.scrollTo({top:positions[slide],behavior:'smooth'});}
-  async function enterTV(){root.classList.add('is-tv');document.body.classList.add('bi-tv-body');slide=0;root.scrollTop=0;try{await document.documentElement.requestFullscreen();}catch(e){}rotateTimer=setInterval(advanceTvScroll,Math.max(30,Number(root.dataset.rotate||30))*1000);setTimeout(()=>Object.values(charts).forEach(x=>x.resize()),100);}
-  function exitTV(){root.classList.remove('is-tv');document.body.classList.remove('bi-tv-body');clearInterval(rotateTimer);root.scrollTop=0;if(document.fullscreenElement)document.exitFullscreen();}
+  const tvSlides=Array.from(root.querySelectorAll('[data-bi-slide]'));
+  function showTvSlide(index){
+    slide=(index+tvSlides.length)%tvSlides.length;
+    tvSlides.forEach((item,i)=>item.classList.toggle('is-tv-active',i===slide));
+    root.dataset.tvSlide=String(slide+1);
+    const progress=root.querySelector('[data-bi-tv-progress]');if(progress)progress.textContent=`Vista ${slide+1} de ${tvSlides.length}`;
+    setTimeout(()=>Object.values(charts).forEach(instance=>instance.resize()),80);
+  }
+  function advanceTvSlide(){showTvSlide(slide+1);}
+  async function enterTV(){root.classList.add('is-tv');document.body.classList.add('bi-tv-body');showTvSlide(0);try{await document.documentElement.requestFullscreen();}catch(e){}clearInterval(rotateTimer);rotateTimer=setInterval(advanceTvSlide,Math.max(10,Number(root.dataset.rotate||30))*1000);}
+  function exitTV(){root.classList.remove('is-tv');document.body.classList.remove('bi-tv-body');clearInterval(rotateTimer);tvSlides.forEach(item=>item.classList.remove('is-tv-active'));delete root.dataset.tvSlide;if(document.fullscreenElement)document.exitFullscreen();setTimeout(()=>Object.values(charts).forEach(instance=>instance.resize()),80);}
   document.querySelector('[data-bi-tv]').addEventListener('click',enterTV);document.querySelector('[data-bi-tv-exit]').addEventListener('click',exitTV);document.addEventListener('keydown',e=>{if(e.key==='Escape')exitTV();});document.addEventListener('fullscreenchange',()=>{if(!document.fullscreenElement&&root.classList.contains('is-tv'))exitTV();});
   setInterval(refresh,Math.max(30,Number(root.dataset.refresh||300))*1000);render(data);
 })();
