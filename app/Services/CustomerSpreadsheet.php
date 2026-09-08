@@ -27,4 +27,15 @@ final class CustomerSpreadsheet
             ['codigo', 'nome']
         );
     }
+
+    /** Headers shown in the downloadable model, excluding import-only aliases. */
+    public static function templateColumns(): array
+    {
+        $headers=[];$targets=[];
+        foreach (self::columns() as $header=>$target) {
+            if (isset($targets[$target])) { continue; }
+            $targets[$target]=true;$headers[]=$header;
+        }
+        return $headers;
+    }
 }
