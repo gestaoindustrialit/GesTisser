@@ -251,22 +251,22 @@ if ($canComputeAttendance) {
      INNER JOIN hr_schedules s ON s.id = u.schedule_id
      LEFT JOIN hr_departments d ON d.id = u.department_id
      LEFT JOIN (
-        SELECT user_id, MIN(datetime(occurred_at, "localtime")) AS first_entry_at
+        SELECT user_id, MIN(datetime(occurred_at)) AS first_entry_at
         FROM shopfloor_time_entries
         WHERE entry_type = "entrada"
-          AND date(occurred_at, "localtime") = date(?)
+          AND date(occurred_at) = date(?)
         GROUP BY user_id
      ) AS first_entry ON first_entry.user_id = u.id
      LEFT JOIN (
-        SELECT te.user_id, MIN(datetime(te.occurred_at, "localtime")) AS second_entry_at
+        SELECT te.user_id, MIN(datetime(te.occurred_at)) AS second_entry_at
         FROM shopfloor_time_entries te
         INNER JOIN users su ON su.id = te.user_id
         INNER JOIN hr_schedules ss ON ss.id = su.schedule_id
         WHERE te.entry_type = "entrada"
-          AND date(te.occurred_at, "localtime") = date(?)
+          AND date(te.occurred_at) = date(?)
           AND ss.second_start_time IS NOT NULL
           AND trim(ss.second_start_time) <> ""
-          AND datetime(te.occurred_at, "localtime") >= datetime(date(?) || " " || substr(ss.end_time, 1, 5) || ":00")
+          AND datetime(te.occurred_at) >= datetime(date(?) || " " || substr(ss.end_time, 1, 5) || ":00")
         GROUP BY te.user_id
      ) AS second_entry ON second_entry.user_id = u.id
      WHERE ' . $activeUsersConditionSql . '
