@@ -92,8 +92,8 @@ header('Content-Type: text/html; charset=UTF-8');
     <title><?= isset($pageTitle) ? h($pageTitle) . ' · ' : '' ?>gesTISSER</title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
     <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css" rel="stylesheet">
-    <link href="assets/styles.css" rel="stylesheet">
-    <link href="assets/mapper-theme.css" rel="stylesheet">
+    <link href="assets/styles.css?v=<?= h((string) (@filemtime(dirname(__DIR__) . '/assets/styles.css') ?: '1')) ?>" rel="stylesheet">
+    <link href="assets/mapper-theme.css?v=<?= h((string) (@filemtime(dirname(__DIR__) . '/assets/mapper-theme.css') ?: '1')) ?>" rel="stylesheet">
 </head>
 <body class="<?= h($resolvedBodyClass) ?>">
 <?php if ($user): ?>
