@@ -16,6 +16,11 @@ function erp_count(PDO $pdo, string $sql): int { return (int) $pdo->query($sql)-
 function erp_money(float $value): string { return number_format($value, 2, ',', '.') . ' €'; }
 function erp_page_url(string $page): string { return 'erp.php?page=' . urlencode($page); }
 function erp_article_fields(): array { return ['material','bag_color','width_tolerance','length_tolerance','front_colors','back_colors','pallet_dimensions','pallet_lid','pallet_straps','pallet_film','microperforation','has_handle','has_holes','has_gusset','centered_gusset','gusset_length','composition','theoretical_weight','thread_color','perforation_type','seam_type','lot_identification_rule','analysis_grammage','analysis_total_weight','analysis_apparent_width','analysis_gusset_width','analysis_bag_height','analysis_break_height','analysis_break_length','analysis_seam_strength','analysis_static_friction','analysis_dynamic_friction','analysis_air_permeability']; }
+function erp_import_log_context(string $action): array {
+    $field=$action==='import_articles'?'articles_csv':($action==='import_customers'?'customers_file':'');$file=$field!==''&&isset($_FILES[$field])&&is_array($_FILES[$field])?$_FILES[$field]:[];
+    $tmp=(string)($file['tmp_name']??'');$detectedMime='';if($tmp!==''&&is_file($tmp)&&function_exists('finfo_open')){$finfo=@finfo_open(FILEINFO_MIME_TYPE);if($finfo){$detectedMime=(string)@finfo_file($finfo,$tmp);@finfo_close($finfo);}}
+    return ['action'=>$action,'page'=>(string)($_GET['page']??''),'user_id'=>(int)($_SESSION['user_id']??0),'filename'=>basename((string)($file['name']??'')),'extension'=>strtolower(pathinfo((string)($file['name']??''),PATHINFO_EXTENSION)),'browser_mime'=>(string)($file['type']??''),'detected_mime'=>$detectedMime,'upload_error'=>(int)($file['error']??UPLOAD_ERR_NO_FILE),'reported_size'=>(int)($file['size']??0),'temporary_size'=>$tmp!==''&&is_file($tmp)?(int)filesize($tmp):null,'is_uploaded_file'=>$tmp!==''?is_uploaded_file($tmp):false,'php_version'=>PHP_VERSION,'zip_available'=>class_exists('ZipArchive'),'simplexml_available'=>function_exists('simplexml_load_string'),'upload_max_filesize'=>(string)ini_get('upload_max_filesize'),'post_max_size'=>(string)ini_get('post_max_size')];
+}
 
 $flashSuccess = $flashError = null;
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
@@ -123,7 +128,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 erp_audit($pdo, $userId, 'stock_adjust', 'erp_stock_movements', (int)$pdo->lastInsertId(), [], ['movement_number'=>$number,'quantity'=>$qty], trim($_POST['reason']??'')); $flashSuccess = 'Movimento registado no ledger.';
             } else { throw new RuntimeException('Sem permissão ou ação desconhecida.'); }
             $pdo->commit();
-        } catch (Throwable $e) { if ($pdo->inTransaction()) $pdo->rollBack(); $flashError = 'Erro: ' . $e->getMessage(); }
+        } catch (Throwable $e) { if ($pdo->inTransaction()) $pdo->rollBack();$errorId=taskforce_error_id();$context=['error_id'=>$errorId,'exception'=>get_class($e),'message'=>$e->getMessage(),'file'=>$e->getFile(),'line'=>$e->getLine()];if(in_array($action,['import_customers','import_articles'],true)){$context=array_merge($context,erp_import_log_context($action));}safe_log('ERP action failed',$context); $flashError = 'Erro: ' . $e->getMessage().' (referência '.$errorId.')'; }
     }
 }
 
