@@ -33,7 +33,9 @@ final class ArticleSpreadsheet
     public static function readWithColumns(string $path, string $extension, array $columns, array $required): array
     {
         $matrices = strtolower($extension) === 'xlsx' ? self::readXlsxMatrices($path) : [self::readCsvMatrix($path)];
+        $diagnostics=[];
         foreach ($matrices as $matrix) {
+            $known=[];$widths=[];foreach(array_slice($matrix,0,20) as $row){$widths[]=count($row);foreach($row as $value){$header=self::normalizeHeader($value);if(isset($columns[$header])){$known[$header]=true;}}}$diagnostics[]=['rows'=>count($matrix),'sample_widths'=>$widths,'recognized_headers'=>array_keys($known)];
             $headerIndex = self::findHeaderRow($matrix, $columns, $required);
             if ($headerIndex !== null) {
                 $headers = $matrix[$headerIndex];
@@ -41,6 +43,7 @@ final class ArticleSpreadsheet
                 return self::combine($headers, $matrix, $columns, $required);
             }
         }
+        if (function_exists('safe_log')) { safe_log('Spreadsheet header not found',['extension'=>strtolower($extension),'required'=>$required,'sheets'=>$diagnostics]); }
         throw new RuntimeException('O ficheiro deve incluir as colunas '.implode(' e ',$required).'.');
     }
 
