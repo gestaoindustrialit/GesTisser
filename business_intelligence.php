@@ -21,7 +21,7 @@ if(($_GET['format']??'')==='csv'){
     foreach($payload['details'] as $r)fputcsv($out,[$r['order_number'],$r['customer'],$r['article'],$r['status'],$r['planned_quantity'],$r['produced_quantity'],$r['due_date']],';');fclose($out);exit;
 }
 $options=$bi->options();$initial=$bi->payload();$pageTitle='Business Intelligence';$bodyClass='bg-light bi-page';require __DIR__.'/partials/header.php';
-function bi_options(array $rows,int $selected,string $empty):void{echo '<option value="">'.h($empty).'</option>';foreach($rows as $r){$v=(int)$r['value'];echo '<option value="'.$v.'"'.($v===$selected?' selected':'').'>'.h($r['label']).'</option>';}}
+function bi_options(array $rows,int $selected,string $empty){echo '<option value="">'.h($empty).'</option>';foreach($rows as $r){$v=(int)$r['value'];echo '<option value="'.$v.'"'.($v===$selected?' selected':'').'>'.h($r['label']).'</option>';}}
 ?>
 <link href="assets/business-intelligence.css?v=<?=h((string)(@filemtime(__DIR__.'/assets/business-intelligence.css')?:'1'))?>" rel="stylesheet">
 <div class="bi-dashboard" id="biDashboard" data-refresh="<?= (int)($initial['settings']['bi_tv_refresh_seconds']??300) ?>" data-rotate="<?= (int)($initial['settings']['bi_tv_rotate_seconds']??20) ?>">

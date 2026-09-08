@@ -3,9 +3,12 @@ declare(strict_types=1);
 
 final class BusinessIntelligence
 {
-    private PDO $pdo;
-    private array $filters;
-    private bool $financial;
+    /** @var PDO */
+    private $pdo;
+    /** @var array */
+    private $filters;
+    /** @var bool */
+    private $financial;
 
     public function __construct(PDO $pdo, array $filters, bool $financial)
     {
@@ -94,14 +97,14 @@ final class BusinessIntelligence
         $today = new DateTimeImmutable('today');
         $from = $this->date((string)($input['from'] ?? '')) ?: $today->modify('first day of this month')->format('Y-m-d');
         $to = $this->date((string)($input['to'] ?? '')) ?: $today->format('Y-m-d');
-        if ($from > $to) { [$from,$to]=[$to,$from]; }
+        if ($from > $to) { $swap=$from; $from=$to; $to=$swap; }
         $out=['from'=>$from,'to'=>$to];
         foreach (['customer','supplier','article','order','machine','operation'] as $key) $out[$key]=max(0,(int)($input[$key]??0));
         $out['status']=substr(trim((string)($input['status']??'')),0,60);
         return $out;
     }
 
-    private function date(string $date): ?string { $d=DateTimeImmutable::createFromFormat('!Y-m-d',$date); return $d&&$d->format('Y-m-d')===$date?$date:null; }
+    private function date(string $date) { $d=DateTimeImmutable::createFromFormat('!Y-m-d',$date); return $d&&$d->format('Y-m-d')===$date?$date:null; }
 
     private function productionWhere(string $alias): array
     {
@@ -121,7 +124,7 @@ final class BusinessIntelligence
         return $this->groupRows('SELECT o.id,o.order_number,o.status,o.planned_quantity,o.produced_quantity,o.due_date,c.name customer,fp.code article FROM erp_production_orders o LEFT JOIN erp_customers c ON c.id=o.customer_id LEFT JOIN erp_finished_products fp ON fp.id=o.finished_product_id WHERE '.$where['sql'].' ORDER BY o.created_at DESC LIMIT 250',$where['params']);
     }
 
-    private function variation(): ?float
+    private function variation()
     {
         $from=new DateTimeImmutable($this->filters['from']);$to=new DateTimeImmutable($this->filters['to']);$days=(int)$from->diff($to)->days+1;
         $current=$this->productionWhere('o');$previous=$this->filters;$this->filters['to']=$from->modify('-1 day')->format('Y-m-d');$this->filters['from']=$from->modify('-'.$days.' days')->format('Y-m-d');$prev=$this->productionWhere('o');$this->filters=$previous;
@@ -131,10 +134,10 @@ final class BusinessIntelligence
     }
 
     private function settings(): array { $out=[];foreach($this->groupRows('SELECT key,value FROM erp_settings WHERE key LIKE "bi_%"',[]) as $r)$out[$r['key']]=(float)$r['value'];return $out; }
-    private function deadlineTone(?float $rate,array $s): string { if($rate===null)return 'muted';return $rate>=($s['bi_target_deadline_percent']??95)?'success':($rate>=($s['bi_warning_deadline_percent']??85)?'warning':'danger'); }
-    private function wasteTone(?float $rate,array $s): string { if($rate===null)return 'muted';return $rate<=($s['bi_target_waste_percent']??3)?'success':($rate<=($s['bi_warning_waste_percent']??6)?'warning':'danger'); }
-    private function card(string $id,string $label,?float $value,string $unit,?float $change,string $url,string $icon,string $tone='primary'): array { return compact('id','label','value','unit','change','url','icon','tone'); }
-    private function alerts(array $summary,?float $waste,array $settings): array { $a=[];if((int)$summary['overdue']>0)$a[]=['tone'=>'danger','icon'=>'bi-calendar-x','title'=>$summary['overdue'].' OF atrasada(s)','text'=>'Prazo ultrapassado e ordem ainda aberta.'];if($waste!==null&&$waste>($settings['bi_warning_waste_percent']??6))$a[]=['tone'=>'warning','icon'=>'bi-recycle','title'=>'Desperdício acima do limite','text'=>number_format($waste,1,',','.').'% no período selecionado.'];$low=(int)$this->value('SELECT COUNT(*) FROM erp_raw_materials rm WHERE rm.status="Ativo" AND (SELECT COALESCE(SUM(physical_qty-reserved_qty-blocked_qty),0) FROM erp_stock_balances b WHERE b.item_type="raw_material" AND b.item_id=rm.id)<rm.min_stock');if($low>0)$a[]=['tone'=>'warning','icon'=>'bi-box-seam','title'=>$low.' materiais abaixo do mínimo','text'=>'Stock disponível inferior ao stock mínimo configurado.'];return array_slice($a,0,5); }
+    private function deadlineTone($rate,array $s): string { if($rate===null)return 'muted';return $rate>=($s['bi_target_deadline_percent']??95)?'success':($rate>=($s['bi_warning_deadline_percent']??85)?'warning':'danger'); }
+    private function wasteTone($rate,array $s): string { if($rate===null)return 'muted';return $rate<=($s['bi_target_waste_percent']??3)?'success':($rate<=($s['bi_warning_waste_percent']??6)?'warning':'danger'); }
+    private function card(string $id,string $label,$value,string $unit,$change,string $url,string $icon,string $tone='primary'): array { return compact('id','label','value','unit','change','url','icon','tone'); }
+    private function alerts(array $summary,$waste,array $settings): array { $a=[];if((int)$summary['overdue']>0)$a[]=['tone'=>'danger','icon'=>'bi-calendar-x','title'=>$summary['overdue'].' OF atrasada(s)','text'=>'Prazo ultrapassado e ordem ainda aberta.'];if($waste!==null&&$waste>($settings['bi_warning_waste_percent']??6))$a[]=['tone'=>'warning','icon'=>'bi-recycle','title'=>'Desperdício acima do limite','text'=>number_format($waste,1,',','.').'% no período selecionado.'];$low=(int)$this->value('SELECT COUNT(*) FROM erp_raw_materials rm WHERE rm.status="Ativo" AND (SELECT COALESCE(SUM(physical_qty-reserved_qty-blocked_qty),0) FROM erp_stock_balances b WHERE b.item_type="raw_material" AND b.item_id=rm.id)<rm.min_stock');if($low>0)$a[]=['tone'=>'warning','icon'=>'bi-box-seam','title'=>$low.' materiais abaixo do mínimo','text'=>'Stock disponível inferior ao stock mínimo configurado.'];return array_slice($a,0,5); }
     private function row(string $sql,array $params=[]): array { $s=$this->pdo->prepare($sql);$s->execute($params);return $s->fetch(PDO::FETCH_ASSOC)?:[]; }
     private function value(string $sql,array $params=[]){$s=$this->pdo->prepare($sql);$s->execute($params);return $s->fetchColumn();}
     private function groupRows(string $sql,array $params): array {$s=$this->pdo->prepare($sql);$s->execute($params);return $s->fetchAll(PDO::FETCH_ASSOC);}
