@@ -174,7 +174,8 @@ function erp_run_phase1_migrations(PDO $pdo)
         $set->execute(['raw_material_code_pattern','{tipo}{caracteristica}{largura}{gramagem}{seq}']);
         $set->execute(['labor_hourly_rate','0.00']);
         $set->execute(['bi_tv_refresh_seconds','300']);
-        $set->execute(['bi_tv_rotate_seconds','20']);
+        $set->execute(['bi_tv_rotate_seconds','30']);
+        $pdo->exec('UPDATE erp_settings SET value="30" WHERE key="bi_tv_rotate_seconds" AND CAST(value AS INTEGER)<30');
         $set->execute(['bi_target_deadline_percent','95']);
         $set->execute(['bi_warning_deadline_percent','85']);
         $set->execute(['bi_target_waste_percent','3']);

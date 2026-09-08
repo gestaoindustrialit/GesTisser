@@ -34,8 +34,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $flashError = 'O padrão de código das matérias-primas deve incluir {seq}.';
         } elseif ($laborHourlyRate < 0) {
             $flashError = 'Indique um valor de mão de obra por hora válido.';
-        } elseif ($biSettings['bi_tv_refresh_seconds'] < 30 || $biSettings['bi_tv_rotate_seconds'] < 5 || $biSettings['bi_target_deadline_percent'] < $biSettings['bi_warning_deadline_percent'] || $biSettings['bi_warning_waste_percent'] < $biSettings['bi_target_waste_percent']) {
-            $flashError = 'Reveja os limites do BI: atualização mínima de 30 s, rotação mínima de 5 s e limites de aviso coerentes.';
+        } elseif ($biSettings['bi_tv_refresh_seconds'] < 30 || $biSettings['bi_tv_rotate_seconds'] < 30 || $biSettings['bi_target_deadline_percent'] < $biSettings['bi_warning_deadline_percent'] || $biSettings['bi_warning_waste_percent'] < $biSettings['bi_target_waste_percent']) {
+            $flashError = 'Reveja os limites do BI: atualização e deslocamento mínimos de 30 s e limites de aviso coerentes.';
         } else {
             try {
                 $pdo->beginTransaction();
@@ -121,14 +121,15 @@ require __DIR__ . '/partials/header.php';
         </div>
 
         <hr class="my-4">
-        <h2 class="h5">Grupos de produtos de produção</h2>
-        <p class="small text-muted">Estes grupos ficam disponíveis no cadastro e na definição dos materiais necessários a cada operação.</p>
-        <div class="row g-3 mb-4">
-            <?php foreach ([['raw_material','Matérias-primas','Materiais incorporados diretamente no artigo.'],['subsidiary','Subsidiários','Produtos auxiliares necessários ao processo produtivo.'],['consumable','Consumíveis','Produtos consumidos durante a execução das operações.']] as $group): ?>
-                <div class="col-md-4"><div class="border rounded p-3 h-100"><div class="d-flex justify-content-between gap-2"><strong><?= h($group[1]) ?></strong><code><?= h($group[0]) ?></code></div><div class="small text-muted mt-2"><?= h($group[2]) ?></div></div></div>
+        <h2 class="h5">Business Intelligence e modo TV</h2>
+        <p class="small text-muted">Os limites determinam automaticamente as cores verde, amarela e vermelha. Não são atribuídas cores aleatórias.</p>
+        <div class="row g-3">
+            <?php $biFields=['bi_tv_refresh_seconds'=>['Atualizar a cada','segundos',30],'bi_tv_rotate_seconds'=>['Deslocar ecrã a cada','segundos',30],'bi_target_deadline_percent'=>['Prazo: meta verde','%',0],'bi_warning_deadline_percent'=>['Prazo: mínimo amarelo','%',0],'bi_target_waste_percent'=>['Desperdício: máximo verde','%',0],'bi_warning_waste_percent'=>['Desperdício: máximo amarelo','%',0]]; foreach($biFields as $key=>$meta): ?>
+            <div class="col-md-4 col-xl-2"><label class="form-label" for="<?=h($key)?>"><?=h($meta[0])?></label><div class="input-group"><input class="form-control" id="<?=h($key)?>" name="<?=h($key)?>" type="number" step="1" min="<?=$meta[2]?>" required value="<?=h((string)($settings[$key]??0))?>"><span class="input-group-text"><?=h($meta[1])?></span></div></div>
             <?php endforeach; ?>
         </div>
 
+        <hr class="my-4">
         <h2 class="h5">Sequências de numeração</h2>
         <p class="small text-muted">O próximo número é usado no documento seguinte. A largura adiciona zeros à esquerda.</p>
         <div class="table-responsive">

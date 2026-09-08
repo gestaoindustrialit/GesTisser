@@ -24,7 +24,7 @@ $options=$bi->options();$initial=$bi->payload();$pageTitle='Business Intelligenc
 function bi_options(array $rows,int $selected,string $empty){echo '<option value="">'.h($empty).'</option>';foreach($rows as $r){$v=(int)$r['value'];echo '<option value="'.$v.'"'.($v===$selected?' selected':'').'>'.h($r['label']).'</option>';}}
 ?>
 <link href="assets/business-intelligence.css?v=<?=h((string)(@filemtime(__DIR__.'/assets/business-intelligence.css')?:'1'))?>" rel="stylesheet">
-<div class="bi-dashboard" id="biDashboard" data-refresh="<?= (int)($initial['settings']['bi_tv_refresh_seconds']??300) ?>" data-rotate="<?= (int)($initial['settings']['bi_tv_rotate_seconds']??20) ?>">
+<div class="bi-dashboard" id="biDashboard" data-refresh="<?= (int)($initial['settings']['bi_tv_refresh_seconds']??300) ?>" data-rotate="<?= (int)($initial['settings']['bi_tv_rotate_seconds']??30) ?>">
   <div class="bi-toolbar">
     <div><p class="bi-eyebrow"><i class="bi bi-broadcast-pin"></i> Painel executivo</p><h2>Visão integrada da operação</h2><p class="text-muted mb-0">Indicadores calculados exclusivamente sobre dados reais do ERP.</p></div>
     <div class="d-flex gap-2"><button class="btn btn-outline-primary" type="button" data-bi-refresh><i class="bi bi-arrow-clockwise"></i> Atualizar</button><button class="btn btn-primary" type="button" data-bi-tv><i class="bi bi-display"></i> Modo TV</button></div>
