@@ -3,8 +3,12 @@ declare(strict_types=1);
 
 require_once dirname(__DIR__).'/app/Services/CustomerSpreadsheet.php';
 
-function test_xlsx_cell(string $value): string
+function test_xlsx_cell(string $value, bool $richText = false): string
 {
+    if ($richText) {
+        $middle=(int)floor(strlen($value)/2);
+        return '<c t="inlineStr"><is><r><t>'.htmlspecialchars(substr($value,0,$middle), ENT_XML1 | ENT_QUOTES, 'UTF-8').'</t></r><r><t>'.htmlspecialchars(substr($value,$middle), ENT_XML1 | ENT_QUOTES, 'UTF-8').'</t></r></is></c>';
+    }
     return '<c t="inlineStr"><is><t>'.htmlspecialchars($value, ENT_XML1 | ENT_QUOTES, 'UTF-8').'</t></is></c>';
 }
 
@@ -15,7 +19,9 @@ $zip->addFromString('xl/workbook.xml', '<?xml version="1.0"?><workbook xmlns="ht
 $zip->addFromString('xl/_rels/workbook.xml.rels', '<?xml version="1.0"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId7" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/clientes.xml"/></Relationships>');
 $headers=["\xEF\xBB\xBFcódigo\xC2\xA0",'nome','nif'];
 $values=['331','4000K, LDA','515576298'];
-$rows='<row r="1">'.implode('',array_map('test_xlsx_cell',$headers)).'</row><row r="2">'.implode('',array_map('test_xlsx_cell',$values)).'</row>';
+$title='<row r="1">'.test_xlsx_cell('Lista de clientes').'</row>';
+$headerCells=[]; foreach ($headers as $header) { $headerCells[]=test_xlsx_cell($header, true); }
+$rows=$title.'<row r="2">'.implode('',$headerCells).'</row><row r="3">'.implode('',array_map('test_xlsx_cell',$values)).'</row>';
 $zip->addFromString('xl/worksheets/clientes.xml', '<?xml version="1.0"?><worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><sheetData>'.$rows.'</sheetData></worksheet>');
 $zip->close();
 
