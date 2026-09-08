@@ -157,12 +157,12 @@ $selectedCustomerDeliveryAddresses=[];if($selectedCustomer&&!empty($selectedCust
 $deliveryAddressesByCustomer=[];foreach($pdo->query('SELECT * FROM erp_customer_delivery_addresses ORDER BY customer_id,id')->fetchAll(PDO::FETCH_ASSOC) as $deliveryAddress){$deliveryAddressesByCustomer[(int)$deliveryAddress['customer_id']][]=$deliveryAddress;}
 
 $erpNav = [
-    'overview'=>['Visão geral'], 'sales'=>['Comercial'], 'purchases'=>['Compras'], 'production'=>['Planeamento e produção'], 'articles'=>['Artigos'], 'raw_materials'=>['Matérias-primas'], 'warehouse'=>['Armazém'], 'shipping'=>['Expedição'], 'quality'=>['Qualidade'], 'costs'=>['Custos'], 'reports'=>['Relatórios']
+    'overview'=>['Visão geral'], 'sales'=>['Clientes'], 'purchases'=>['Compras'], 'production'=>['Planeamento e produção'], 'articles'=>['Artigos'], 'raw_materials'=>['Matérias-primas'], 'warehouse'=>['Armazém'], 'shipping'=>['Expedição'], 'quality'=>['Qualidade'], 'costs'=>['Custos'], 'reports'=>['Relatórios']
 ];
 $pageTitle='ERP industrial'; require __DIR__.'/partials/header.php';
 ?>
 <div class="container-fluid py-4">
-  <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-3"><div><h1 class="h3 mb-1">ERP industrial gesTISSER</h1><p class="text-muted mb-0">Dashboard e fundações modulares para compras, produção, armazém, qualidade, custos e rastreabilidade.</p></div><a class="btn btn-outline-secondary" href="ERP_IMPLEMENTATION_PLAN.md">Plano Fase 0</a></div>
+  <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-3"><div><h1 class="h3 mb-1">ERP industrial gesTISSER</h1><p class="text-muted mb-0">Dashboard e fundações modulares para compras, produção, armazém, qualidade, custos e rastreabilidade.</p></div></div>
   <?php if($flashSuccess):?><div class="alert alert-success"><?=h($flashSuccess)?></div><?php endif;?><?php if($flashError):?><div class="alert alert-danger"><?=h($flashError)?></div><?php endif;?>
   <div class="erp-module-tabs d-flex flex-wrap gap-2 mb-4">
     <?php foreach($erpNav as $key=>$items):?><a class="btn btn-sm <?= $page===$key?'btn-primary':'btn-outline-primary' ?>" href="<?=h(erp_page_url($key))?>"><?=h($items[0])?></a><?php endforeach;?>
