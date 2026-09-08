@@ -1,7 +1,7 @@
 <?php
 declare(strict_types=1);
 
-function integrations_migrate(PDO $pdo): void
+function integrations_migrate(PDO $pdo)
 {
     static $migratedConnections = [];
     $connectionId = spl_object_hash($pdo);
