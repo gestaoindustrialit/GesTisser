@@ -148,7 +148,7 @@ header('Content-Type: text/html; charset=UTF-8');
                         <?php
                         $erpMenuItems = [
                             'overview' => 'Visão geral ERP',
-                            'sales' => 'Comercial',
+                            'sales' => 'Clientes',
                             'purchases' => 'Compras',
                             'production' => 'Planeamento e produção',
                             'articles' => 'Artigos',
