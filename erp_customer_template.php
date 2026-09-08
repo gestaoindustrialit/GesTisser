@@ -2,7 +2,7 @@
 require_once __DIR__.'/helpers.php';
 require_once __DIR__.'/app/Services/CustomerSpreadsheet.php';
 require_login();
-$headers=array_keys(CustomerSpreadsheet::columns());
+$headers=CustomerSpreadsheet::templateColumns();
 $values=['codigo'=>'CLI-001','nome'=>'Cliente Exemplo, Lda.','nif'=>'500000000','pais'=>'Portugal','prefixo_pais'=>'PT','telefone'=>'229000000','telemovel'=>'910000000','email'=>'geral@cliente.pt','morada_1'=>'Rua Exemplo, 1','cidade'=>'Porto','codigo_postal'=>'4000-000','contacto'=>'Ana Silva','vendedor'=>'Comercial Norte','desconto_percentagem'=>'0','saldo'=>'0','plafond'=>'5000','ativo'=>'Sim'];
 $example=[]; foreach($headers as $header){$example[]=$values[$header]??'';}
 function customer_xlsx_cell(string $value): string { return '<c t="inlineStr"><is><t>'.htmlspecialchars($value,ENT_XML1|ENT_QUOTES,'UTF-8').'</t></is></c>'; }
