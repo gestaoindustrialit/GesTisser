@@ -65,6 +65,16 @@ if (count($templateHeaders)!==count(array_unique(array_values(CustomerSpreadshee
 }
 echo "Cabeçalhos do modelo de clientes sem aliases duplicados: OK.\n";
 
+$tmp=tempnam(sys_get_temp_dir(), 'customer_utf16_csv_');
+$utf16Source="codigo\tnome\tnif\r\n004\tCliente UTF-16\t500000004\r\n";
+$utf16=function_exists('mb_convert_encoding')?mb_convert_encoding($utf16Source,'UTF-16LE','UTF-8'):iconv('UTF-8','UTF-16LE',$utf16Source);
+file_put_contents($tmp,"\xFF\xFE".$utf16);
+try {
+    $customers=CustomerSpreadsheet::read($tmp, 'csv');
+    if(count($customers)!==1||$customers[0]['codigo']!=='004'||$customers[0]['nome']!=='Cliente UTF-16'){throw new RuntimeException('O CSV UTF-16 não foi lido corretamente.');}
+    echo "Leitura de CSV UTF-16 separado por tabulações: OK.\n";
+} finally { unlink($tmp); }
+
 $tmp=tempnam(sys_get_temp_dir(), 'customer_csv_');
 file_put_contents($tmp, "Exportação de clientes\nCódigo Cliente,Nome Fiscal,NIF,\nCLI-002,Cliente Dois,500000001,\n");
 try {

@@ -49,12 +49,26 @@ final class ArticleSpreadsheet
 
     private static function readCsvMatrix(string $path): array
     {
-        $handle=fopen($path,'rb'); if (!$handle) { throw new RuntimeException('Não foi possível ler o ficheiro.'); }
+        $contents=file_get_contents($path);if($contents===false){throw new RuntimeException('Não foi possível ler o ficheiro.');}$contents=self::csvToUtf8($contents);
+        $handle=fopen('php://temp','w+b');if(!$handle){throw new RuntimeException('Não foi possível preparar o ficheiro para leitura.');}fwrite($handle,$contents);rewind($handle);
         $sample=[]; while (count($sample)<20 && ($line=fgets($handle))!==false) { $sample[]=$line; } if (!$sample) { fclose($handle); return []; }
         $delimiter=';'; $bestCount=0; foreach ([';', ',', "\t"] as $candidate) { $count=0;foreach($sample as $line){$count=max($count,count(str_getcsv($line,$candidate)));}if($count>$bestCount){$bestCount=$count;$delimiter=$candidate;} }
         rewind($handle); $headers=fgetcsv($handle,0,$delimiter); if ($headers && isset($headers[0])) { $headers[0]=ltrim($headers[0], "\xEF\xBB\xBF"); }
         $rows=[]; while (($row=fgetcsv($handle,0,$delimiter))!==false) { $rows[]=$row; } fclose($handle);
         array_unshift($rows, $headers ?: []); return $rows;
+    }
+
+    private static function csvToUtf8(string $contents): string
+    {
+        $encoding='';
+        if (substr($contents,0,2)==="\xFF\xFE") {$encoding='UTF-16LE';$contents=substr($contents,2);}
+        elseif(substr($contents,0,2)==="\xFE\xFF"){$encoding='UTF-16BE';$contents=substr($contents,2);}
+        elseif(substr($contents,0,3)==="\xEF\xBB\xBF") { return substr($contents,3); }
+        elseif(strpos(substr($contents,0,200),"\0")!==false){$even=$odd=0;$sample=substr($contents,0,200);for($i=0,$length=strlen($sample);$i<$length;$i++){if($sample[$i]==="\0"){if($i%2===0)$even++;else$odd++;}}$encoding=$odd>=$even?'UTF-16LE':'UTF-16BE';}
+        if($encoding===''){return $contents;}
+        if(function_exists('mb_convert_encoding')){return mb_convert_encoding($contents,'UTF-8',$encoding);}
+        if(function_exists('iconv')){$converted=iconv($encoding,'UTF-8//IGNORE',$contents);if($converted!==false)return $converted;}
+        throw new RuntimeException('O CSV está em '.$encoding.', mas o servidor não possui suporte para converter a codificação.');
     }
 
     private static function readXlsxMatrices(string $path): array
