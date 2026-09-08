@@ -24,8 +24,9 @@ function test_xlsx_cell(string $value, bool $richText = false): string
 $tmp=tempnam(sys_get_temp_dir(), 'customer_reader_');
 $zip=new ZipArchive();
 $zip->open($tmp, ZipArchive::CREATE | ZipArchive::OVERWRITE);
-$zip->addFromString('xl/workbook.xml', '<?xml version="1.0"?><workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><sheets><sheet name="Clientes" sheetId="1" r:id="rId7"/></sheets></workbook>');
-$zip->addFromString('xl/_rels/workbook.xml.rels', '<?xml version="1.0"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId7" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/clientes.xml"/></Relationships>');
+$zip->addFromString('xl/workbook.xml', '<?xml version="1.0"?><workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><sheets><sheet name="Instruções" sheetId="1" r:id="rId1"/><sheet name="Clientes" sheetId="2" r:id="rId7"/></sheets></workbook>');
+$zip->addFromString('xl/_rels/workbook.xml.rels', '<?xml version="1.0"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/instrucoes.xml"/><Relationship Id="rId7" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/clientes.xml"/></Relationships>');
+$zip->addFromString('xl/worksheets/instrucoes.xml', '<?xml version="1.0"?><worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><sheetData><row r="1">'.test_xlsx_cell('Como importar clientes').'</row></sheetData></worksheet>');
 $headers=["\xEF\xBB\xBFcódigo\xC2\xA0",'nome','nif'];
 $values=['331','4000K, LDA','515576298'];
 $title='<row r="1">'.test_xlsx_cell('Lista de clientes').'</row>';
@@ -40,6 +41,18 @@ try {
         throw new RuntimeException('A folha de clientes não foi lida corretamente.');
     }
     echo "Leitura de clientes em folha Excel com cabeçalhos normalizados: OK.\n";
+} finally {
+    unlink($tmp);
+}
+
+$tmp=tempnam(sys_get_temp_dir(), 'customer_csv_');
+file_put_contents($tmp, "Exportação de clientes\nCódigo Cliente,Nome Fiscal,NIF,\nCLI-002,Cliente Dois,500000001,\n");
+try {
+    $customers=CustomerSpreadsheet::read($tmp, 'csv');
+    if (count($customers)!==1 || $customers[0]['codigo_cliente']!=='CLI-002' || $customers[0]['nome_fiscal']!=='Cliente Dois') {
+        throw new RuntimeException('O CSV com separador automático e nomes alternativos não foi lido corretamente.');
+    }
+    echo "Leitura de CSV com vírgulas e cabeçalhos alternativos: OK.\n";
 } finally {
     unlink($tmp);
 }

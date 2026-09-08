@@ -32,35 +32,38 @@ final class ArticleSpreadsheet
 
     public static function readWithColumns(string $path, string $extension, array $columns, array $required): array
     {
-        $matrix = strtolower($extension) === 'xlsx' ? self::readXlsxMatrix($path) : self::readCsvMatrix($path);
-        $headerIndex = self::findHeaderRow($matrix, $required);
-        if ($headerIndex === null) {
-            throw new RuntimeException('O ficheiro deve incluir as colunas '.implode(' e ',$required).'.');
+        $matrices = strtolower($extension) === 'xlsx' ? self::readXlsxMatrices($path) : [self::readCsvMatrix($path)];
+        foreach ($matrices as $matrix) {
+            $headerIndex = self::findHeaderRow($matrix, $columns, $required);
+            if ($headerIndex !== null) {
+                $headers = $matrix[$headerIndex];
+                $matrix = array_slice($matrix, $headerIndex + 1);
+                return self::combine($headers, $matrix, $columns, $required);
+            }
         }
-        $headers = $matrix[$headerIndex];
-        $matrix = array_slice($matrix, $headerIndex + 1);
-        return self::combine($headers, $matrix, $columns, $required);
+        throw new RuntimeException('O ficheiro deve incluir as colunas '.implode(' e ',$required).'.');
     }
 
     private static function readCsvMatrix(string $path): array
     {
         $handle=fopen($path,'rb'); if (!$handle) { throw new RuntimeException('Não foi possível ler o ficheiro.'); }
-        $headers=fgetcsv($handle,0,';'); if ($headers && isset($headers[0])) { $headers[0]=ltrim($headers[0], "\xEF\xBB\xBF"); }
-        $rows=[]; while (($row=fgetcsv($handle,0,';'))!==false) { $rows[]=$row; } fclose($handle);
+        $sample=[]; while (count($sample)<20 && ($line=fgets($handle))!==false) { $sample[]=$line; } if (!$sample) { fclose($handle); return []; }
+        $delimiter=';'; $bestCount=0; foreach ([';', ',', "\t"] as $candidate) { $count=0;foreach($sample as $line){$count=max($count,count(str_getcsv($line,$candidate)));}if($count>$bestCount){$bestCount=$count;$delimiter=$candidate;} }
+        rewind($handle); $headers=fgetcsv($handle,0,$delimiter); if ($headers && isset($headers[0])) { $headers[0]=ltrim($headers[0], "\xEF\xBB\xBF"); }
+        $rows=[]; while (($row=fgetcsv($handle,0,$delimiter))!==false) { $rows[]=$row; } fclose($handle);
         array_unshift($rows, $headers ?: []); return $rows;
     }
 
-    private static function readXlsxMatrix(string $path): array
+    private static function readXlsxMatrices(string $path): array
     {
         $zip=new ZipArchive(); if ($zip->open($path)!==true) { throw new RuntimeException('O ficheiro Excel não é um .xlsx válido.'); }
         $shared=[]; $sharedXml=$zip->getFromName('xl/sharedStrings.xml');
         if ($sharedXml!==false) { $sharedXml=preg_replace('/\sxmlns="[^"]+"/','',$sharedXml,1); $xml=simplexml_load_string($sharedXml); foreach ($xml->si as $si) { $parts=[]; foreach ($si->xpath('.//t') as $text) { $parts[]=(string)$text; } $shared[]=implode('',$parts); } }
-        $sheetPath=self::firstWorksheetPath($zip);
-        $sheetXml=$zip->getFromName($sheetPath); $zip->close();
-        if ($sheetXml===false) { throw new RuntimeException('A primeira folha do Excel não foi encontrada.'); }
-        $sheetXml=preg_replace('/\sxmlns="[^"]+"/','',$sheetXml,1); $xml=simplexml_load_string($sheetXml); $matrix=[];
-        foreach ($xml->sheetData->row as $row) { $values=[]; $sequentialIndex=0; foreach ($row->c as $cell) { preg_match('/[A-Z]+/',(string)$cell['r'],$m); $index=isset($m[0])?self::columnIndex($m[0]):$sequentialIndex; $type=(string)$cell['t']; $value=$type==='inlineStr'?self::inlineString($cell):(string)$cell->v; if ($type==='s') { $value=$shared[(int)$value]??''; } $values[$index]=$value; $sequentialIndex=$index+1; } if ($values) { $matrix[]=array_replace(array_fill(0,max(array_keys($values))+1,''),$values); } }
-        return $matrix;
+        $matrices=[]; foreach (self::worksheetPaths($zip) as $sheetPath) { $sheetXml=$zip->getFromName($sheetPath); if ($sheetXml===false) { continue; }
+            $sheetXml=preg_replace('/\sxmlns="[^"]+"/','',$sheetXml,1); $xml=simplexml_load_string($sheetXml); $matrix=[];
+            foreach ($xml->sheetData->row as $row) { $values=[];$sequentialIndex=0;foreach ($row->c as $cell) { preg_match('/[A-Z]+/i',(string)$cell['r'],$m);$index=isset($m[0])?self::columnIndex(strtoupper($m[0])):$sequentialIndex;$type=(string)$cell['t'];$value=$type==='inlineStr'?self::inlineString($cell):(string)$cell->v;if($type==='s'){$value=$shared[(int)$value]??'';}$values[$index]=$value;$sequentialIndex=$index+1;}if($values){$matrix[]=array_replace(array_fill(0,max(array_keys($values))+1,''),$values);} }
+            $matrices[]=$matrix;
+        } $zip->close(); if (!$matrices) { throw new RuntimeException('Não foram encontradas folhas no ficheiro Excel.'); } return $matrices;
     }
 
     private static function inlineString(SimpleXMLElement $cell): string
@@ -70,50 +73,46 @@ final class ArticleSpreadsheet
         return implode('', $parts);
     }
 
-    private static function firstWorksheetPath(ZipArchive $zip): string
+    private static function worksheetPaths(ZipArchive $zip): array
     {
         $workbookXml=$zip->getFromName('xl/workbook.xml');
         $relationshipsXml=$zip->getFromName('xl/_rels/workbook.xml.rels');
-        if ($workbookXml===false || $relationshipsXml===false) { return 'xl/worksheets/sheet1.xml'; }
+        if ($workbookXml===false || $relationshipsXml===false) { return ['xl/worksheets/sheet1.xml']; }
 
         $workbookXml=preg_replace('/\sxmlns="[^"]+"/','',$workbookXml,1);
         $relationshipsXml=preg_replace('/\sxmlns="[^"]+"/','',$relationshipsXml,1);
         $workbook=simplexml_load_string($workbookXml);
         $relationships=simplexml_load_string($relationshipsXml);
-        if ($workbook===false || $relationships===false) { return 'xl/worksheets/sheet1.xml'; }
-
-        $relationshipId='';
-        foreach ($workbook->sheets->sheet ?? [] as $sheet) {
+        if ($workbook===false || $relationships===false) { return ['xl/worksheets/sheet1.xml']; }
+        $targets=[]; foreach ($relationships->Relationship as $relationship) { $targets[(string)$relationship['Id']]=(string)$relationship['Target']; }
+        $paths=[]; foreach ($workbook->sheets->sheet ?? [] as $sheet) {
             $attributes=$sheet->attributes('http://schemas.openxmlformats.org/officeDocument/2006/relationships');
             $relationshipId=(string)($attributes['id'] ?? '');
-            if ($relationshipId!=='') { break; }
-        }
-        foreach ($relationships->Relationship as $relationship) {
-            if ((string)$relationship['Id']!==$relationshipId) { continue; }
-            $target=str_replace('\\','/',(string)$relationship['Target']);
-            if ($target==='') { break; }
-            if ($target[0]==='/') { return ltrim($target,'/'); }
+            $target=str_replace('\\','/',$targets[$relationshipId]??''); if ($target==='') { continue; }
+            if ($target[0]==='/') { $paths[]=ltrim($target,'/'); continue; }
             while (strpos($target,'../')===0) { $target=substr($target,3); }
-            return strpos($target,'xl/')===0 ? $target : 'xl/'.$target;
+            $paths[]=strpos($target,'xl/')===0?$target:'xl/'.$target;
         }
-        return 'xl/worksheets/sheet1.xml';
+        return $paths ?: ['xl/worksheets/sheet1.xml'];
     }
 
     private static function combine(array $headers, array $rows, array $columns, array $required): array
     {
         $headers=array_map([self::class, 'normalizeHeader'], $headers);
-        foreach ($required as $header) { if (!in_array($header,$headers,true)) { throw new RuntimeException('O ficheiro deve incluir as colunas '.implode(' e ',$required).'.'); } }
-        foreach ($headers as $header) { if (!isset($columns[$header])) { throw new RuntimeException('Coluna desconhecida: '.$header); } }
-        $result=[]; foreach ($rows as $row) { if (!array_filter($row,static function($v){return trim((string)$v)!=='';})) continue; $row=array_pad($row,count($headers),''); $result[]=array_combine($headers,array_slice($row,0,count($headers))); }
+        foreach ($required as $header) { $target=$columns[$header];$found=false;foreach($headers as $candidate){if(isset($columns[$candidate])&&$columns[$candidate]===$target){$found=true;break;}}if(!$found){throw new RuntimeException('O ficheiro deve incluir as colunas '.implode(' e ',$required).'.');} }
+        foreach ($headers as $header) { if ($header!==''&&!isset($columns[$header])) { throw new RuntimeException('Coluna desconhecida: '.$header); } }
+        $result=[]; foreach ($rows as $row) { if (!array_filter($row,static function($v){return trim((string)$v)!=='';})) continue;$combined=[];foreach($headers as $index=>$header){if($header!==''){$combined[$header]=$row[$index]??'';}}$result[]=$combined; }
         return $result;
     }
 
     /** @return int|null */
-    private static function findHeaderRow(array $matrix, array $required)
+    private static function findHeaderRow(array $matrix, array $columns, array $required)
     {
         foreach ($matrix as $index => $row) {
             $headers=array_map([self::class, 'normalizeHeader'], $row);
-            if (!array_diff($required, $headers)) { return $index; }
+            $mapped=[];foreach($headers as $header){if(isset($columns[$header])){$mapped[]=$columns[$header];}}
+            $requiredTargets=[];foreach($required as $header){$requiredTargets[]=$columns[$header];}
+            if (!array_diff($requiredTargets, $mapped)) { return $index; }
         }
         return null;
     }
@@ -128,7 +127,8 @@ final class ArticleSpreadsheet
             'Ó'=>'O','Ò'=>'O','Ô'=>'O','Õ'=>'O','Ö'=>'O','ó'=>'o','ò'=>'o','ô'=>'o','õ'=>'o','ö'=>'o',
             'Ú'=>'U','Ù'=>'U','Û'=>'U','Ü'=>'U','ú'=>'u','ù'=>'u','û'=>'u','ü'=>'u','Ç'=>'C','ç'=>'c',
         ]);
-        return strtolower($header);
+        $header=strtolower($header);
+        return trim((string)preg_replace('/[^a-z0-9]+/','_',$header),'_');
     }
 
     private static function columnIndex(string $letters): int
