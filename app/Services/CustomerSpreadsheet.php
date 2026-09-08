@@ -18,8 +18,11 @@ final class CustomerSpreadsheet
     public static function read(string $path, string $extension): array
     {
         require_once __DIR__.'/ArticleSpreadsheet.php';
-        /* The parser is deliberately shared so customer imports accept exactly the same
-           Excel and semicolon-separated CSV formats as the article sheet. */
-        return ArticleSpreadsheet::readWithColumns($path, $extension, self::columns(), ['codigo', 'nome']);
+        return ArticleSpreadsheet::readWithColumns(
+            $path,
+            $extension,
+            self::columns(),
+            ['codigo', 'nome']
+        );
     }
 }
