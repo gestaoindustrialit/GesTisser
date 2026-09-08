@@ -160,6 +160,7 @@ function erp_run_phase1_migrations(PDO $pdo)
         foreach (erp_default_permissions() as $code => $label) { $perm->execute([$code, $label, $label]); }
         $rolePermission=$pdo->prepare('INSERT OR IGNORE INTO erp_role_permissions(profile,permission_code) VALUES (?,?)');
         foreach(['Produção','Chefias'] as $role){foreach(['erp.operations.view','erp.routings.view','erp.shopfloor.execute'] as $permission)$rolePermission->execute([$role,$permission]);}
+        $rolePermission->execute(['Chefias','erp.bi.view']);
         foreach(['erp.operations.manage','erp.routings.edit','erp.routings.activate','erp.work_order_routing.edit','erp.execution.correct'] as $permission)$rolePermission->execute(['Chefias',$permission]);
         $seq = $pdo->prepare('INSERT OR IGNORE INTO erp_number_sequences(code,prefix,next_number,padding) VALUES (?,?,?,?)');
         foreach ([['stock_movement','MOV-',1,6],['raw_material','MP-',1,5],['finished_product','PA-',1,5],['customer','CLI-',1,4],['supplier','FOR-',1,4],['work_order','OF-',1,5]] as $s) { $seq->execute($s); }
@@ -167,6 +168,13 @@ function erp_run_phase1_migrations(PDO $pdo)
         $set->execute(['allow_negative_stock','0']);
         $set->execute(['raw_material_code_pattern','{tipo}{caracteristica}{largura}{gramagem}{seq}']);
         $set->execute(['labor_hourly_rate','0.00']);
+        $set->execute(['bi_tv_refresh_seconds','300']);
+        $set->execute(['bi_tv_rotate_seconds','30']);
+        $pdo->exec('UPDATE erp_settings SET value="30" WHERE key="bi_tv_rotate_seconds" AND CAST(value AS INTEGER)<30');
+        $set->execute(['bi_target_deadline_percent','95']);
+        $set->execute(['bi_warning_deadline_percent','85']);
+        $set->execute(['bi_target_waste_percent','3']);
+        $set->execute(['bi_warning_waste_percent','6']);
 
         foreach ([['BOB','Bobina'],['PAL','Palete'],['PRD','Produção'],['EXP','Expedição']] as $lt) { $pdo->prepare('INSERT OR IGNORE INTO erp_location_types(code,description) VALUES (?,?)')->execute($lt); }
         foreach ([['BL','Branco laminado'],['BNL','Branco não laminado'],['TL','Transparente laminado'],['TNL','Transparente não laminado'],['R30','R30'],['R50','R50']] as $mf) { $pdo->prepare('INSERT OR IGNORE INTO erp_material_features(code,description) VALUES (?,?)')->execute($mf); }
@@ -182,7 +190,8 @@ function erp_default_permissions(): array
 {
     return [
         'erp.view'=>'Ver ERP','erp.master_data'=>'Gerir dados mestre','erp.customers'=>'Gerir clientes','erp.suppliers'=>'Gerir fornecedores','erp.purchases'=>'Gerir compras','erp.purchase_approve'=>'Aprovar compras','erp.receipts'=>'Registar receções','erp.sales'=>'Gerir vendas','erp.confirm_orders'=>'Confirmar encomendas','erp.work_orders_create'=>'Criar OF','erp.work_orders_release'=>'Libertar OF','erp.planning'=>'Planear produção','erp.production_register'=>'Registar produção','erp.consumptions'=>'Registar consumos','erp.stock_move'=>'Movimentar stock','erp.stock_adjust'=>'Ajustar stock','erp.inventory_approve'=>'Aprovar inventários','erp.shipments_prepare'=>'Preparar expedições','erp.shipments_confirm'=>'Confirmar expedições','erp.quality'=>'Gerir qualidade','erp.costs_view'=>'Consultar custos','erp.costs_edit'=>'Alterar custos','erp.period_close'=>'Fechar períodos','erp.reports_export'=>'Exportar relatórios','erp.documents_cancel'=>'Anular documentos',
-        'erp.operations.view'=>'Consultar operações','erp.operations.manage'=>'Gerir operações','erp.routings.view'=>'Consultar routings','erp.routings.edit'=>'Criar/editar routings','erp.routings.activate'=>'Ativar versões de routing','erp.work_order_routing.edit'=>'Alterar routing de uma OF','erp.shopfloor.execute'=>'Executar operações no Shopfloor','erp.execution.correct'=>'Corrigir registos de execução'
+        'erp.operations.view'=>'Consultar operações','erp.operations.manage'=>'Gerir operações','erp.routings.view'=>'Consultar routings','erp.routings.edit'=>'Criar/editar routings','erp.routings.activate'=>'Ativar versões de routing','erp.work_order_routing.edit'=>'Alterar routing de uma OF','erp.shopfloor.execute'=>'Executar operações no Shopfloor','erp.execution.correct'=>'Corrigir registos de execução',
+        'erp.bi.view'=>'Consultar Business Intelligence','erp.bi.financial'=>'Consultar indicadores financeiros no BI'
     ];
 }
 
