@@ -421,7 +421,10 @@ $lateHistoryFilters = [
 ];
 
 $lateHistoryRows = [];
-if ($canComputeAttendance) {
+$canComputeLateHistory = table_exists($pdo, 'shopfloor_time_entries')
+    && table_exists($pdo, 'hr_schedules')
+    && column_exists($pdo, 'users', 'schedule_id');
+if ($canComputeLateHistory) {
     $lateHistoryUserNumberExpr = column_exists($pdo, 'users', 'user_number') ? 'u.user_number' : 'NULL';
     $lateHistoryWhere = [];
     $lateHistoryParams = [];
