@@ -3,8 +3,6 @@ declare(strict_types=1);
 
 final class CustomerSpreadsheet
 {
-    private const REQUIRED_COLUMNS = ['codigo', 'nome'];
-
     public static function columns(): array
     {
         return [
