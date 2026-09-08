@@ -7,6 +7,10 @@ $readerSource=file_get_contents(dirname(__DIR__).'/app/Services/ArticleSpreadshe
 if ($readerSource===false || preg_match('/function\s+findHeaderRow\s*\([^)]*\)\s*:\s*\?/', $readerSource)) {
     throw new RuntimeException('O leitor contém um tipo de retorno nullable incompatível com o PHP do servidor.');
 }
+$customerReaderSource=file_get_contents(dirname(__DIR__).'/app/Services/CustomerSpreadsheet.php');
+if ($customerReaderSource===false || preg_match('/\b(?:private|protected|public)\s+const\b/', $customerReaderSource)) {
+    throw new RuntimeException('O leitor de clientes contém uma constante com visibilidade incompatível com o PHP do servidor.');
+}
 
 function test_xlsx_cell(string $value, bool $richText = false): string
 {

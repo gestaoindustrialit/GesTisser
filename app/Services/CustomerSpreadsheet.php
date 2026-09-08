@@ -24,7 +24,7 @@ final class CustomerSpreadsheet
             $path,
             $extension,
             self::columns(),
-            self::REQUIRED_COLUMNS
+            ['codigo', 'nome']
         );
     }
 }
