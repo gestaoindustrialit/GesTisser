@@ -4,7 +4,7 @@ declare(strict_types=1);
 require_once dirname(__DIR__) . '/bootstrap/config.php';
 require_once dirname(__DIR__) . '/integrations_migrations.php';
 
-function integration_migration_assert(bool $condition, string $message): void
+function integration_migration_assert(bool $condition, string $message)
 {
     if (!$condition) {
         throw new RuntimeException($message);
@@ -13,6 +13,11 @@ function integration_migration_assert(bool $condition, string $message): void
 
 $pdo = new PDO('sqlite::memory:');
 $pdo->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
+
+integration_migration_assert(
+    !(new ReflectionFunction('integrations_migrate'))->hasReturnType(),
+    'The migration function must remain compatible with runtimes that cannot enforce a void return type.'
+);
 
 integrations_migrate($pdo);
 
