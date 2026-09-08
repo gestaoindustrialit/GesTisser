@@ -251,22 +251,22 @@ if ($canComputeAttendance) {
      INNER JOIN hr_schedules s ON s.id = u.schedule_id
      LEFT JOIN hr_departments d ON d.id = u.department_id
      LEFT JOIN (
-        SELECT user_id, MIN(datetime(occurred_at, "localtime")) AS first_entry_at
+        SELECT user_id, MIN(datetime(occurred_at)) AS first_entry_at
         FROM shopfloor_time_entries
         WHERE entry_type = "entrada"
-          AND date(occurred_at, "localtime") = date(?)
+          AND date(occurred_at) = date(?)
         GROUP BY user_id
      ) AS first_entry ON first_entry.user_id = u.id
      LEFT JOIN (
-        SELECT te.user_id, MIN(datetime(te.occurred_at, "localtime")) AS second_entry_at
+        SELECT te.user_id, MIN(datetime(te.occurred_at)) AS second_entry_at
         FROM shopfloor_time_entries te
         INNER JOIN users su ON su.id = te.user_id
         INNER JOIN hr_schedules ss ON ss.id = su.schedule_id
         WHERE te.entry_type = "entrada"
-          AND date(te.occurred_at, "localtime") = date(?)
+          AND date(te.occurred_at) = date(?)
           AND ss.second_start_time IS NOT NULL
           AND trim(ss.second_start_time) <> ""
-          AND datetime(te.occurred_at, "localtime") >= datetime(date(?) || " " || substr(ss.end_time, 1, 5) || ":00")
+          AND datetime(te.occurred_at) >= datetime(date(?) || " " || substr(ss.end_time, 1, 5) || ":00")
         GROUP BY te.user_id
      ) AS second_entry ON second_entry.user_id = u.id
      WHERE ' . $activeUsersConditionSql . '
@@ -421,33 +421,89 @@ $lateHistoryFilters = [
 ];
 
 $lateHistoryRows = [];
-if ($hasLateHistoryTable) {
+$canComputeLateHistory = table_exists($pdo, 'shopfloor_time_entries')
+    && table_exists($pdo, 'hr_schedules')
+    && column_exists($pdo, 'users', 'schedule_id');
+if ($canComputeLateHistory) {
     $lateHistoryUserNumberExpr = column_exists($pdo, 'users', 'user_number') ? 'u.user_number' : 'NULL';
     $lateHistoryWhere = [];
     $lateHistoryParams = [];
     if ($lateHistoryFilters['user_id'] > 0) {
-        $lateHistoryWhere[] = 'h.user_id = ?';
+        $lateHistoryWhere[] = 'te.user_id = ?';
         $lateHistoryParams[] = $lateHistoryFilters['user_id'];
     }
     if ($lateHistoryFilters['date_from'] !== '') {
-        $lateHistoryWhere[] = 'date(h.delay_date) >= date(?)';
+        $lateHistoryWhere[] = 'date(te.occurred_at) >= date(?)';
         $lateHistoryParams[] = $lateHistoryFilters['date_from'];
     }
     if ($lateHistoryFilters['date_to'] !== '') {
-        $lateHistoryWhere[] = 'date(h.delay_date) <= date(?)';
+        $lateHistoryWhere[] = 'date(te.occurred_at) <= date(?)';
         $lateHistoryParams[] = $lateHistoryFilters['date_to'];
     }
-    $lateHistoryWhereSql = $lateHistoryWhere ? (' WHERE ' . implode(' AND ', $lateHistoryWhere)) : '';
+    $lateHistoryWhere[] = 'te.entry_type = "entrada"';
+    $lateHistoryWhereSql = ' WHERE ' . implode(' AND ', $lateHistoryWhere);
     $lateHistoryStmt = $pdo->prepare(
-        'SELECT h.*, u.name AS employee_name, ' . $lateHistoryUserNumberExpr . ' AS user_number
-         FROM hr_late_history h
-         INNER JOIN users u ON u.id = h.user_id'
+        'SELECT date(te.occurred_at) AS delay_date,
+                te.user_id,
+                u.name AS employee_name,
+                ' . $lateHistoryUserNumberExpr . ' AS user_number,
+                s.start_time,
+                s.end_time,
+                s.second_start_time,
+                MIN(CASE
+                    WHEN trim(COALESCE(s.second_start_time, "")) = ""
+                      OR time(te.occurred_at) < time(s.end_time)
+                    THEN datetime(te.occurred_at)
+                END) AS first_entry_at,
+                MIN(CASE
+                    WHEN trim(COALESCE(s.second_start_time, "")) <> ""
+                     AND time(te.occurred_at) >= time(s.end_time)
+                    THEN datetime(te.occurred_at)
+                END) AS second_entry_at
+         FROM shopfloor_time_entries te
+         INNER JOIN users u ON u.id = te.user_id
+         INNER JOIN hr_schedules s ON s.id = u.schedule_id'
         . $lateHistoryWhereSql .
-        ' ORDER BY h.delay_date DESC, h.entered_at DESC
-          LIMIT 300'
+        ' GROUP BY date(te.occurred_at), te.user_id
+          ORDER BY delay_date DESC'
     );
     $lateHistoryStmt->execute($lateHistoryParams);
-    $lateHistoryRows = $lateHistoryStmt->fetchAll(PDO::FETCH_ASSOC);
+    $lateHistoryDays = $lateHistoryStmt->fetchAll(PDO::FETCH_ASSOC);
+
+    foreach ($lateHistoryDays as $lateHistoryDay) {
+        $periods = [
+            ['label' => 'Manhã', 'scheduled_at' => $lateHistoryDay['start_time'] ?? '', 'entered_at' => $lateHistoryDay['first_entry_at'] ?? ''],
+            ['label' => 'Tarde', 'scheduled_at' => $lateHistoryDay['second_start_time'] ?? '', 'entered_at' => $lateHistoryDay['second_entry_at'] ?? ''],
+        ];
+        foreach ($periods as $period) {
+            $scheduledTime = substr(trim((string) $period['scheduled_at']), 0, 5);
+            $enteredAt = trim((string) $period['entered_at']);
+            if ($scheduledTime === '' || $enteredAt === '') {
+                continue;
+            }
+
+            $scheduledTimestamp = strtotime((string) $lateHistoryDay['delay_date'] . ' ' . $scheduledTime . ':00');
+            $enteredTimestamp = strtotime($enteredAt);
+            if ($scheduledTimestamp === false || $enteredTimestamp === false || $enteredTimestamp <= $scheduledTimestamp) {
+                continue;
+            }
+
+            $lateHistoryRows[] = [
+                'delay_date' => (string) $lateHistoryDay['delay_date'],
+                'user_id' => (int) $lateHistoryDay['user_id'],
+                'employee_name' => (string) $lateHistoryDay['employee_name'],
+                'user_number' => (string) ($lateHistoryDay['user_number'] ?? ''),
+                'delay_period' => (string) $period['label'],
+                'scheduled_at' => $scheduledTime,
+                'entered_at' => date('Y-m-d H:i:s', $enteredTimestamp),
+                'delay_seconds' => $enteredTimestamp - $scheduledTimestamp,
+            ];
+        }
+    }
+    usort($lateHistoryRows, static function (array $left, array $right): int {
+        return strcmp((string) $right['entered_at'], (string) $left['entered_at']);
+    });
+    $lateHistoryRows = array_slice($lateHistoryRows, 0, 300);
 }
 
 $where = [];
