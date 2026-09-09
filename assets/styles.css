@@ -1148,6 +1148,15 @@ body {
 .machine-empty { grid-column: 1 / -1; padding: 2rem; border: 1px dashed #ced4da; border-radius: .75rem; color: #6c757d; text-align: center; }
 .machine-file-chips { display: flex; flex-wrap: wrap; gap: .5rem; margin-top: .75rem; }
 .machine-file-chips a { display: inline-flex; align-items: center; gap: .3rem; padding: .3rem .55rem; border: 1px solid #dee2e6; border-radius: 999px; color: #0d6efd; font-size: .75rem; font-weight: 600; text-decoration: none; }
+.machine-file-chips a:hover { background: #eef6ff; border-color: #0d6efd; }
+.machine-pdf-modal .modal-content { height: min(88vh, 900px); overflow: hidden; border: 0; border-radius: 1rem; }
+.machine-pdf-modal .modal-header { padding: .85rem 1rem; }
+.machine-pdf-modal .modal-title { max-width: min(75vw, 900px); overflow: hidden; font-size: 1rem; font-weight: 700; text-overflow: ellipsis; white-space: nowrap; }
+.machine-pdf-kicker { display: block; margin-bottom: .15rem; color: #6c757d; font-size: .7rem; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; }
+.machine-pdf-modal .modal-body { min-height: 0; padding: 0; background: #525659; }
+.machine-pdf-modal iframe { display: block; width: 100%; height: 100%; border: 0; background: #525659; }
+.machine-pdf-modal .modal-footer { justify-content: space-between; padding: .65rem 1rem; }
+.machine-pdf-modal .modal-footer small { color: #6c757d; }
 
 .machine-modal .modal-dialog { max-width: 1140px; }
 .machine-modal .modal-content { max-height: calc(100vh - 2rem); overflow: hidden; border: 0; border-radius: 1rem; }

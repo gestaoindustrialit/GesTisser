@@ -1,5 +1,6 @@
 <?php
 require_once __DIR__ . '/hr_organization_lib.php';
+require_once __DIR__ . '/app/Services/MachineAttachment.php';
 require_login();
 gt_run_org_migrations($pdo);
 $userId = (int) $_SESSION['user_id'];
@@ -57,15 +58,11 @@ function gt_save_machine_upload(PDO $pdo, int $machineId, int $userId, array $fi
     if ($tmpName === '' || !is_uploaded_file($tmpName)) {
         throw new RuntimeException('Upload inválido.');
     }
-    $finfo = finfo_open(FILEINFO_MIME_TYPE);
-    $mime = $finfo ? (string) finfo_file($finfo, $tmpName) : '';
-    if ($finfo) {
-        finfo_close($finfo);
-    }
+    $originalName = (string) ($file['name'] ?? 'documento');
+    $mime = gt_machine_attachment_mime($tmpName, $originalName);
     if (!in_array($mime, $allowedMimeTypes, true)) {
         throw new RuntimeException('Tipo de ficheiro não permitido.');
     }
-    $originalName = (string) ($file['name'] ?? 'documento');
     $extension = strtolower(pathinfo($originalName, PATHINFO_EXTENSION));
     $safeName = 'machine_' . $machineId . '_' . bin2hex(random_bytes(10)) . ($extension !== '' ? '.' . $extension : '');
     $uploadDir = __DIR__ . '/storage/uploads/machines';
@@ -157,11 +154,7 @@ function gt_save_machine_chunk(PDO $pdo, int $machineId, int $userId, array $fil
     if ($size <= 0 || $size > 10 * 1024 * 1024) {
         throw new RuntimeException('Cada ficheiro deve ter no máximo 10 MB.');
     }
-    $finfo = finfo_open(FILEINFO_MIME_TYPE);
-    $mime = $finfo ? (string) finfo_file($finfo, $assembled) : '';
-    if ($finfo) {
-        finfo_close($finfo);
-    }
+    $mime = gt_machine_attachment_mime($assembled, $originalName);
     if (!in_array($mime, $allowedMimeTypes, true)) {
         throw new RuntimeException('Tipo de ficheiro não permitido.');
     }
@@ -334,11 +327,29 @@ require __DIR__ . '/partials/header.php';
                 <div class="machine-card-head"><div><span class="machine-status-pill"><?= h($statusLabels[$m['status']] ?? $m['status']) ?></span><h2><?= h($m['code'] . ' · ' . $m['name']) ?></h2><p><?= h(trim(($m['brand'] ?? '') . ' ' . ($m['model'] ?? '')) ?: 'Marca e modelo por definir') ?></p></div><span class="criticality <?= h($m['criticality'] ?? 'medium') ?>"><?= h($criticalityLabels[$m['criticality']] ?? $m['criticality']) ?></span></div>
                 <div class="machine-meta"><div><span>Localização</span><strong><?= h($m['department_name'] ?: $m['location'] ?: 'Por definir') ?></strong></div><div><span>Responsável</span><strong><?= h($m['owner_name'] ?: 'Por definir') ?></strong></div><div><span>Capacidade nominal</span><strong><?= h(trim(($m['nominal_capacity'] ?? '') . ' ' . ($m['capacity_unit'] ?? '')) ?: 'Por definir') ?></strong></div><div><span>Operadores autónomos</span><strong><?= h((string) $m['autonomous']) ?></strong></div><div><span>N.º série</span><strong><?= h($m['serial_number'] ?: '—') ?></strong></div><div><span>Próxima manutenção</span><strong><?= h($m['next_maintenance_date'] ?: '—') ?></strong></div></div>
                 <p class="machine-notes"><?= h($m['notes'] ?: 'Sem observações.') ?></p>
-                <?php if (!empty($m['_attachments'])): ?><div class="machine-file-chips"><?php foreach ($m['_attachments'] as $attachment): ?><a href="<?= h($attachment['file_path']) ?>" target="_blank" rel="noopener"><i class="bi bi-paperclip"></i><?= h($attachment['original_name']) ?></a><?php endforeach; ?></div><?php endif; ?>
+                <?php if (!empty($m['_attachments'])): ?><div class="machine-file-chips"><?php foreach ($m['_attachments'] as $attachment): ?><?php $isPdf = ($attachment['mime_type'] ?? '') === 'application/pdf' || strtolower(pathinfo((string) ($attachment['original_name'] ?? ''), PATHINFO_EXTENSION)) === 'pdf'; ?><a href="<?= h($attachment['file_path']) ?>" target="_blank" rel="noopener"<?= $isPdf ? ' class="machine-pdf-preview" data-pdf-name="' . h((string) $attachment['original_name']) . '"' : '' ?>><i class="bi bi-paperclip"></i><?= h($attachment['original_name']) ?></a><?php endforeach; ?></div><?php endif; ?>
                 <div class="machine-actions"><a class="btn btn-outline-secondary" href="hr_skills.php?machine_id=<?= (int) $m['id'] ?>">Competências</a><button class="btn btn-primary" type="button" data-bs-toggle="modal" data-bs-target="#machineModal" data-machine='<?= h(json_encode($m, JSON_HEX_APOS | JSON_HEX_QUOT | JSON_UNESCAPED_UNICODE)) ?>'>Editar</button><form method="post" class="d-inline"><?= csrf_input() ?><input type="hidden" name="action" value="delete"><input type="hidden" name="id" value="<?= (int) $m['id'] ?>"><button class="btn btn-danger-subtle">Eliminar</button></form></div>
             </article>
         <?php endforeach; ?>
         <?php if (!$machines): ?><div class="machine-empty">Sem máquinas para os filtros selecionados.</div><?php endif; ?>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="modal fade machine-pdf-modal" id="machinePdfModal" tabindex="-1" aria-labelledby="machinePdfModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered modal-xl">
+        <div class="modal-content">
+            <div class="modal-header">
+                <div><span class="machine-pdf-kicker">Pré-visualização do documento</span><h2 class="modal-title" id="machinePdfModalLabel">Documento PDF</h2></div>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Fechar"></button>
+            </div>
+            <div class="modal-body">
+                <iframe id="machinePdfFrame" title="Pré-visualização do documento PDF"></iframe>
+            </div>
+            <div class="modal-footer">
+                <small>Se o documento não aparecer, abra-o num novo separador.</small>
+                <a class="btn btn-primary" id="machinePdfOpen" href="#" target="_blank" rel="noopener"><i class="bi bi-box-arrow-up-right"></i> Abrir PDF</a>
             </div>
         </div>
     </div>
@@ -377,6 +388,28 @@ document.addEventListener('DOMContentLoaded', function () {
     const form = document.getElementById('machineForm');
     const title = document.getElementById('machineModalLabel');
     const existingFiles = document.getElementById('machineExistingFiles');
+    const pdfModalElement = document.getElementById('machinePdfModal');
+    const pdfFrame = document.getElementById('machinePdfFrame');
+    const pdfTitle = document.getElementById('machinePdfModalLabel');
+    const pdfOpen = document.getElementById('machinePdfOpen');
+    const showPdfPreview = function (url, name) {
+        if (!pdfModalElement || !pdfFrame || !pdfTitle || !pdfOpen || !window.bootstrap) return false;
+        pdfTitle.textContent = name || 'Documento PDF';
+        pdfFrame.src = url;
+        pdfOpen.href = url;
+        bootstrap.Modal.getOrCreateInstance(pdfModalElement).show();
+        return true;
+    };
+    document.addEventListener('click', function (event) {
+        const link = event.target.closest('.machine-pdf-preview');
+        if (!link) return;
+        if (showPdfPreview(link.href, link.dataset.pdfName || link.textContent.trim())) event.preventDefault();
+    });
+    if (pdfModalElement) {
+        pdfModalElement.addEventListener('hidden.bs.modal', function () {
+            if (pdfFrame) pdfFrame.removeAttribute('src');
+        });
+    }
     const renderFiles = function (files) {
         if (!existingFiles) return;
         existingFiles.innerHTML = '';
@@ -394,6 +427,11 @@ document.addEventListener('DOMContentLoaded', function () {
             link.target = '_blank';
             link.rel = 'noopener';
             link.textContent = file.original_name || 'Ficheiro';
+            const extension = (file.original_name || '').split('.').pop().toLowerCase();
+            if (file.mime_type === 'application/pdf' || extension === 'pdf') {
+                link.className = 'machine-pdf-preview';
+                link.dataset.pdfName = file.original_name || 'Documento PDF';
+            }
             const remove = document.createElement('button');
             remove.type = 'submit';
             remove.name = 'attachment_id';

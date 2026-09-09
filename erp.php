@@ -4,6 +4,7 @@ require_once __DIR__ . '/erp_migrations.php';
 require_once __DIR__ . '/app/Services/ArticleSpreadsheet.php';
 require_once __DIR__ . '/app/Services/CustomerSpreadsheet.php';
 require_once __DIR__ . '/app/Services/SupplierSpreadsheet.php';
+require_once __DIR__ . '/app/Services/RawMaterialSpreadsheet.php';
 require_once __DIR__ . '/app/Services/RoutingService.php';
 require_login();
 erp_run_phase1_migrations($pdo);

@@ -16,63 +16,67 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     if (!validate_csrf_or_abort(false)) {
         $flashError = 'Pedido inválido. Atualize a página e tente novamente.';
     } else {
-        $allowNegativeStock = isset($_POST['allow_negative_stock']) && $_POST['allow_negative_stock'] === '1';
-        $codePattern = trim((string) ($_POST['raw_material_code_pattern'] ?? ''));
-        $laborHourlyRateInput = str_replace(',', '.', trim((string) ($_POST['labor_hourly_rate'] ?? '')));
-        $laborHourlyRate = is_numeric($laborHourlyRateInput) ? (float) $laborHourlyRateInput : -1;
-        $biSettings = [];
-        foreach (['bi_tv_refresh_seconds','bi_tv_rotate_seconds','bi_target_deadline_percent','bi_warning_deadline_percent','bi_target_waste_percent','bi_warning_waste_percent'] as $biKey) {
-            $biSettings[$biKey] = (float) str_replace(',', '.', (string)($_POST[$biKey] ?? '0'));
-        }
-        $sequenceIds = (array) ($_POST['sequence_id'] ?? []);
-        $prefixes = (array) ($_POST['sequence_prefix'] ?? []);
-        $nextNumbers = (array) ($_POST['sequence_next_number'] ?? []);
-        $paddings = (array) ($_POST['sequence_padding'] ?? []);
-        $suffixes = (array) ($_POST['sequence_suffix'] ?? []);
-
-        if ($codePattern === '' || strpos($codePattern, '{seq}') === false) {
-            $flashError = 'O padrão de código das matérias-primas deve incluir {seq}.';
-        } elseif ($laborHourlyRate < 0) {
-            $flashError = 'Indique um valor de mão de obra por hora válido.';
-        } elseif ($biSettings['bi_tv_refresh_seconds'] < 30 || $biSettings['bi_tv_rotate_seconds'] < 30 || $biSettings['bi_target_deadline_percent'] < $biSettings['bi_warning_deadline_percent'] || $biSettings['bi_warning_waste_percent'] < $biSettings['bi_target_waste_percent']) {
-            $flashError = 'Reveja os limites do BI: atualização e deslocamento mínimos de 30 s e limites de aviso coerentes.';
-        } else {
-            try {
+        $action = (string) ($_POST['action'] ?? 'save_settings');
+        try {
+            if ($action === 'save_operation_type') {
+                $id = (int) ($_POST['id'] ?? 0);
+                $code = strtolower(trim((string) ($_POST['code'] ?? '')));
+                $name = trim((string) ($_POST['name'] ?? ''));
+                if (!preg_match('/^[a-z0-9_-]+$/', $code) || $name === '') throw new InvalidArgumentException('Indique um código simples e um nome para o tipo de operação.');
                 $pdo->beginTransaction();
-                $saveSetting = $pdo->prepare('INSERT INTO erp_settings(key,value,updated_by,updated_at) VALUES (?,?,?,CURRENT_TIMESTAMP) ON CONFLICT(key) DO UPDATE SET value=excluded.value, updated_by=excluded.updated_by, updated_at=CURRENT_TIMESTAMP');
-                $saveSetting->execute(['allow_negative_stock', $allowNegativeStock ? '1' : '0', $userId]);
-                $saveSetting->execute(['raw_material_code_pattern', $codePattern, $userId]);
-                $saveSetting->execute(['labor_hourly_rate', number_format($laborHourlyRate, 2, '.', ''), $userId]);
-                foreach ($biSettings as $biKey => $biValue) $saveSetting->execute([$biKey, (string)$biValue, $userId]);
-
-                $saveSequence = $pdo->prepare('UPDATE erp_number_sequences SET prefix=?, next_number=?, padding=?, suffix=?, updated_at=CURRENT_TIMESTAMP WHERE id=?');
-                foreach ($sequenceIds as $index => $rawId) {
-                    $id = (int) $rawId;
-                    $nextNumber = max(1, (int) ($nextNumbers[$index] ?? 1));
-                    $padding = min(12, max(1, (int) ($paddings[$index] ?? 5)));
-                    $saveSequence->execute([
-                        trim((string) ($prefixes[$index] ?? '')),
-                        $nextNumber,
-                        $padding,
-                        trim((string) ($suffixes[$index] ?? '')),
-                        $id,
-                    ]);
+                if ($id) {
+                    $old = $pdo->prepare('SELECT code FROM erp_operation_types WHERE id=?'); $old->execute([$id]); $oldCode = $old->fetchColumn();
+                    if ($oldCode === false) throw new InvalidArgumentException('Tipo de operação inexistente.');
+                    $pdo->prepare('UPDATE erp_operation_types SET code=?,name=?,updated_at=CURRENT_TIMESTAMP WHERE id=?')->execute([$code,$name,$id]);
+                    $pdo->prepare('UPDATE erp_operations SET operation_type=? WHERE operation_type=?')->execute([$code,$oldCode]);
+                } else {
+                    $pdo->prepare('INSERT INTO erp_operation_types(code,name) VALUES (?,?)')->execute([$code,$name]);
                 }
-                erp_audit($pdo, $userId, 'update', 'erp_settings', null, [], ['allow_negative_stock' => $allowNegativeStock, 'raw_material_code_pattern' => $codePattern, 'labor_hourly_rate' => $laborHourlyRate, 'business_intelligence' => $biSettings]);
-                $pdo->commit();
-                $flashSuccess = 'Configuração do ERP atualizada com sucesso.';
-            } catch (Throwable $exception) {
-                if ($pdo->inTransaction()) {
-                    $pdo->rollBack();
-                }
-                $flashError = 'Não foi possível guardar a configuração do ERP.';
+                erp_audit($pdo,$userId,$id?'update':'create','erp_operation_types',$id?:((int)$pdo->lastInsertId()),[],['code'=>$code,'name'=>$name]);
+                $pdo->commit(); $flashSuccess = 'Tipo de operação guardado com sucesso.';
+            } elseif ($action === 'delete_operation_type') {
+                $id = (int) ($_POST['id'] ?? 0); $stmt=$pdo->prepare('SELECT code FROM erp_operation_types WHERE id=?');$stmt->execute([$id]);$code=$stmt->fetchColumn();
+                if ($code === false) throw new InvalidArgumentException('Tipo de operação inexistente.');
+                $used=$pdo->prepare('SELECT COUNT(*) FROM erp_operations WHERE operation_type=?');$used->execute([$code]);
+                if ((int)$used->fetchColumn()>0) throw new DomainException('Não é possível remover um tipo associado a operações.');
+                $pdo->prepare('DELETE FROM erp_operation_types WHERE id=?')->execute([$id]);
+                erp_audit($pdo,$userId,'delete','erp_operation_types',$id,['code'=>$code],[]); $flashSuccess='Tipo de operação removido com sucesso.';
+            } elseif ($action === 'save_operation_sector') {
+                $id=(int)($_POST['id']??0);$code=strtoupper(trim((string)($_POST['code']??'')));$name=trim((string)($_POST['name']??''));
+                if ($code===''||$name==='') throw new InvalidArgumentException('O código e o nome do setor são obrigatórios.');
+                $values=[$code,$name,max(0,(float)str_replace(',','.',(string)($_POST['hourly_rate']??0))),!empty($_POST['is_active'])?1:0];
+                if($id){$pdo->prepare('UPDATE erp_work_centers SET code=?,name=?,hourly_rate=?,is_active=? WHERE id=?')->execute(array_merge($values,[$id]));}
+                else{$pdo->prepare('INSERT INTO erp_work_centers(code,name,hourly_rate,is_active) VALUES (?,?,?,?)')->execute($values);$id=(int)$pdo->lastInsertId();}
+                erp_audit($pdo,$userId,(int)($_POST['id']??0)?'update':'create','erp_work_centers',$id,[],['code'=>$code,'name'=>$name]);$flashSuccess='Setor de operações guardado com sucesso.';
+            } elseif ($action === 'delete_operation_sector') {
+                $id=(int)($_POST['id']??0);$references=['erp_operations'=>'default_work_center_id','erp_machines'=>'work_center_id','erp_article_routing_steps'=>'work_center_id','erp_shift_assignments'=>'work_center_id'];
+                foreach($references as $table=>$column){$stmt=$pdo->prepare("SELECT COUNT(*) FROM $table WHERE $column=?");$stmt->execute([$id]);if((int)$stmt->fetchColumn()>0)throw new DomainException('Não é possível remover um setor que está a ser utilizado.');}
+                $pdo->prepare('DELETE FROM erp_work_centers WHERE id=?')->execute([$id]);erp_audit($pdo,$userId,'delete','erp_work_centers',$id,[],[]);$flashSuccess='Setor de operações removido com sucesso.';
+            } else {
+                $allowNegativeStock = isset($_POST['allow_negative_stock']) && $_POST['allow_negative_stock'] === '1';
+                $codePattern = trim((string) ($_POST['raw_material_code_pattern'] ?? ''));
+                $laborHourlyRateInput = str_replace(',', '.', trim((string) ($_POST['labor_hourly_rate'] ?? '')));
+                $laborHourlyRate = is_numeric($laborHourlyRateInput) ? (float) $laborHourlyRateInput : -1;
+                $biSettings = [];
+                foreach (['bi_tv_refresh_seconds','bi_tv_rotate_seconds','bi_target_deadline_percent','bi_warning_deadline_percent','bi_target_waste_percent','bi_warning_waste_percent'] as $biKey) $biSettings[$biKey]=(float)str_replace(',','.',(string)($_POST[$biKey]??'0'));
+                if ($codePattern === '' || strpos($codePattern, '{seq}') === false) throw new InvalidArgumentException('O padrão de código das matérias-primas deve incluir {seq}.');
+                if ($laborHourlyRate < 0) throw new InvalidArgumentException('Indique um valor de mão de obra por hora válido.');
+                if ($biSettings['bi_tv_refresh_seconds']<30||$biSettings['bi_tv_rotate_seconds']<30||$biSettings['bi_target_deadline_percent']<$biSettings['bi_warning_deadline_percent']||$biSettings['bi_warning_waste_percent']<$biSettings['bi_target_waste_percent']) throw new InvalidArgumentException('Reveja os limites do BI: atualização e deslocamento mínimos de 30 s e limites de aviso coerentes.');
+                $pdo->beginTransaction();$saveSetting=$pdo->prepare('INSERT INTO erp_settings(key,value,updated_by,updated_at) VALUES (?,?,?,CURRENT_TIMESTAMP) ON CONFLICT(key) DO UPDATE SET value=excluded.value,updated_by=excluded.updated_by,updated_at=CURRENT_TIMESTAMP');
+                $saveSetting->execute(['allow_negative_stock',$allowNegativeStock?'1':'0',$userId]);$saveSetting->execute(['raw_material_code_pattern',$codePattern,$userId]);$saveSetting->execute(['labor_hourly_rate',number_format($laborHourlyRate,2,'.',''),$userId]);foreach($biSettings as $key=>$value)$saveSetting->execute([$key,(string)$value,$userId]);
+                $saveSequence=$pdo->prepare('UPDATE erp_number_sequences SET prefix=?,next_number=?,padding=?,suffix=?,updated_at=CURRENT_TIMESTAMP WHERE id=?');foreach((array)($_POST['sequence_id']??[]) as $index=>$rawId)$saveSequence->execute([trim((string)($_POST['sequence_prefix'][$index]??'')),max(1,(int)($_POST['sequence_next_number'][$index]??1)),min(12,max(1,(int)($_POST['sequence_padding'][$index]??5))),trim((string)($_POST['sequence_suffix'][$index]??'')),(int)$rawId]);
+                erp_audit($pdo,$userId,'update','erp_settings',null,[],['allow_negative_stock'=>$allowNegativeStock,'raw_material_code_pattern'=>$codePattern,'labor_hourly_rate'=>$laborHourlyRate,'business_intelligence'=>$biSettings]);$pdo->commit();$flashSuccess='Configuração do ERP atualizada com sucesso.';
             }
+        } catch (Throwable $exception) {
+            if ($pdo->inTransaction()) $pdo->rollBack();
+            $flashError = $exception instanceof PDOException ? 'Não foi possível guardar: o código ou nome já existe.' : $exception->getMessage();
         }
     }
 }
-
 $settings = $pdo->query('SELECT key, value FROM erp_settings')->fetchAll(PDO::FETCH_KEY_PAIR);
 $sequences = $pdo->query('SELECT id, code, prefix, next_number, padding, suffix FROM erp_number_sequences ORDER BY code')->fetchAll(PDO::FETCH_ASSOC);
+$operationTypes = $pdo->query('SELECT id,code,name FROM erp_operation_types ORDER BY name COLLATE NOCASE')->fetchAll(PDO::FETCH_ASSOC);
+$operationSectors = $pdo->query('SELECT id,code,name,hourly_rate,is_active FROM erp_work_centers ORDER BY is_active DESC,code COLLATE NOCASE')->fetchAll(PDO::FETCH_ASSOC);
 $sequenceLabels = [
     'customer' => 'Clientes',
     'finished_product' => 'Produtos acabados',
@@ -93,8 +97,26 @@ require __DIR__ . '/partials/header.php';
 <?php if ($flashSuccess): ?><div class="alert alert-success"><?= h($flashSuccess) ?></div><?php endif; ?>
 <?php if ($flashError): ?><div class="alert alert-danger"><?= h($flashError) ?></div><?php endif; ?>
 
+<div class="row g-4 mb-4">
+    <div class="col-xl-6">
+        <section class="card shadow-sm soft-card h-100" aria-labelledby="operation-types-title"><div class="card-body p-4">
+            <h2 class="h5" id="operation-types-title">Tipos de operações</h2><p class="text-muted">Adicione, edite ou remova as opções apresentadas no campo Tipo das operações.</p>
+            <?php foreach($operationTypes as $type): ?><form method="post" class="row g-2 align-items-center mb-2"><?=csrf_input()?><input type="hidden" name="action" value="save_operation_type"><input type="hidden" name="id" value="<?=(int)$type['id']?>"><div class="col-4"><input class="form-control" name="code" required value="<?=h($type['code'])?>" aria-label="Código do tipo"></div><div class="col"><input class="form-control" name="name" required value="<?=h($type['name'])?>" aria-label="Nome do tipo"></div><div class="col-auto"><button class="btn btn-outline-primary" aria-label="Guardar tipo"><i class="bi bi-check-lg"></i></button><button class="btn btn-outline-danger" name="action" value="delete_operation_type" formnovalidate aria-label="Remover tipo" onclick="return confirm('Remover este tipo de operação?')"><i class="bi bi-trash"></i></button></div></form><?php endforeach; ?>
+            <form method="post" class="row g-2 align-items-center mt-3 pt-3 border-top"><?=csrf_input()?><input type="hidden" name="action" value="save_operation_type"><div class="col-4"><input class="form-control" name="code" required placeholder="Código"></div><div class="col"><input class="form-control" name="name" required placeholder="Novo tipo"></div><div class="col-auto"><button class="btn btn-primary"><i class="bi bi-plus-lg me-1"></i>Adicionar</button></div></form>
+        </div></section>
+    </div>
+    <div class="col-xl-6">
+        <section class="card shadow-sm soft-card h-100" aria-labelledby="operation-sectors-title"><div class="card-body p-4">
+            <h2 class="h5" id="operation-sectors-title">Setores de operações</h2><p class="text-muted">Gira os setores disponíveis para associar às operações.</p>
+            <?php foreach($operationSectors as $sector): ?><form method="post" class="row g-2 align-items-center mb-2"><?=csrf_input()?><input type="hidden" name="action" value="save_operation_sector"><input type="hidden" name="id" value="<?=(int)$sector['id']?>"><div class="col-3"><input class="form-control" name="code" required value="<?=h($sector['code'])?>" aria-label="Código do setor"></div><div class="col"><input class="form-control" name="name" required value="<?=h($sector['name'])?>" aria-label="Nome do setor"></div><div class="col-2"><input class="form-control" type="number" min="0" step="0.01" name="hourly_rate" value="<?=h((string)$sector['hourly_rate'])?>" aria-label="Custo por hora"></div><div class="col-auto"><input type="hidden" name="is_active" value="0"><input class="form-check-input me-2" type="checkbox" name="is_active" value="1" <?=(int)$sector['is_active']?'checked':''?> aria-label="Setor ativo"><button class="btn btn-outline-primary" aria-label="Guardar setor"><i class="bi bi-check-lg"></i></button><button class="btn btn-outline-danger" name="action" value="delete_operation_sector" formnovalidate aria-label="Remover setor" onclick="return confirm('Remover este setor de operações?')"><i class="bi bi-trash"></i></button></div></form><?php endforeach; ?>
+            <form method="post" class="row g-2 align-items-center mt-3 pt-3 border-top"><?=csrf_input()?><input type="hidden" name="action" value="save_operation_sector"><input type="hidden" name="is_active" value="1"><div class="col-3"><input class="form-control" name="code" required placeholder="Código"></div><div class="col"><input class="form-control" name="name" required placeholder="Novo setor"></div><div class="col-2"><input class="form-control" type="number" min="0" step="0.01" name="hourly_rate" value="0" aria-label="Custo por hora"></div><div class="col-auto"><button class="btn btn-primary"><i class="bi bi-plus-lg me-1"></i>Adicionar</button></div></form>
+        </div></section>
+    </div>
+</div>
+
 <form method="post" class="card shadow-sm soft-card">
     <?= csrf_input() ?>
+    <input type="hidden" name="action" value="save_settings">
     <div class="card-body p-4">
         <h2 class="h5">Regras de stock e codificação</h2>
         <div class="row g-3 align-items-end">
