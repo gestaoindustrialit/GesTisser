@@ -267,8 +267,21 @@ $pageTitle='ERP industrial'; require __DIR__.'/partials/header.php';
 </div>
 <script>
 (function () {
-  var customerModal = document.getElementById('customerModal');
-  if (customerModal && window.bootstrap) { bootstrap.Modal.getOrCreateInstance(customerModal).show(); }
+  function showCustomerModal() {
+    var customerModal = document.getElementById('customerModal');
+    if (customerModal && window.bootstrap && window.bootstrap.Modal) {
+      window.bootstrap.Modal.getOrCreateInstance(customerModal).show();
+    }
+  }
+
+  // The Bootstrap bundle is loaded by the shared footer, after this page script.
+  // Waiting for DOMContentLoaded ensures the modal API is available before trying
+  // to open the customer selected through customer_id/new_customer.
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', showCustomerModal);
+  } else {
+    showCustomerModal();
+  }
 
   var addAddress = document.querySelector('[data-add-delivery-address]');
   if (addAddress) {

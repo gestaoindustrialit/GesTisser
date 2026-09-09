@@ -4,6 +4,8 @@ require_once dirname(__DIR__).'/helpers.php';
 require_once dirname(__DIR__).'/erp_migrations.php';
 require_once dirname(__DIR__).'/app/Services/CustomerSpreadsheet.php';
 erp_run_phase1_migrations($pdo);
+$erpSource=file_get_contents(dirname(__DIR__).'/erp.php');
+if($erpSource===false||strpos($erpSource,"document.addEventListener('DOMContentLoaded', showCustomerModal)")===false){throw new RuntimeException('A abertura do formulário de cliente não aguarda pelo carregamento do Bootstrap.');}
 $tmp=tempnam(sys_get_temp_dir(),'customer_csv_');
 file_put_contents($tmp,"codigo;nome;nif;telemovel;plafond;ativo\nCLI-TEST;Cliente Teste;500000000;910000000;2500,50;Sim\n");
 $rows=CustomerSpreadsheet::read($tmp,'csv'); unlink($tmp);
