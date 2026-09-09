@@ -73,6 +73,27 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
 $settings = $pdo->query('SELECT key, value FROM erp_settings')->fetchAll(PDO::FETCH_KEY_PAIR);
 $sequences = $pdo->query('SELECT id, code, prefix, next_number, padding, suffix FROM erp_number_sequences ORDER BY code')->fetchAll(PDO::FETCH_ASSOC);
+$operations = $pdo->query(
+    'SELECT o.id, o.code, o.name, o.operation_type, o.production_unit, o.min_operators, o.is_active, w.code AS work_center_code, w.name AS work_center_name
+     FROM erp_operations o
+     LEFT JOIN erp_work_centers w ON w.id = o.default_work_center_id
+     ORDER BY o.is_active DESC, o.code COLLATE NOCASE'
+)->fetchAll(PDO::FETCH_ASSOC);
+$operationTypeLabels = [
+    'production' => 'Produção',
+    'control' => 'Controlo',
+    'transport' => 'Transporte',
+    'wait' => 'Espera',
+    'subcontract' => 'Subcontratação',
+    'other' => 'Outro',
+];
+$productionUnitLabels = [
+    'unit' => 'Unidades', 'units' => 'Unidades', 'unidade' => 'Unidades', 'unidades' => 'Unidades',
+    'piece' => 'Peças', 'pieces' => 'Peças', 'kg' => 'Quilogramas', 'kilogram' => 'Quilogramas',
+    'kilograms' => 'Quilogramas', 'm' => 'Metros', 'meter' => 'Metros', 'meters' => 'Metros',
+    'l' => 'Litros', 'liter' => 'Litros', 'liters' => 'Litros', 'litro' => 'Litros', 'litros' => 'Litros',
+    't' => 'Toneladas', 'ton' => 'Toneladas', 'tons' => 'Toneladas',
+];
 $sequenceLabels = [
     'customer' => 'Clientes',
     'finished_product' => 'Produtos acabados',
@@ -92,6 +113,43 @@ require __DIR__ . '/partials/header.php';
 
 <?php if ($flashSuccess): ?><div class="alert alert-success"><?= h($flashSuccess) ?></div><?php endif; ?>
 <?php if ($flashError): ?><div class="alert alert-danger"><?= h($flashError) ?></div><?php endif; ?>
+
+<section class="card shadow-sm soft-card mb-4" aria-labelledby="erp-operations-title">
+    <div class="card-body p-4">
+        <div class="d-flex flex-wrap justify-content-between align-items-start gap-3 mb-3">
+            <div>
+                <h2 class="h5 mb-1" id="erp-operations-title">Configuração das operações</h2>
+                <p class="text-muted mb-0">Edite a identificação, o tipo, o setor, as instruções de trabalho e a capacidade de cada operação.</p>
+            </div>
+            <a class="btn btn-primary" href="erp_operations.php?id=0"><i class="bi bi-plus-lg me-1"></i>Nova operação</a>
+        </div>
+        <div class="table-responsive">
+            <table class="table table-hover align-middle mb-0">
+                <thead><tr><th>Código</th><th>Operação</th><th>Tipo</th><th>Setor</th><th>Capacidade</th><th>Estado</th><th><span class="visually-hidden">Ações</span></th></tr></thead>
+                <tbody>
+                <?php foreach ($operations as $operation): ?>
+                    <?php
+                    $unit = (string) $operation['production_unit'];
+                    $center = $operation['work_center_code']
+                        ? $operation['work_center_code'] . ' · ' . $operation['work_center_name']
+                        : '—';
+                    ?>
+                    <tr>
+                        <td><code><?= h((string) $operation['code']) ?></code></td>
+                        <td><strong><?= h((string) $operation['name']) ?></strong></td>
+                        <td><?= h((string) ($operationTypeLabels[$operation['operation_type']] ?? $operation['operation_type'])) ?></td>
+                        <td><?= h((string) $center) ?></td>
+                        <td><?= h((string) ($productionUnitLabels[$unit] ?? $unit)) ?> · <?= (int) $operation['min_operators'] ?> <?= (int) $operation['min_operators'] === 1 ? 'operador' : 'operadores' ?></td>
+                        <td><span class="badge <?= (int) $operation['is_active'] === 1 ? 'text-bg-success' : 'text-bg-secondary' ?>"><?= (int) $operation['is_active'] === 1 ? 'Ativa' : 'Inativa' ?></span></td>
+                        <td class="text-end"><a class="btn btn-sm btn-outline-primary" href="erp_operations.php?id=<?= (int) $operation['id'] ?>"><i class="bi bi-pencil me-1"></i>Editar campos</a></td>
+                    </tr>
+                <?php endforeach; ?>
+                <?php if (!$operations): ?><tr><td colspan="7" class="py-4 text-center text-muted">Ainda não existem operações configuradas.</td></tr><?php endif; ?>
+                </tbody>
+            </table>
+        </div>
+    </div>
+</section>
 
 <form method="post" class="card shadow-sm soft-card">
     <?= csrf_input() ?>
