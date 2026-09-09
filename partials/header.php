@@ -26,6 +26,7 @@ if ($user && !$showBiMenu) {
     }
 }
 $isShopfloorOnlyNavigation = $user && has_shopfloor_only_navigation($user);
+$isPinLogin = $user && (string) ($_SESSION['login_mode'] ?? '') === 'pin';
 
 if ($user && !isset($navbarClockControl)) {
     // Keep navbar query variables isolated from the page that includes this partial.
@@ -92,7 +93,7 @@ $isCurrentGroup = static function (array $files) use ($currentFile) {
     return in_array($currentFile, $files, true);
 };
 $gtHasAuthenticatedShell = !empty($user);
-$resolvedBodyClass = trim('gt-body ' . (isset($bodyClass) ? (string) $bodyClass : 'bg-light') . ($gtHasAuthenticatedShell ? ' gt-authenticated' : ' gt-guest'));
+$resolvedBodyClass = trim('gt-body ' . (isset($bodyClass) ? (string) $bodyClass : 'bg-light') . ($gtHasAuthenticatedShell ? ' gt-authenticated' : ' gt-guest') . ($isPinLogin ? ' gt-pin-login' : ''));
 
 header('Content-Type: text/html; charset=UTF-8');
 ?>
@@ -110,7 +111,8 @@ header('Content-Type: text/html; charset=UTF-8');
 </head>
 <body class="<?= h($resolvedBodyClass) ?>">
 <?php if ($user): ?>
-<div class="gt-app-shell">
+<div class="gt-app-shell<?= $isPinLogin ? ' gt-pin-session' : '' ?>">
+    <?php if (!$isPinLogin): ?>
     <aside class="gt-sidebar" id="gtSidebar" aria-label="Navegação principal">
         <div class="gt-brand">
             <a class="gt-brand-logo-shell" href="<?= h($isShopfloorOnlyNavigation ? route_url('shopfloor', 'shopfloor.php') : route_url('home', 'dashboard.php')) ?>" aria-label="Abrir página inicial">
@@ -222,16 +224,28 @@ header('Content-Type: text/html; charset=UTF-8');
         </div>
     </aside>
     <button type="button" class="gt-sidebar-backdrop" data-gt-sidebar-close aria-label="Fechar menu"></button>
+    <?php endif; ?>
 
     <div class="gt-main">
         <header class="gt-topbar">
-            <button type="button" class="gt-icon-button gt-mobile-menu" data-gt-sidebar-toggle aria-controls="gtSidebar" aria-expanded="false" aria-label="Abrir menu">
-                <i class="bi bi-list"></i>
-            </button>
-            <div class="gt-page-heading">
-                <p>Centro operacional</p>
-                <h1><?= h(isset($pageTitle) ? (string) $pageTitle : 'gesTISSER') ?></h1>
-            </div>
+            <?php if ($isPinLogin): ?>
+                <a class="gt-pin-topbar-logo" href="<?= h(route_url('shopfloor', 'shopfloor.php')) ?>" aria-label="Abrir Shopfloor">
+                    <?php if ($navbarLogo): ?>
+                        <img src="<?= h($navbarLogo) ?>" alt="Logótipo empresa">
+                    <?php else: ?>
+                        <span class="gt-brand-monogram">T</span>
+                        <strong>gesTISSER</strong>
+                    <?php endif; ?>
+                </a>
+            <?php else: ?>
+                <button type="button" class="gt-icon-button gt-mobile-menu" data-gt-sidebar-toggle aria-controls="gtSidebar" aria-expanded="false" aria-label="Abrir menu">
+                    <i class="bi bi-list"></i>
+                </button>
+                <div class="gt-page-heading">
+                    <p>Centro operacional</p>
+                    <h1><?= h(isset($pageTitle) ? (string) $pageTitle : 'gesTISSER') ?></h1>
+                </div>
+            <?php endif; ?>
             <div class="gt-top-actions">
                 <?php if (isset($navbarClockControl) && is_array($navbarClockControl)): ?>
                     <form method="post" action="<?= h((string) ($navbarClockControl['form_action'] ?? 'shopfloor.php')) ?>" class="gt-clock-form">

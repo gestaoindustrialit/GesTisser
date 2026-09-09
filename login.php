@@ -82,6 +82,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     session_regenerate_id(true);
                     $_SESSION['user_id'] = (int) $pendingUser['id'];
                     $_SESSION['login_at'] = date('Y-m-d H:i:s');
+                    $_SESSION['login_mode'] = 'password';
                     RateLimiter::recordLoginAttempt($pdo, $identifier, $requestIp, true);
                     $pdo->prepare('UPDATE users SET last_login_at = CURRENT_TIMESTAMP WHERE id = ?')->execute([(int) $pendingUser['id']]);
                     AuditLog::write($pdo, (int) $pendingUser['id'], 'auth.login_success', ['mode' => 'password']);
@@ -121,6 +122,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     session_regenerate_id(true);
                     $_SESSION['user_id'] = (int) $matchedPinUser['id'];
                     $_SESSION['login_at'] = date('Y-m-d H:i:s');
+                    $_SESSION['login_mode'] = 'pin';
                     RateLimiter::recordLoginAttempt($pdo, $identifier, $requestIp, true);
                     $pdo->prepare('UPDATE users SET last_login_at = CURRENT_TIMESTAMP WHERE id = ?')->execute([(int) $matchedPinUser['id']]);
                     AuditLog::write($pdo, (int) $matchedPinUser['id'], 'auth.login_success', ['mode' => 'pin']);

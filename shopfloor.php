@@ -15,6 +15,7 @@ $profile = (string) ($user['access_profile'] ?? 'Utilizador');
 $isAdmin = (int) ($user['is_admin'] ?? 0) === 1;
 $isRh = $profile === 'RH';
 $isChief = $profile === 'Chefias';
+$canManageAnnouncements = $isAdmin || $isRh;
 
 if (!$isAdmin && !in_array($profile, ['Utilizador', 'Produção', 'Chefias', 'RH'], true)) {
     http_response_code(403);
@@ -453,7 +454,7 @@ $requestType,
     }
 
 
-    if ($action === 'publish_announcement' && ($isAdmin || $isRh)) {
+    if ($action === 'publish_announcement' && $canManageAnnouncements) {
         $title = trim((string) ($_POST['title'] ?? ''));
         $body = trim((string) ($_POST['body'] ?? ''));
         $targetUserIds = array_values(array_unique(array_filter(array_map('intval', (array) ($_POST['target_user_ids'] ?? [])), static function (int $id): bool { return $id > 0; })));
@@ -510,7 +511,7 @@ $requestType,
         }
     }
 
-    if ($action === 'toggle_announcement' && ($isAdmin || $isRh)) {
+    if ($action === 'toggle_announcement' && $canManageAnnouncements) {
         $announcementId = (int) ($_POST['announcement_id'] ?? 0);
         $toggleStmt = $pdo->prepare('UPDATE shopfloor_announcements SET is_active = CASE WHEN is_active = 1 THEN 0 ELSE 1 END WHERE id = ?');
         $toggleStmt->execute([$announcementId]);
@@ -523,7 +524,7 @@ $requestType,
         }
     }
 
-    if ($action === 'delete_announcement' && ($isAdmin || $isRh)) {
+    if ($action === 'delete_announcement' && $canManageAnnouncements) {
         $announcementId = (int) ($_POST['announcement_id'] ?? 0);
         $deleteStmt = $pdo->prepare('DELETE FROM shopfloor_announcements WHERE id = ?');
         $deleteStmt->execute([$announcementId]);
@@ -715,7 +716,7 @@ $takenVacationDaysStmt->execute([$userId, $yearEnd, $yearStart]);
 $takenVacationDays = (float) $takenVacationDaysStmt->fetchColumn();
 
 $announcementTargetUsers = [];
-if ($isAdmin || $isRh) {
+if ($canManageAnnouncements) {
     $announcementTargetUsersStmt = $pdo->query('SELECT id, name, username FROM users ORDER BY name COLLATE NOCASE ASC');
     $announcementTargetUsers = $announcementTargetUsersStmt->fetchAll(PDO::FETCH_ASSOC);
 }
@@ -726,7 +727,7 @@ $announcements = $announcementsStmt->fetchAll(PDO::FETCH_ASSOC);
 $pendingAnnouncementAck = fetch_pending_shopfloor_announcement_ack($pdo, $userId, $sessionLoginAt);
 
 $managedAnnouncements = [];
-if ($isAdmin || $isRh) {
+if ($canManageAnnouncements) {
     $managedAnnouncementsStmt = $pdo->query('SELECT a.id, a.title, a.body, a.created_at, a.is_active, a.audience, COALESCE(u.name, "Sistema") AS created_by_name, (SELECT COUNT(*) FROM shopfloor_announcement_targets t WHERE t.announcement_id = a.id) AS target_count FROM shopfloor_announcements a LEFT JOIN users u ON u.id = a.created_by ORDER BY a.created_at DESC LIMIT 25');
     $managedAnnouncements = $managedAnnouncementsStmt->fetchAll(PDO::FETCH_ASSOC);
 }
@@ -1387,7 +1388,7 @@ require __DIR__ . '/partials/header.php';
                     <?php endif; ?>
                 </ul>
 
-                <?php if ($isAdmin || $isRh): ?>
+                <?php if ($canManageAnnouncements): ?>
                     <h3 class="h6">Publicar comunicado</h3>
                     <form method="post" class="vstack gap-2 mb-4" data-user-picker-modal-target="#shopfloorAnnouncementUsersModal" data-user-picker-input-name="target_user_ids[]" data-user-picker-all-label="Todos os utilizadores Shopfloor" data-user-picker-selected-suffix="utilizadores selecionados">
                         <input type="hidden" name="action" value="publish_announcement">
