@@ -1,5 +1,6 @@
 <?php
 require_once __DIR__ . '/hr_organization_lib.php';
+require_once __DIR__ . '/app/Services/MachineAttachment.php';
 require_login();
 gt_run_org_migrations($pdo);
 $userId = (int) $_SESSION['user_id'];
@@ -57,15 +58,11 @@ function gt_save_machine_upload(PDO $pdo, int $machineId, int $userId, array $fi
     if ($tmpName === '' || !is_uploaded_file($tmpName)) {
         throw new RuntimeException('Upload inválido.');
     }
-    $finfo = finfo_open(FILEINFO_MIME_TYPE);
-    $mime = $finfo ? (string) finfo_file($finfo, $tmpName) : '';
-    if ($finfo) {
-        finfo_close($finfo);
-    }
+    $originalName = (string) ($file['name'] ?? 'documento');
+    $mime = gt_machine_attachment_mime($tmpName, $originalName);
     if (!in_array($mime, $allowedMimeTypes, true)) {
         throw new RuntimeException('Tipo de ficheiro não permitido.');
     }
-    $originalName = (string) ($file['name'] ?? 'documento');
     $extension = strtolower(pathinfo($originalName, PATHINFO_EXTENSION));
     $safeName = 'machine_' . $machineId . '_' . bin2hex(random_bytes(10)) . ($extension !== '' ? '.' . $extension : '');
     $uploadDir = __DIR__ . '/storage/uploads/machines';
@@ -157,11 +154,7 @@ function gt_save_machine_chunk(PDO $pdo, int $machineId, int $userId, array $fil
     if ($size <= 0 || $size > 10 * 1024 * 1024) {
         throw new RuntimeException('Cada ficheiro deve ter no máximo 10 MB.');
     }
-    $finfo = finfo_open(FILEINFO_MIME_TYPE);
-    $mime = $finfo ? (string) finfo_file($finfo, $assembled) : '';
-    if ($finfo) {
-        finfo_close($finfo);
-    }
+    $mime = gt_machine_attachment_mime($assembled, $originalName);
     if (!in_array($mime, $allowedMimeTypes, true)) {
         throw new RuntimeException('Tipo de ficheiro não permitido.');
     }
