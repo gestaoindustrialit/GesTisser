@@ -715,3 +715,167 @@ function initArticleMaterials() {
     });
 }
 initArticleMaterials();
+
+function initSortableTables() {
+    const collator = new Intl.Collator('pt', {
+        numeric: true,
+        sensitivity: 'base'
+    });
+
+    document.querySelectorAll('table[data-sortable-table]').forEach((table) => {
+        const body = table.tBodies[0];
+        const headers = Array.from(table.querySelectorAll('thead th'));
+        if (!body) return;
+
+        const dataRows = Array.from(body.rows).filter((row) => row.cells.length === headers.length);
+        const filters = new Map();
+        let pageSize = 15;
+        let currentPage = 1;
+
+        const pagination = document.createElement('div');
+        pagination.className = 'sortable-table-pagination';
+        pagination.innerHTML = '<label>Mostrar <select class="form-select form-select-sm" aria-label="Registos por página"><option value="15">15</option><option value="25">25</option><option value="50">50</option><option value="100">100</option><option value="all">Todos</option></select> registos</label><span data-page-summary></span><div><button type="button" class="btn btn-sm btn-outline-secondary" data-page-previous><i class="bi bi-chevron-left" aria-hidden="true"></i> Anterior</button><span data-page-number></span><button type="button" class="btn btn-sm btn-outline-secondary" data-page-next>Seguinte <i class="bi bi-chevron-right" aria-hidden="true"></i></button></div>';
+        table.closest('.table-responsive').after(pagination);
+
+        const pageSummary = pagination.querySelector('[data-page-summary]');
+        const pageNumber = pagination.querySelector('[data-page-number]');
+        const previousPage = pagination.querySelector('[data-page-previous]');
+        const nextPage = pagination.querySelector('[data-page-next]');
+
+        const renderRows = () => {
+            const filteredRows = dataRows.filter((row) => (
+                Array.from(filters).every(([index, query]) => (
+                    row.cells[index].textContent.toLocaleLowerCase('pt').includes(query)
+                ))
+            ));
+            const totalPages = pageSize === Infinity ? 1 : Math.max(1, Math.ceil(filteredRows.length / pageSize));
+            currentPage = Math.min(currentPage, totalPages);
+            const start = pageSize === Infinity ? 0 : (currentPage - 1) * pageSize;
+            const visibleRows = filteredRows.slice(start, pageSize === Infinity ? undefined : start + pageSize);
+
+            dataRows.forEach((row) => { row.hidden = true; });
+            visibleRows.forEach((row) => { row.hidden = false; });
+
+            let noResults = body.querySelector('[data-sort-no-results]');
+            if (filters.size > 0 && filteredRows.length === 0) {
+                if (!noResults) {
+                    noResults = document.createElement('tr');
+                    noResults.dataset.sortNoResults = '';
+                    noResults.innerHTML = `<td colspan="${headers.length}" class="text-center text-muted py-4">Sem resultados para a pesquisa.</td>`;
+                    body.appendChild(noResults);
+                }
+                noResults.hidden = false;
+            } else if (noResults) {
+                noResults.hidden = true;
+            }
+
+            const firstShown = filteredRows.length === 0 ? 0 : start + 1;
+            const lastShown = Math.min(start + visibleRows.length, filteredRows.length);
+            pageSummary.textContent = `${firstShown}–${lastShown} de ${filteredRows.length}`;
+            pageNumber.textContent = `Página ${currentPage} de ${totalPages}`;
+            previousPage.disabled = currentPage <= 1;
+            nextPage.disabled = currentPage >= totalPages;
+            pagination.hidden = dataRows.length === 0;
+        };
+
+        pagination.querySelector('select').addEventListener('change', (event) => {
+            pageSize = event.target.value === 'all' ? Infinity : Number(event.target.value);
+            currentPage = 1;
+            renderRows();
+        });
+        previousPage.addEventListener('click', () => {
+            currentPage = Math.max(1, currentPage - 1);
+            renderRows();
+        });
+        nextPage.addEventListener('click', () => {
+            currentPage += 1;
+            renderRows();
+        });
+
+        headers.forEach((header, columnIndex) => {
+            const label = header.textContent.trim();
+            if (!label || header.hasAttribute('data-no-sort')) return;
+
+            const button = document.createElement('button');
+            const icon = document.createElement('i');
+            const controls = document.createElement('div');
+            button.type = 'button';
+            button.className = 'sortable-table-button';
+            button.setAttribute('aria-label', `Pesquisar e ordenar por ${label}`);
+            button.setAttribute('aria-expanded', 'false');
+            button.append(...Array.from(header.childNodes));
+            icon.className = 'bi bi-arrow-down-up sortable-table-icon';
+            icon.setAttribute('aria-hidden', 'true');
+            button.appendChild(icon);
+            header.appendChild(button);
+
+            controls.className = 'sortable-table-controls';
+            controls.hidden = true;
+            controls.innerHTML = `<label><span class="visually-hidden">Pesquisar em ${label}</span><input type="search" class="form-control form-control-sm" placeholder="Pesquisar…" autocomplete="off"></label><div class="sortable-table-directions"><button type="button" data-sort-direction="ascending"><i class="bi bi-sort-up" aria-hidden="true"></i> Ascendente</button><button type="button" data-sort-direction="descending"><i class="bi bi-sort-down" aria-hidden="true"></i> Descendente</button><button type="button" class="sortable-table-close" aria-label="Fechar pesquisa"><i class="bi bi-x-lg" aria-hidden="true"></i></button></div>`;
+            header.appendChild(controls);
+
+            const search = controls.querySelector('input');
+            button.addEventListener('click', () => {
+                const opening = controls.hidden;
+                if (opening) {
+                    table.querySelectorAll('.sortable-table-controls').forEach((otherControls) => {
+                        otherControls.hidden = true;
+                        const otherButton = otherControls.previousElementSibling;
+                        if (otherButton) otherButton.setAttribute('aria-expanded', 'false');
+                    });
+                }
+                controls.hidden = !opening;
+                button.setAttribute('aria-expanded', opening ? 'true' : 'false');
+                if (opening) search.focus();
+            });
+
+            search.addEventListener('input', () => {
+                const query = search.value.trim().toLocaleLowerCase('pt');
+                if (query === '') filters.delete(columnIndex);
+                else filters.set(columnIndex, query);
+                header.classList.toggle('has-table-filter', query !== '');
+                currentPage = 1;
+                renderRows();
+            });
+
+            controls.querySelector('.sortable-table-close').addEventListener('click', () => {
+                controls.hidden = true;
+                button.setAttribute('aria-expanded', 'false');
+                button.focus();
+            });
+
+            controls.querySelectorAll('[data-sort-direction]').forEach((sortButton) => {
+                sortButton.addEventListener('click', () => {
+                    const ascending = sortButton.dataset.sortDirection === 'ascending';
+
+                    headers.forEach((otherHeader) => {
+                        otherHeader.removeAttribute('aria-sort');
+                        const otherIcon = otherHeader.querySelector('.sortable-table-icon');
+                        if (otherIcon) otherIcon.className = 'bi bi-arrow-down-up sortable-table-icon';
+                    });
+
+                    header.setAttribute('aria-sort', ascending ? 'ascending' : 'descending');
+                    icon.className = `bi ${ascending ? 'bi-arrow-up' : 'bi-arrow-down'} sortable-table-icon`;
+
+                    dataRows.sort((rowA, rowB) => {
+                        const valueA = rowA.cells[columnIndex].textContent.trim();
+                        const valueB = rowB.cells[columnIndex].textContent.trim();
+                        if (valueA === '' && valueB !== '') return 1;
+                        if (valueB === '' && valueA !== '') return -1;
+                        const comparison = collator.compare(valueA, valueB);
+                        return ascending ? comparison : -comparison;
+                    });
+
+                    dataRows.forEach((row) => body.appendChild(row));
+                    const noResults = body.querySelector('[data-sort-no-results]');
+                    if (noResults) body.appendChild(noResults);
+                    currentPage = 1;
+                    renderRows();
+                });
+            });
+        });
+
+        renderRows();
+    });
+}
+initSortableTables();
