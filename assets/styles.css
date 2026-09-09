@@ -4,6 +4,27 @@ body {
     color: #1f2937;
 }
 
+/* The extra specificity keeps these rules effective when the theme is loaded afterwards. */
+.gt-sidebar .gt-nav .gt-nav-submenu > a {
+    display: flex;
+    align-items: center;
+    font-size: 0.875rem;
+    white-space: nowrap;
+}
+
+.gt-sidebar .gt-nav .gt-nav-submenu > a > i {
+    flex: 0 0 1.15rem;
+    width: 1.15rem;
+    margin-right: 0.6rem;
+    color: #65bd4d;
+    font-size: 0.95rem;
+    text-align: center;
+}
+
+.gt-sidebar .gt-nav .gt-nav-submenu > a > span {
+    min-width: 0;
+}
+
 .container,
 .container-sm,
 .container-md,

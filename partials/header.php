@@ -147,21 +147,21 @@ header('Content-Type: text/html; charset=UTF-8');
                     <div class="gt-nav-submenu">
                         <?php
                         $erpMenuItems = [
-                            'overview' => 'Visão geral ERP',
-                            'sales' => 'Clientes',
-                            'purchases' => 'Compras',
-                            'production' => 'Planeamento e produção',
-                            'articles' => 'Artigos',
-                            'raw_materials' => 'Matérias-primas',
-                            'warehouse' => 'Armazém e stock',
-                            'quality' => 'Qualidade',
-                            'costs' => 'Custos e margens',
-                            'machines' => 'Máquinas e equipamentos',
-                            'operations' => 'Operações',
+                            'overview' => ['label' => 'Visão geral ERP', 'icon' => 'bi-grid'],
+                            'sales' => ['label' => 'Clientes', 'icon' => 'bi-people'],
+                            'purchases' => ['label' => 'Compras', 'icon' => 'bi-cart3'],
+                            'production' => ['label' => 'Planeamento e produção', 'icon' => 'bi-calendar3'],
+                            'articles' => ['label' => 'Artigos', 'icon' => 'bi-box-seam'],
+                            'raw_materials' => ['label' => 'Matérias-primas', 'icon' => 'bi-stack'],
+                            'warehouse' => ['label' => 'Armazém e stock', 'icon' => 'bi-building'],
+                            'quality' => ['label' => 'Qualidade', 'icon' => 'bi-patch-check'],
+                            'costs' => ['label' => 'Custos e margens', 'icon' => 'bi-cash-coin'],
+                            'machines' => ['label' => 'Máquinas e equipamentos', 'icon' => 'bi-gear-wide-connected'],
+                            'operations' => ['label' => 'Operações', 'icon' => 'bi-diagram-3'],
                         ];
                         ?>
-                        <?php foreach ($erpMenuItems as $erpKey => $erpLabel): ?>
-                            <a class="<?= $isCurrentFile('erp.php') && $currentErpPage === $erpKey ? 'is-active' : '' ?>" href="<?= $erpKey === 'overview' ? h(route_url('erp', 'erp.php')) : ($erpKey === 'operations' ? 'erp_operations.php' : 'erp.php?page=' . h($erpKey)) ?>"><?= h($erpLabel) ?></a>
+                        <?php foreach ($erpMenuItems as $erpKey => $erpItem): ?>
+                            <a class="<?= $isCurrentFile('erp.php') && $currentErpPage === $erpKey ? 'is-active' : '' ?>" href="<?= $erpKey === 'overview' ? h(route_url('erp', 'erp.php')) : ($erpKey === 'operations' ? 'erp_operations.php' : 'erp.php?page=' . h($erpKey)) ?>"><i class="bi <?= h($erpItem['icon']) ?>" aria-hidden="true"></i><span><?= h($erpItem['label']) ?></span></a>
                         <?php endforeach; ?>
                     </div>
                 </details>
@@ -170,27 +170,27 @@ header('Content-Type: text/html; charset=UTF-8');
                     <details class="gt-nav-group"<?= $isCurrentGroup($hrFiles) ? ' open' : '' ?>>
                         <summary><span><i class="bi bi-people"></i>Recursos humanos</span><i class="bi bi-chevron-down gt-nav-chevron"></i></summary>
                         <div class="gt-nav-submenu">
-                            <a class="<?= $isCurrentFile('hr.php') ? 'is-active' : '' ?>" href="hr.php">Visão geral RH</a>
+                            <a class="<?= $isCurrentFile('hr.php') ? 'is-active' : '' ?>" href="hr.php"><i class="bi bi-grid" aria-hidden="true"></i><span>Visão geral RH</span></a>
                             <span class="gt-nav-label">Gestão base</span>
-                            <a class="<?= $isCurrentFile('users.php') ? 'is-active' : '' ?>" href="users.php">Utilizadores</a>
-                            <a class="<?= $isCurrentFile('hr_schedules.php') ? 'is-active' : '' ?>" href="hr_schedules.php">Horários</a>
-                            <a class="<?= $isCurrentFile('hr_departments.php') ? 'is-active' : '' ?>" href="hr_departments.php">Departamentos</a>
-                            <a class="<?= $isCurrentFile('hr_organogram.php') ? 'is-active' : '' ?>" href="hr_organogram.php">Organograma</a>
-                            <a class="<?= $isCurrentFile('hr_skills.php') ? 'is-active' : '' ?>" href="hr_skills.php">Matriz de competências</a>
-                            <a class="<?= $isCurrentFile('hr_job_descriptions.php') ? 'is-active' : '' ?>" href="hr_job_descriptions.php">Cadernos de encargos</a>
+                            <a class="<?= $isCurrentFile('users.php') ? 'is-active' : '' ?>" href="users.php"><i class="bi bi-person" aria-hidden="true"></i><span>Utilizadores</span></a>
+                            <a class="<?= $isCurrentFile('hr_schedules.php') ? 'is-active' : '' ?>" href="hr_schedules.php"><i class="bi bi-clock" aria-hidden="true"></i><span>Horários</span></a>
+                            <a class="<?= $isCurrentFile('hr_departments.php') ? 'is-active' : '' ?>" href="hr_departments.php"><i class="bi bi-building" aria-hidden="true"></i><span>Departamentos</span></a>
+                            <a class="<?= $isCurrentFile('hr_organogram.php') ? 'is-active' : '' ?>" href="hr_organogram.php"><i class="bi bi-diagram-3" aria-hidden="true"></i><span>Organograma</span></a>
+                            <a class="<?= $isCurrentFile('hr_skills.php') ? 'is-active' : '' ?>" href="hr_skills.php"><i class="bi bi-stars" aria-hidden="true"></i><span>Matriz de competências</span></a>
+                            <a class="<?= $isCurrentFile('hr_job_descriptions.php') ? 'is-active' : '' ?>" href="hr_job_descriptions.php"><i class="bi bi-journal-text" aria-hidden="true"></i><span>Cadernos de encargos</span></a>
                             <span class="gt-nav-label">Operação diária</span>
-                            <a class="<?= $isCurrentFile('resultados.php') ? 'is-active' : '' ?>" href="resultados.php">Resultados</a>
-                            <a class="<?= $isCurrentFile('hr_calendar.php') ? 'is-active' : '' ?>" href="hr_calendar.php">Calendário</a>
-                            <a class="<?= $isCurrentFile('hr_absences.php') ? 'is-active' : '' ?>" href="hr_absences.php">Ausências</a>
-                            <a class="<?= $isCurrentFile('hr_vacations.php') ? 'is-active' : '' ?>" href="hr_vacations.php">Férias</a>
-                            <a class="<?= $isCurrentFile('payroll.php') ? 'is-active' : '' ?>" href="payroll.php">Export Payroll</a>
-                            <a class="<?= $isCurrentFile('hr_bank.php') ? 'is-active' : '' ?>" href="hr_bank.php">Banco de horas</a>
-                            <a class="<?= $isCurrentFile('hr_alerts.php') ? 'is-active' : '' ?>" href="hr_alerts.php">Alertas RH</a>
-                            <a class="<?= $isCurrentFile('hr_evaluations.php') ? 'is-active' : '' ?>" href="hr_evaluations.php">Avaliações</a>
-                            <a class="<?= $isCurrentFile('shopfloor_break_dashboard.php') ? 'is-active' : '' ?>" href="shopfloor_break_dashboard.php">Dashboard de pausas</a>
-                            <a class="<?= $isCurrentFile('shopfloor_break_reasons.php') ? 'is-active' : '' ?>" href="shopfloor_break_reasons.php">Pausas e paragens</a>
-                            <a class="<?= $isCurrentFile('shopfloor_absence_reasons.php') ? 'is-active' : '' ?>" href="shopfloor_absence_reasons.php">Motivos de ausência</a>
-                            <a class="<?= $isCurrentFile('hr_evaluation_rules.php') ? 'is-active' : '' ?>" href="hr_evaluation_rules.php">Regras de avaliação</a>
+                            <a class="<?= $isCurrentFile('resultados.php') ? 'is-active' : '' ?>" href="resultados.php"><i class="bi bi-graph-up-arrow" aria-hidden="true"></i><span>Resultados</span></a>
+                            <a class="<?= $isCurrentFile('hr_calendar.php') ? 'is-active' : '' ?>" href="hr_calendar.php"><i class="bi bi-calendar3" aria-hidden="true"></i><span>Calendário</span></a>
+                            <a class="<?= $isCurrentFile('hr_absences.php') ? 'is-active' : '' ?>" href="hr_absences.php"><i class="bi bi-person-dash" aria-hidden="true"></i><span>Ausências</span></a>
+                            <a class="<?= $isCurrentFile('hr_vacations.php') ? 'is-active' : '' ?>" href="hr_vacations.php"><i class="bi bi-sun" aria-hidden="true"></i><span>Férias</span></a>
+                            <a class="<?= $isCurrentFile('payroll.php') ? 'is-active' : '' ?>" href="payroll.php"><i class="bi bi-file-earmark-arrow-down" aria-hidden="true"></i><span>Export Payroll</span></a>
+                            <a class="<?= $isCurrentFile('hr_bank.php') ? 'is-active' : '' ?>" href="hr_bank.php"><i class="bi bi-hourglass-split" aria-hidden="true"></i><span>Banco de horas</span></a>
+                            <a class="<?= $isCurrentFile('hr_alerts.php') ? 'is-active' : '' ?>" href="hr_alerts.php"><i class="bi bi-bell" aria-hidden="true"></i><span>Alertas RH</span></a>
+                            <a class="<?= $isCurrentFile('hr_evaluations.php') ? 'is-active' : '' ?>" href="hr_evaluations.php"><i class="bi bi-clipboard-check" aria-hidden="true"></i><span>Avaliações</span></a>
+                            <a class="<?= $isCurrentFile('shopfloor_break_dashboard.php') ? 'is-active' : '' ?>" href="shopfloor_break_dashboard.php"><i class="bi bi-pie-chart" aria-hidden="true"></i><span>Dashboard de pausas</span></a>
+                            <a class="<?= $isCurrentFile('shopfloor_break_reasons.php') ? 'is-active' : '' ?>" href="shopfloor_break_reasons.php"><i class="bi bi-cup-hot" aria-hidden="true"></i><span>Pausas e paragens</span></a>
+                            <a class="<?= $isCurrentFile('shopfloor_absence_reasons.php') ? 'is-active' : '' ?>" href="shopfloor_absence_reasons.php"><i class="bi bi-card-list" aria-hidden="true"></i><span>Motivos de ausência</span></a>
+                            <a class="<?= $isCurrentFile('hr_evaluation_rules.php') ? 'is-active' : '' ?>" href="hr_evaluation_rules.php"><i class="bi bi-sliders" aria-hidden="true"></i><span>Regras de avaliação</span></a>
                         </div>
                     </details>
                 <?php endif; ?>
@@ -199,12 +199,12 @@ header('Content-Type: text/html; charset=UTF-8');
                     <details class="gt-nav-group"<?= $isCurrentGroup($adminFiles) ? ' open' : '' ?>>
                         <summary><span><i class="bi bi-sliders"></i>Administração</span><i class="bi bi-chevron-down gt-nav-chevron"></i></summary>
                         <div class="gt-nav-submenu">
-                            <a class="<?= $isCurrentFile('company_profile.php') ? 'is-active' : '' ?>" href="company_profile.php">Empresa e branding</a>
-                            <a class="<?= $isCurrentFile('erp_settings.php') ? 'is-active' : '' ?>" href="erp_settings.php">Configuração ERP</a>
-                            <a class="<?= in_array($currentFile, ['integrations.php','integration_edit.php','integration_flow_edit.php','integration_logs.php'], true) ? 'is-active' : '' ?>" href="integrations.php">Integrações</a>
-                            <a class="<?= $isCurrentFile('requests.php') ? 'is-active' : '' ?>" href="requests.php">Gerar formulários</a>
-                            <a class="<?= $isCurrentFile('checklists.php') ? 'is-active' : '' ?>" href="checklists.php">Checklists</a>
-                            <a class="<?= $isCurrentFile('app_logs.php') ? 'is-active' : '' ?>" href="app_logs.php">Logs da aplicação</a>
+                            <a class="<?= $isCurrentFile('company_profile.php') ? 'is-active' : '' ?>" href="company_profile.php"><i class="bi bi-buildings" aria-hidden="true"></i><span>Empresa e branding</span></a>
+                            <a class="<?= $isCurrentFile('erp_settings.php') ? 'is-active' : '' ?>" href="erp_settings.php"><i class="bi bi-gear" aria-hidden="true"></i><span>Configuração ERP</span></a>
+                            <a class="<?= in_array($currentFile, ['integrations.php','integration_edit.php','integration_flow_edit.php','integration_logs.php'], true) ? 'is-active' : '' ?>" href="integrations.php"><i class="bi bi-plug" aria-hidden="true"></i><span>Integrações</span></a>
+                            <a class="<?= $isCurrentFile('requests.php') ? 'is-active' : '' ?>" href="requests.php"><i class="bi bi-ui-checks" aria-hidden="true"></i><span>Gerar formulários</span></a>
+                            <a class="<?= $isCurrentFile('checklists.php') ? 'is-active' : '' ?>" href="checklists.php"><i class="bi bi-list-check" aria-hidden="true"></i><span>Checklists</span></a>
+                            <a class="<?= $isCurrentFile('app_logs.php') ? 'is-active' : '' ?>" href="app_logs.php"><i class="bi bi-terminal" aria-hidden="true"></i><span>Logs da aplicação</span></a>
                         </div>
                     </details>
                 <?php endif; ?>
