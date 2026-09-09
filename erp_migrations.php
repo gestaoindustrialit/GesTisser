@@ -78,6 +78,37 @@ function erp_run_phase1_migrations(PDO $pdo)
             'CREATE TABLE IF NOT EXISTS erp_stock_balances (item_type TEXT NOT NULL, item_id INTEGER NOT NULL, warehouse_id INTEGER, location_id INTEGER, lot TEXT, physical_qty REAL NOT NULL DEFAULT 0, reserved_qty REAL NOT NULL DEFAULT 0, blocked_qty REAL NOT NULL DEFAULT 0, ordered_qty REAL NOT NULL DEFAULT 0, updated_at DATETIME DEFAULT CURRENT_TIMESTAMP, PRIMARY KEY(item_type, item_id, warehouse_id, location_id, lot))'
         ];
         foreach ($sql as $statement) { $pdo->exec($statement); }
+        /* Supplier master data used by Purchasing. Keep the original compact table
+           compatible while extending it with the fields from the current supplier sheet. */
+        $supplierColumns = [
+            'address_2'=>'TEXT', 'postal_code'=>'TEXT', 'mobile'=>'TEXT', 'contact_name'=>'TEXT',
+            'salesperson'=>'TEXT', 'website'=>'TEXT', 'notes'=>'TEXT', 'discount_percent'=>'REAL NOT NULL DEFAULT 0',
+            'credit_limit'=>'REAL NOT NULL DEFAULT 0', 'pefc_certified'=>'INTEGER NOT NULL DEFAULT 0',
+            'stock_order_control'=>'INTEGER NOT NULL DEFAULT 0', 'include_osaf'=>'INTEGER NOT NULL DEFAULT 0',
+            'created_at'=>'DATETIME DEFAULT CURRENT_TIMESTAMP', 'updated_at'=>'DATETIME DEFAULT CURRENT_TIMESTAMP'
+        ];
+        foreach ($supplierColumns as $column=>$definition) {
+            if (!erp_column_exists($pdo, 'erp_suppliers', $column)) { $pdo->exec('ALTER TABLE erp_suppliers ADD COLUMN '.$column.' '.$definition); }
+        }
+        $supplierSeed = [
+            ['CIF','CIF - COMPAGNIE INDUSTRIELLE','DOUAR HJAR NHAL','','90.025 WILAYA DE TANGER','MARROCOS','','','','','','','',0,0,0,0,0,''],
+            ['DAMAN0201','KANDIL FABRICS PVT LTD','406 - LOTUS HOUSE 4TH FLOOR, 33A NEW MARINE LINE,','','MUMBAI - 400020','INDIA','0091 2266338751','','dpf@damanpolyfabs.com','Niranjan','','','',0,0,0,0,0,''],
+            ['FERTIPLAST','FERTIPLAST FERTILIZANTES Y PL','POL. IND. HACIENDA DOLORES C/2 N.º 39B','','41500 SEVILHA','ESPANHA','','034954186024','','','','','B91003228',0,0,0,0,0,''],
+            ['HUBER','HUBERGROUP SPAIN, SA','CPTICA 13','','08755 CASTELLBISBAL','ESPANHA','','','','','','','A61285938',0,0,0,0,0,''],
+            ['KAO','KAO CHIMIGRAF S.L.U','C/COMPOSITOR CARCASSI, 6 - 8','','08191 RUBI (BARCELONA)','ESPANHA','','','','','','','B66842618',0,0,0,0,0,''],
+            ['KAYPEE','KAYPEE POLYFAB PVT, LTD','GUJARAT','','','INDIA','','','','','','','',0,0,0,0,0,''],
+            ['LINCON','LINCON POLYMERS PVT LTD','308 SHANTI MALL NEAR SARTHAK SCHOOL','','380061 GHATLODIA, AHMEDABAD','INDIA','','00917927461493','','','','','',0,0,0,0,0,''],
+            ['MAURICIO201','MAVURJI ROVENS PVT. LTD','BLOCK NO 1485, MOTI BHOYAN, KALOL - KHATRAJ ROAD','','KALOL, DIST. GANDHINAGAR, GUJ','INDIA','0091 2712797051','','marketing@mavurjacks.com','Somaraj','','','',0,0,0,0,1,''],
+            ['MULTISAC001','MULTISAC S.A','LOT 34 ET 36 ZONE INDUSTRIELLE, BOUSKINA','','BENSLIMANE','MARROCOS','','','','','','','03385554',0,0,0,0,1,''],
+            ['PLASTENE','PLASTENE INDIA LIMITED','SURVEY NO 1551, AHMEDABAD MEHSANA HIGHWAY','','382715 GUJARAT - INDIA','INDIA','','','','','','','',0,0,0,0,0,''],
+            ['REI&REI','REI & REI, LDA','RUA DO COMERCIO ESPINHEIRA','','3060-285 COVOES - CANTANHEDE','PORTUGAL','234756284','935029134 / 935029131','geral@reirei.pt','','','','502897970',0,0,0,0,0,''],
+            ['SATYENDRA','SATYENDRA','INDIA','','','INDIA','','','','','','','',0,0,0,0,0,''],
+            ['SINTIGRAF','SINTIGRAF','','','','','','','','','','','',0,0,0,0,0,''],
+            ['TISSER0001','TISSER UNIPESSOAL LDA','','','','','','','','','','','508757509',0,0,0,0,1,'STOCK EXISTENTE'],
+            ['TRADIBAG','TRADIBAG, LTD','28 LOWER MAIN ST ARKLOW','CO.WICKLOW Y14 X8D2','','IRLANDA','','','','','','','3504134KH',0,0,0,0,1,'']
+        ];
+        $seedSupplier=$pdo->prepare('INSERT OR IGNORE INTO erp_suppliers(code,name,address,address_2,postal_code,country,phone,mobile,email,contact_name,salesperson,website,tax_number,discount_percent,credit_limit,pefc_certified,stock_order_control,include_osaf,notes,is_active) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,1)');
+        foreach($supplierSeed as $supplier){$seedSupplier->execute($supplier);}
         /* Routing is versioned and copied to the OF.  Existing operation/OF tables are
            extended rather than replaced so installations already in production remain valid. */
         $routingSql = [
