@@ -4,6 +4,25 @@ body {
     color: #1f2937;
 }
 
+/* Keep submenu icons aligned without changing the navigation's existing theme. */
+.gt-nav-submenu > a {
+    display: flex;
+    align-items: center;
+    gap: 0.65rem;
+}
+
+.gt-nav-submenu > a > i {
+    flex: 0 0 1.15rem;
+    width: 1.15rem;
+    color: #65bd4d;
+    font-size: 0.95rem;
+    text-align: center;
+}
+
+.gt-nav-submenu > a > span {
+    min-width: 0;
+}
+
 .container,
 .container-sm,
 .container-md,
