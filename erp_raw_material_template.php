@@ -1,6 +1,6 @@
 <?php
 require_once __DIR__.'/helpers.php';
-require_once __DIR__.'/app/Services/RawMaterialSpreadsheet.php';
+require_once __DIR__.'/app/Services/ArticleSpreadsheet.php';
 require_login();
 $headers=RawMaterialSpreadsheet::templateColumns();
 $values=['codigo'=>'MP-001','descricao'=>'Polipropileno','categoria'=>'raw_material','tipo'=>'POLIMERO','caracteristica'=>'NATURAL','unidade'=>'KG','largura'=>'','gramagem'=>'','stock_minimo'=>'100','stock_maximo'=>'1000','ponto_reposicao'=>'250','prazo_entrega_dias'=>'5','fornecedor_preferencial'=>'FOR-001','preco_padrao'=>'1,2500','armazem_standard'=>'MP','localizacao_standard'=>'A-01','email_alerta'=>'aprovisionamento@empresa.pt','alertas_ativos'=>'Sim','controlar_lote'=>'Sim','controlar_bobina'=>'Não','permitir_consumo_parcial'=>'Sim','estado'=>'Ativo','observacoes'=>''];
