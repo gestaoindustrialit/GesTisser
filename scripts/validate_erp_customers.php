@@ -5,7 +5,12 @@ require_once dirname(__DIR__).'/erp_migrations.php';
 require_once dirname(__DIR__).'/app/Services/CustomerSpreadsheet.php';
 erp_run_phase1_migrations($pdo);
 $erpSource=file_get_contents(dirname(__DIR__).'/erp.php');
-if($erpSource===false||strpos($erpSource,"document.addEventListener('DOMContentLoaded', showCustomerModal)")===false){throw new RuntimeException('A abertura do formulário de cliente não aguarda pelo carregamento do Bootstrap.');}
+if($erpSource===false||strpos($erpSource,'data-customer-editor')===false){throw new RuntimeException('O formulário de cliente não está disponível no quadro da página.');}
+foreach(['save_customer'=>'Clientes','save_supplier'=>'Fornecedores','save_article'=>'Artigos'] as $action=>$table){
+    $formPosition=strpos($erpSource,'name="action" value="'.$action.'"');
+    $tablePosition=strpos($erpSource,'data-sortable-table="'.$table.'"');
+    if($formPosition===false||$tablePosition===false||$formPosition>$tablePosition){throw new RuntimeException('O formulário de '.$table.' deve aparecer antes da listagem.');}
+}
 $tmp=tempnam(sys_get_temp_dir(),'customer_csv_');
 file_put_contents($tmp,"codigo;nome;nif;telemovel;plafond;ativo\nCLI-TEST;Cliente Teste;500000000;910000000;2500,50;Sim\n");
 $rows=CustomerSpreadsheet::read($tmp,'csv'); unlink($tmp);
