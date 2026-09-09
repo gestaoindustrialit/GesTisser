@@ -149,13 +149,11 @@ header('Content-Type: text/html; charset=UTF-8');
                         $erpMenuItems = [
                             'overview' => ['label' => 'Visão geral ERP', 'icon' => 'bi-grid'],
                             'sales' => ['label' => 'Clientes', 'icon' => 'bi-people'],
-                            'purchases' => ['label' => 'Compras', 'icon' => 'bi-cart3'],
+                            'purchases' => ['label' => 'Fornecedores', 'icon' => 'bi-cart3'],
                             'production' => ['label' => 'Planeamento e produção', 'icon' => 'bi-calendar3'],
                             'articles' => ['label' => 'Artigos', 'icon' => 'bi-box-seam'],
                             'raw_materials' => ['label' => 'Matérias-primas', 'icon' => 'bi-stack'],
                             'warehouse' => ['label' => 'Armazém e stock', 'icon' => 'bi-building'],
-                            'quality' => ['label' => 'Qualidade', 'icon' => 'bi-patch-check'],
-                            'costs' => ['label' => 'Custos e margens', 'icon' => 'bi-cash-coin'],
                             'machines' => ['label' => 'Máquinas e equipamentos', 'icon' => 'bi-gear-wide-connected'],
                             'operations' => ['label' => 'Operações', 'icon' => 'bi-diagram-3'],
                         ];
