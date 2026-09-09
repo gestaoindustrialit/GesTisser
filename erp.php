@@ -31,10 +31,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         try {
             $pdo->beginTransaction();
             if ($action === 'save_customer' && erp_user_can($pdo, $user, 'erp.customers')) {
-                $id=(int)($_POST['customer_id']??0); $fields=array_values(CustomerSpreadsheet::columns()); $values=[];
+                // The spreadsheet mapping contains several aliases for the same database
+                // column.  Forms, unlike imports, must update every column only once or
+                // the generated placeholders and the associative values fall out of sync.
+                $id=(int)($_POST['customer_id']??0); $fields=array_values(array_unique(CustomerSpreadsheet::columns())); $values=[];
                 foreach($fields as $field){$raw=trim((string)($_POST[$field]??'')); $values[$field]=in_array($field,['discount_percent','balance','credit_limit'],true)?(float)str_replace(',','.',$raw):($field==='is_active'?(int)($_POST['is_active']??0):$raw);}
                 if($values['code']===''||$values['name']===''){throw new RuntimeException('O código e o nome são obrigatórios.');}
-                if($id>0){$sets=[];foreach($fields as $field){$sets[]=$field.'=?';}$params=array_values($values);$params[]=$id;$pdo->prepare('UPDATE erp_customers SET '.implode(',',$sets).',updated_at=CURRENT_TIMESTAMP WHERE id=?')->execute($params);$verb='update';}
+                if($id>0){$exists=$pdo->prepare('SELECT 1 FROM erp_customers WHERE id=?');$exists->execute([$id]);if(!$exists->fetchColumn())throw new RuntimeException('Cliente não encontrado.');$sets=[];foreach($fields as $field){$sets[]=$field.'=?';}$params=array_values($values);$params[]=$id;$pdo->prepare('UPDATE erp_customers SET '.implode(',',$sets).',updated_at=CURRENT_TIMESTAMP WHERE id=?')->execute($params);$verb='update';}
                 else{$pdo->prepare('INSERT INTO erp_customers('.implode(',',$fields).') VALUES ('.implode(',',array_fill(0,count($fields),'?')).')')->execute(array_values($values));$id=(int)$pdo->lastInsertId();$verb='create';}
                 $pdo->prepare('DELETE FROM erp_customer_delivery_addresses WHERE customer_id=?')->execute([$id]);
                 $addressLabels=(array)($_POST['delivery_label']??[]);$addresses=(array)($_POST['delivery_address']??[]);$postalCodes=(array)($_POST['delivery_postal_code']??[]);$cities=(array)($_POST['delivery_city']??[]);$countries=(array)($_POST['delivery_country']??[]);$transporters=(array)($_POST['delivery_transporter']??[]);
@@ -92,7 +95,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $numeric=['customer_id','width','length','grammage','colors_per_face','unit_id','min_stock','sale_price','standard_cost']; $values=[];
                 foreach ($fields as $field) { $raw=$_POST[$field]??''; $values[$field]=in_array($field,$numeric,true) ? ((string)$raw===''?null:(float)$raw) : trim((string)$raw); }
                 foreach (erp_article_fields() as $field) { $values[$field]=in_array($field,['pallet_straps','microperforation','has_handle','has_holes','has_gusset','centered_gusset'],true) ? (int)($_POST[$field]??0) : trim((string)($_POST[$field]??'')); }
-                if ($id>0) { $sets=[]; $params=[]; foreach($values as $field=>$value){$sets[]=$field.'=?';$params[]=$value;} $params[]=$userId;$params[]=$id; $pdo->prepare('UPDATE erp_finished_products SET '.implode(',',$sets).',updated_by=?,updated_at=CURRENT_TIMESTAMP WHERE id=?')->execute($params); $verb='update'; }
+                if ($id>0) { $exists=$pdo->prepare('SELECT 1 FROM erp_finished_products WHERE id=?');$exists->execute([$id]);if(!$exists->fetchColumn())throw new RuntimeException('Artigo não encontrado.');$sets=[]; $params=[]; foreach($values as $field=>$value){$sets[]=$field.'=?';$params[]=$value;} $params[]=$userId;$params[]=$id; $pdo->prepare('UPDATE erp_finished_products SET '.implode(',',$sets).',updated_by=?,updated_at=CURRENT_TIMESTAMP WHERE id=?')->execute($params); $verb='update'; }
                 else { $columns=array_keys($values);$columns[]='created_by';$columns[]='updated_by';$params=array_values($values);$params[]=$userId;$params[]=$userId; $pdo->prepare('INSERT INTO erp_finished_products('.implode(',',$columns).') VALUES ('.implode(',',array_fill(0,count($columns),'?')).')')->execute($params);$id=(int)$pdo->lastInsertId();$verb='create'; }
                 $pdo->prepare('DELETE FROM erp_article_materials WHERE finished_product_id=?')->execute([$id]);
                 $materialIds=(array)($_POST['material_id']??[]); $quantities=(array)($_POST['material_quantity']??[]); $wastes=(array)($_POST['material_waste']??[]); $materialNotes=(array)($_POST['material_notes']??[]); $seen=[];
