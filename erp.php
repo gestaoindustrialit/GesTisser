@@ -169,7 +169,7 @@ $materialTypes=$pdo->query('SELECT * FROM erp_material_types ORDER BY code')->fe
 $features=$pdo->query('SELECT * FROM erp_material_features ORDER BY code')->fetchAll(PDO::FETCH_ASSOC);
 $productTypes=$pdo->query('SELECT * FROM erp_product_types ORDER BY code')->fetchAll(PDO::FETCH_ASSOC);
 $customers=$pdo->query('SELECT * FROM erp_customers ORDER BY id DESC')->fetchAll(PDO::FETCH_ASSOC);
-$suppliers=$pdo->query('SELECT * FROM erp_suppliers ORDER BY id DESC LIMIT 100')->fetchAll(PDO::FETCH_ASSOC);
+$suppliers=$pdo->query('SELECT * FROM erp_suppliers ORDER BY id DESC')->fetchAll(PDO::FETCH_ASSOC);
 $rawMaterials=$pdo->query('SELECT rm.*, mt.name material_type, mf.description feature_name, u.code unit_code, w.code warehouse_code, l.code location_code, ps.name supplier_name FROM erp_raw_materials rm LEFT JOIN erp_material_types mt ON mt.id=rm.material_type_id LEFT JOIN erp_material_features mf ON mf.id=rm.material_feature_id LEFT JOIN erp_units u ON u.id=rm.primary_unit_id LEFT JOIN erp_warehouses w ON w.id=rm.standard_warehouse_id LEFT JOIN erp_locations l ON l.id=rm.preferred_location_id LEFT JOIN erp_suppliers ps ON ps.id=rm.preferred_supplier_id ORDER BY rm.code')->fetchAll(PDO::FETCH_ASSOC);
 $finishedProducts=$pdo->query('SELECT fp.*, c.name customer_name FROM erp_finished_products fp LEFT JOIN erp_customers c ON c.id=fp.customer_id ORDER BY fp.code')->fetchAll(PDO::FETCH_ASSOC);
 $products=$pdo->query('SELECT p.*, u.code unit_code FROM erp_products p LEFT JOIN erp_units u ON u.id=p.unit_id ORDER BY p.id DESC LIMIT 50')->fetchAll(PDO::FETCH_ASSOC);
