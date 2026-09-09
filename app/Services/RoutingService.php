@@ -11,9 +11,8 @@ final class RoutingService
     {
         $code=trim((string)($data['code']??'')); $name=trim((string)($data['name']??''));
         if($code===''||$name==='') throw new InvalidArgumentException('O código e o nome são obrigatórios.');
-        $types=['production','control','transport','wait','subcontract','other'];
         $type=(string)($data['operation_type']??'production');
-        if(!in_array($type,$types,true)) throw new InvalidArgumentException('Tipo de operação inválido.');
+        if(!$this->scalar('SELECT 1 FROM erp_operation_types WHERE code=?',[$type])) throw new InvalidArgumentException('Tipo de operação inválido.');
         $machineIds=array_values(array_unique(array_filter(array_map('intval',$machineIds))));
         $default=(int)($data['default_machine_id']??0);
         if($default && !in_array($default,$machineIds,true)) throw new InvalidArgumentException('A máquina predefinida tem de ser compatível.');
