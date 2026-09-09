@@ -4,6 +4,11 @@ body {
     color: #1f2937;
 }
 
+/* Keep dense data views readable without forcing columns to wrap or overflow. */
+.table {
+    font-size: 0.9rem;
+}
+
 /* The extra specificity keeps these rules effective when the theme is loaded afterwards. */
 .gt-sidebar .gt-nav .gt-nav-submenu > a {
     display: flex;
