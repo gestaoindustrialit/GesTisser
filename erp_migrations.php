@@ -21,6 +21,30 @@ function erp_column_exists(PDO $pdo, string $table, string $column): bool
     return false;
 }
 
+function erp_migrate_supplier_columns(PDO $pdo)
+{
+    $supplierColumns = [
+        'address_2'=>'TEXT', 'postal_code'=>'TEXT', 'mobile'=>'TEXT', 'contact_name'=>'TEXT',
+        'salesperson'=>'TEXT', 'website'=>'TEXT', 'notes'=>'TEXT', 'discount_percent'=>'REAL NOT NULL DEFAULT 0',
+        'credit_limit'=>'REAL NOT NULL DEFAULT 0', 'pefc_certified'=>'INTEGER NOT NULL DEFAULT 0',
+        'stock_order_control'=>'INTEGER NOT NULL DEFAULT 0', 'include_osaf'=>'INTEGER NOT NULL DEFAULT 0',
+        // SQLite cannot add a non-constant default to a table that already contains rows.
+        'created_at'=>'DATETIME', 'updated_at'=>'DATETIME'
+    ];
+    foreach ($supplierColumns as $column=>$definition) {
+        if (!erp_column_exists($pdo, 'erp_suppliers', $column)) {
+            $pdo->exec('ALTER TABLE erp_suppliers ADD COLUMN '.$column.' '.$definition);
+        }
+    }
+
+    $pdo->exec('UPDATE erp_suppliers SET created_at=COALESCE(created_at,CURRENT_TIMESTAMP), updated_at=COALESCE(updated_at,CURRENT_TIMESTAMP)');
+    $pdo->exec('CREATE TRIGGER IF NOT EXISTS erp_suppliers_insert_timestamps AFTER INSERT ON erp_suppliers
+        WHEN NEW.created_at IS NULL OR NEW.updated_at IS NULL
+        BEGIN
+            UPDATE erp_suppliers SET created_at=COALESCE(NEW.created_at,CURRENT_TIMESTAMP), updated_at=COALESCE(NEW.updated_at,CURRENT_TIMESTAMP) WHERE id=NEW.id;
+        END');
+}
+
 function erp_backup_database_once(PDO $pdo)
 {
     static $backupPath = null;
@@ -80,16 +104,7 @@ function erp_run_phase1_migrations(PDO $pdo)
         foreach ($sql as $statement) { $pdo->exec($statement); }
         /* Supplier master data used by Purchasing. Keep the original compact table
            compatible while extending it with the fields from the current supplier sheet. */
-        $supplierColumns = [
-            'address_2'=>'TEXT', 'postal_code'=>'TEXT', 'mobile'=>'TEXT', 'contact_name'=>'TEXT',
-            'salesperson'=>'TEXT', 'website'=>'TEXT', 'notes'=>'TEXT', 'discount_percent'=>'REAL NOT NULL DEFAULT 0',
-            'credit_limit'=>'REAL NOT NULL DEFAULT 0', 'pefc_certified'=>'INTEGER NOT NULL DEFAULT 0',
-            'stock_order_control'=>'INTEGER NOT NULL DEFAULT 0', 'include_osaf'=>'INTEGER NOT NULL DEFAULT 0',
-            'created_at'=>'DATETIME DEFAULT CURRENT_TIMESTAMP', 'updated_at'=>'DATETIME DEFAULT CURRENT_TIMESTAMP'
-        ];
-        foreach ($supplierColumns as $column=>$definition) {
-            if (!erp_column_exists($pdo, 'erp_suppliers', $column)) { $pdo->exec('ALTER TABLE erp_suppliers ADD COLUMN '.$column.' '.$definition); }
-        }
+        erp_migrate_supplier_columns($pdo);
         $supplierSeed = [
             ['CIF','CIF - COMPAGNIE INDUSTRIELLE','DOUAR HJAR NHAL','','90.025 WILAYA DE TANGER','MARROCOS','','','','','','','',0,0,0,0,0,''],
             ['DAMAN0201','KANDIL FABRICS PVT LTD','406 - LOTUS HOUSE 4TH FLOOR, 33A NEW MARINE LINE,','','MUMBAI - 400020','INDIA','0091 2266338751','','dpf@damanpolyfabs.com','Niranjan','','','',0,0,0,0,0,''],
