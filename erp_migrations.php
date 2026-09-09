@@ -21,7 +21,7 @@ function erp_column_exists(PDO $pdo, string $table, string $column): bool
     return false;
 }
 
-function erp_migrate_supplier_columns(PDO $pdo): void
+function erp_migrate_supplier_columns(PDO $pdo)
 {
     $supplierColumns = [
         'address_2'=>'TEXT', 'postal_code'=>'TEXT', 'mobile'=>'TEXT', 'contact_name'=>'TEXT',
