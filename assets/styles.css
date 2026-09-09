@@ -4,6 +4,35 @@ body {
     color: #1f2937;
 }
 
+/* PIN authentication is used on shared Shopfloor terminals. Keep that shell
+   focused on the operation and do not expose the application's navigation. */
+.gt-app-shell.gt-pin-session {
+    display: block;
+    min-height: 100vh;
+}
+
+.gt-pin-session .gt-main {
+    width: 100%;
+    min-width: 0;
+}
+
+.gt-pin-topbar-logo {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.65rem;
+    min-width: 0;
+    color: inherit;
+    text-decoration: none;
+}
+
+.gt-pin-topbar-logo img {
+    display: block;
+    width: auto;
+    max-width: min(190px, 35vw);
+    max-height: 50px;
+    object-fit: contain;
+}
+
 /* Keep dense data views readable without forcing columns to wrap or overflow. */
 .table {
     font-size: 0.9rem;
