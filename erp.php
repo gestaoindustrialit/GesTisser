@@ -193,7 +193,7 @@ $selectedSupplier=null;if(!empty($_GET['supplier_id'])){$q=$pdo->prepare('SELECT
 $deliveryAddressesByCustomer=[];foreach($pdo->query('SELECT * FROM erp_customer_delivery_addresses ORDER BY customer_id,id')->fetchAll(PDO::FETCH_ASSOC) as $deliveryAddress){$deliveryAddressesByCustomer[(int)$deliveryAddress['customer_id']][]=$deliveryAddress;}
 
 $erpNav = [
-    'overview'=>['Visão geral'], 'sales'=>['Clientes'], 'purchases'=>['Compras'], 'production'=>['Planeamento e produção'], 'articles'=>['Artigos'], 'raw_materials'=>['Matérias-primas'], 'warehouse'=>['Armazém'], 'shipping'=>['Expedição'], 'quality'=>['Qualidade'], 'costs'=>['Custos'], 'reports'=>['Relatórios']
+    'overview'=>['Visão geral'], 'sales'=>['Clientes'], 'purchases'=>['Fornecedores'], 'production'=>['Planeamento e produção'], 'articles'=>['Artigos'], 'raw_materials'=>['Matérias-primas'], 'warehouse'=>['Armazém'], 'shipping'=>['Expedição'], 'reports'=>['Relatórios']
 ];
 $pageTitle='ERP industrial'; require __DIR__.'/partials/header.php';
 ?>
