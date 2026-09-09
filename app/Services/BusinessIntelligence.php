@@ -1,145 +1,94 @@
 <?php
 declare(strict_types=1);
 
+/** Central aggregation layer for the executive production dashboard. */
 final class BusinessIntelligence
 {
-    /** @var PDO */
     private $pdo;
-    /** @var array */
     private $filters;
-    /** @var bool */
     private $financial;
 
     public function __construct(PDO $pdo, array $filters, bool $financial)
     {
-        $this->pdo = $pdo;
-        $this->filters = $this->normaliseFilters($filters);
-        $this->financial = $financial;
+        $this->pdo=$pdo;$this->filters=$this->normaliseFilters($filters);$this->financial=$financial;
     }
 
     public function filters(): array { return $this->filters; }
 
     public function payload(): array
     {
-        $productionWhere = $this->productionWhere('o');
-        $timeWhere = $this->timeWhere();
-        $settings = $this->settings();
-        $summary = $this->row('SELECT COUNT(*) orders_total,
-                SUM(CASE WHEN o.status NOT IN ("Concluída","Fechada","Cancelada") THEN 1 ELSE 0 END) orders_open,
-                COALESCE(SUM(o.planned_quantity),0) planned,
-                COALESCE(SUM(o.produced_quantity),0) produced,
-                SUM(CASE WHEN o.due_date IS NOT NULL AND o.due_date < date("now") AND o.status NOT IN ("Concluída","Fechada","Cancelada") THEN 1 ELSE 0 END) overdue
-            FROM erp_production_orders o WHERE '.$productionWhere['sql'], $productionWhere['params']);
-
-        $deadline = $this->row('SELECT SUM(CASE WHEN o.status IN ("Concluída","Fechada") THEN 1 ELSE 0 END) completed,
-                SUM(CASE WHEN o.status IN ("Concluída","Fechada") AND (o.updated_at IS NULL OR o.due_date IS NULL OR date(o.updated_at)<=date(o.due_date)) THEN 1 ELSE 0 END) on_time
-            FROM erp_production_orders o WHERE '.$productionWhere['sql'], $productionWhere['params']);
-        $deadlineRate = (int)$deadline['completed'] > 0 ? 100 * (float)$deadline['on_time'] / (int)$deadline['completed'] : null;
-
-        $waste = $this->row('SELECT COALESCE(SUM(w.quantity),0) waste, COALESCE(SUM(t.quantity_good),0) good
-            FROM erp_operation_time_entries t
-            JOIN erp_production_order_operations opo ON opo.id=t.production_order_operation_id
-            JOIN erp_production_orders o ON o.id=opo.production_order_id
-            LEFT JOIN (SELECT time_entry_id,SUM(quantity) quantity,MAX(created_at) created_at FROM erp_operation_waste GROUP BY time_entry_id) w ON w.time_entry_id=t.id
-            WHERE '.$timeWhere['sql'], $timeWhere['params']);
-        $wasteRate = ((float)$waste['good'] + (float)$waste['waste']) > 0
-            ? 100 * (float)$waste['waste'] / ((float)$waste['good'] + (float)$waste['waste']) : null;
-
-        $cards = [
-            $this->card('of_open', 'Ordens de fabrico em aberto', (float)$summary['orders_open'], 'nº', null, 'erp.php?page=production', 'bi-clipboard2-pulse'),
-            $this->card('production', 'Produção realizada', (float)$summary['produced'], 'qtd.', $this->variation(), 'erp.php?page=production', 'bi-gear-wide-connected'),
-            $this->card('deadline', 'Cumprimento dos prazos', $deadlineRate, '%', null, 'erp.php?page=production', 'bi-clock-history', $this->deadlineTone($deadlineRate, $settings)),
-            $this->card('waste', 'Taxa de desperdício/refugo', $wasteRate, '%', null, 'shopfloor.php', 'bi-recycle', $this->wasteTone($wasteRate, $settings)),
+        $where=$this->productionWhere('o');$time=$this->timeWhere();$settings=$this->settings();
+        $orders=$this->row('SELECT COUNT(*) total,
+            SUM(CASE WHEN o.status NOT IN ("Concluída","Fechada","Cancelada") THEN 1 ELSE 0 END) open,
+            SUM(CASE WHEN o.due_date IS NOT NULL AND date(o.due_date)<date("now") AND o.status NOT IN ("Concluída","Fechada","Cancelada") THEN 1 ELSE 0 END) overdue,
+            SUM(CASE WHEN o.status IN ("Concluída","Fechada") THEN 1 ELSE 0 END) completed,
+            SUM(CASE WHEN o.status IN ("Concluída","Fechada") AND o.due_date IS NOT NULL AND o.updated_at IS NOT NULL AND date(o.updated_at)<=date(o.due_date) THEN 1 ELSE 0 END) on_time,
+            SUM(CASE WHEN o.status IN ("Concluída","Fechada") AND o.due_date IS NOT NULL AND o.updated_at IS NOT NULL THEN 1 ELSE 0 END) deadline_sample,
+            SUM(o.planned_quantity) planned,SUM(o.produced_quantity) produced,
+            AVG(CASE WHEN o.due_date IS NOT NULL AND date(o.due_date)<date("now") AND o.status NOT IN ("Concluída","Fechada","Cancelada") THEN julianday("now")-julianday(o.due_date) END) avg_delay
+            FROM erp_production_orders o WHERE '.$where['sql'],$where['params']);
+        $execution=$this->row('SELECT COUNT(DISTINCT t.id) entries,
+            SUM(MAX(0,(julianday(COALESCE(t.ended_at,CURRENT_TIMESTAMP))-julianday(t.started_at))*24-COALESCE(t.pause_seconds,0)/3600.0)) productive_hours,
+            SUM(t.quantity_good) good,SUM(t.quantity_rejected) rejected,
+            SUM(CASE WHEN opo.calculation_unit="minutes_per_unit" THEN t.quantity_good*opo.run_value/NULLIF(opo.base_quantity,0)
+                     WHEN opo.calculation_unit="units_per_hour" THEN t.quantity_good*60/NULLIF(opo.run_value,0) END)/60.0 standard_hours
+            FROM erp_operation_time_entries t JOIN erp_production_order_operations opo ON opo.id=t.production_order_operation_id
+            JOIN erp_production_orders o ON o.id=opo.production_order_id WHERE '.$time['sql'],$time['params']);
+        $stops=$this->row('SELECT COUNT(s.id) incidents,SUM(MAX(0,(julianday(COALESCE(s.ended_at,CURRENT_TIMESTAMP))-julianday(s.started_at))*24)) hours
+            FROM erp_operation_stoppages s JOIN erp_operation_time_entries t ON t.id=s.time_entry_id
+            JOIN erp_production_order_operations opo ON opo.id=t.production_order_operation_id JOIN erp_production_orders o ON o.id=opo.production_order_id WHERE '.$time['sql'],$time['params']);
+        $waste=$this->row('SELECT COUNT(w.id) records,SUM(w.quantity) waste,SUM(t.quantity_good) good
+            FROM erp_operation_time_entries t JOIN erp_production_order_operations opo ON opo.id=t.production_order_operation_id
+            JOIN erp_production_orders o ON o.id=opo.production_order_id LEFT JOIN erp_operation_waste w ON w.time_entry_id=t.id WHERE '.$time['sql'],$time['params']);
+        $unit=$this->productionUnit($where);$produced=$this->nullableSum($orders,'produced','total');$planned=$this->nullableSum($orders,'planned','total');
+        $productionRate=$this->ratio($produced,$planned);$deadlineRate=((int)$orders['deadline_sample']>0)?100*(float)$orders['on_time']/(int)$orders['deadline_sample']:null;
+        $productive=(int)$execution['entries']>0?(float)$execution['productive_hours']:null;$efficiency=$this->ratio(isset($execution['standard_hours'])?(float)$execution['standard_hours']:null,$productive);
+        $wasteKg=(int)$waste['records']>0?(float)$waste['waste']:null;$wasteRate=$this->ratio($wasteKg,$wasteKg===null?null:$wasteKg+(float)$waste['good']);
+        $stopHours=(int)$stops['incidents']>0?(float)$stops['hours']:null;$setup=$this->setupMetrics($time);
+        $previous=$this->previousMetrics();
+        $cards=[
+            $this->card('of_open','OF em aberto',(int)$orders['total']?(float)$orders['open']:null,'OF',null,null,$previous['open'],'negative','bi-clipboard2-pulse',(int)$orders['overdue'].' em atraso','Total de OF não concluídas. Origem: ordens de fabrico.'),
+            $this->card('production','Produção realizada vs. planeada',$produced,$unit,$planned,$productionRate,$previous['production'],'positive','bi-boxes',null,'Quantidade produzida ÷ quantidade planeada × 100. Origem: ordens de fabrico.'),
+            $this->card('worked_hours','Horas trabalhadas vs. previstas',null,'h',null,null,null,'positive','bi-person-workspace','Sem registos de presença','Presença dos colaboradores ÷ calendário laboral. A origem de assiduidade não existe no modelo atual.'),
+            $this->card('productive_hours','Horas produtivas vs. trabalhadas',$productive,'h',null,null,$previous['productive'],'positive','bi-stopwatch','Horas trabalhadas indisponíveis','Horas em operações produtivas ÷ horas de presença. Origem produtiva: registos de operação.'),
+            $this->card('machine_hours','Horas de máquina realizadas vs. disponíveis',$productive,'h',null,null,$previous['productive'],'positive','bi-cpu','Capacidade sem calendário','Funcionamento registado ÷ calendário da máquina. Não existe calendário de máquina para calcular a capacidade.'),
+            $this->card('efficiency','Eficiência produtiva',$efficiency,'%',100.0,$efficiency,$previous['efficiency'],'positive','bi-speedometer2',null,'Horas padrão da produção realizada ÷ horas produtivas reais × 100. Tempos da gama copiada para a OF.'),
+            $this->card('deadline','Cumprimento dos prazos',$deadlineRate,'%',100.0,$deadlineRate,$previous['deadline'],'positive','bi-calendar2-check',(int)$orders['on_time'].' de '.(int)$orders['deadline_sample'].' OF no prazo','OF concluídas até à data prevista ÷ OF concluídas com datas válidas × 100.'),
+            $this->card('overdue','OF em atraso',(int)$orders['total']?(float)$orders['overdue']:null,'OF',0.0,null,$previous['overdue'],'negative','bi-calendar-x',$orders['avg_delay']===null?'Sem atraso médio':number_format((float)$orders['avg_delay'],1,',','.').' dias em média','OF abertas cuja data prevista já passou. Críticas são as com maior atraso.'),
+            $this->card('downtime','Tempo de paragem das máquinas',$stopHours,'h',null,null,$previous['downtime'],'negative','bi-pause-circle',$this->mainStopCause($time),'Soma dos intervalos de paragem registados. Percentagem indisponível sem calendário da máquina.'),
+            $this->card('setup','Tempo médio de preparação/setup',$setup['average'],'min',null,null,$previous['setup'],'negative','bi-tools',$setup['count']===null?'Sem dados':$setup['count'].' transições','Intervalo médio entre o fim da execução anterior e o início da nova OF, na mesma máquina.'),
+            $this->card('waste','Desperdício/refugo',$wasteRate,'%',$wasteKg,$wasteRate,$previous['waste'],'negative','bi-recycle',$wasteKg===null?'Sem dados':number_format($wasteKg,2,',','.').' kg registados','Desperdício ÷ (quantidade conforme + desperdício) × 100. Quantidade reportada na unidade registada (kg no processo atual).'),
+            $this->card('availability','Disponibilidade das máquinas',null,'%',null,null,null,'positive','bi-activity',(int)$stops['incidents']?(int)$stops['incidents'].' paragens/avarias':'Sem dados','(Tempo disponível − paragens não planeadas) ÷ tempo disponível × 100. Sem calendário de máquina não é calculável.'),
         ];
-        if ($this->financial) {
-            $stock = (float)$this->value('SELECT COALESCE(SUM(b.physical_qty * CASE b.item_type WHEN "raw_material" THEN rm.standard_price ELSE fp.standard_cost END),0)
-                FROM erp_stock_balances b LEFT JOIN erp_raw_materials rm ON b.item_type="raw_material" AND rm.id=b.item_id
-                LEFT JOIN erp_finished_products fp ON b.item_type="finished_product" AND fp.id=b.item_id');
-            $cards[] = $this->card('stock', 'Valor estimado do stock', $stock, '€', null, 'erp.php?page=warehouse', 'bi-box-seam');
-        }
-
-        return [
-            'generated_at'=>gmdate('c'), 'filters'=>$this->filters, 'financial'=>$this->financial,
-            'settings'=>$settings, 'cards'=>$cards,
-            'charts'=>[
-                'monthly_production'=>$this->monthlyProduction(),
-                'production_status'=>$this->groupRows('SELECT o.status label,COUNT(*) value FROM erp_production_orders o WHERE '.$productionWhere['sql'].' GROUP BY o.status ORDER BY value DESC', $productionWhere['params']),
-                'plan_actual'=>$this->groupRows('SELECT COALESCE(strftime("%Y-%m",o.created_at),"Sem data") label,ROUND(SUM(o.planned_quantity),2) planned,ROUND(SUM(o.produced_quantity),2) actual FROM erp_production_orders o WHERE '.$productionWhere['sql'].' GROUP BY label ORDER BY label', $productionWhere['params']),
-                'waste'=>$this->groupRows('SELECT strftime("%Y-%m",COALESCE(w.created_at,t.started_at)) label,ROUND(SUM(w.quantity),2) value FROM erp_operation_waste w JOIN erp_operation_time_entries t ON t.id=w.time_entry_id JOIN erp_production_order_operations opo ON opo.id=t.production_order_operation_id JOIN erp_production_orders o ON o.id=opo.production_order_id WHERE '.$timeWhere['sql'].' GROUP BY label ORDER BY label', $timeWhere['params']),
-                'customers'=>$this->groupRows('SELECT c.name label,COUNT(o.id) orders,ROUND(SUM(o.planned_quantity),2) value FROM erp_production_orders o JOIN erp_customers c ON c.id=o.customer_id WHERE '.$productionWhere['sql'].' GROUP BY c.id,c.name ORDER BY value DESC LIMIT 10', $productionWhere['params']),
-                'stock'=>$this->groupRows('SELECT CASE b.item_type WHEN "raw_material" THEN "Matérias-primas" ELSE "Produtos acabados" END label,ROUND(SUM(b.physical_qty),2) value FROM erp_stock_balances b GROUP BY b.item_type ORDER BY value DESC', []),
-            ],
-            'alerts'=>$this->alerts($summary, $wasteRate, $settings),
-            'details'=>$this->details($productionWhere),
-            'unavailable'=>[
-                'Valor e quantidade de encomendas de clientes, carteira comercial e vendas por artigo: não existem tabelas de encomendas de venda e linhas no modelo atual.',
-                'Compras, fornecedores, materiais comprados e evolução de preços: não existem documentos nem linhas de compra no modelo atual.',
-                'Reclamações e não conformidades: os controlos de qualidade existentes registam resultados de operação, não ocorrências formais.',
-            ],
-        ];
+        return ['generated_at'=>gmdate('c'),'filters'=>$this->filters,'financial'=>$this->financial,'settings'=>$settings,'cards'=>$cards,
+            'charts'=>['plan_actual'=>$this->planActual($where),'labour_machine'=>$this->labourChart($time),'machine_utilisation'=>$this->machineUtilisation($time),'waste_breakdown'=>$this->wasteBreakdown($time),'stop_causes'=>$this->stopCauses($time),'production_status'=>$this->statusChart($where)],
+            'alerts'=>$this->alerts($orders,$wasteRate,$settings),'details'=>$this->details($where),'unavailable'=>[]];
     }
 
-    public function options(): array
-    {
-        return [
-            'customers'=>$this->groupRows('SELECT id value,name label FROM erp_customers WHERE is_active=1 ORDER BY name', []),
-            'suppliers'=>$this->groupRows('SELECT id value,name label FROM erp_suppliers WHERE is_active=1 ORDER BY name', []),
-            'articles'=>$this->groupRows('SELECT id value,code||" — "||description label FROM erp_finished_products WHERE status="Ativo" ORDER BY code', []),
-            'orders'=>$this->groupRows('SELECT id value,order_number label FROM erp_production_orders ORDER BY id DESC LIMIT 500', []),
-            'machines'=>$this->tableExists('erp_machines') ? $this->groupRows('SELECT id value,code||" — "||name label FROM erp_machines WHERE is_active=1 ORDER BY code', []) : [],
-            'operations'=>$this->groupRows('SELECT id value,code||" — "||name label FROM erp_operations WHERE is_active=1 ORDER BY code', []),
-            'statuses'=>$this->groupRows('SELECT DISTINCT status value,status label FROM erp_production_orders WHERE status<>"" ORDER BY status', []),
-        ];
-    }
-
-    private function normaliseFilters(array $input): array
-    {
-        $today = new DateTimeImmutable('today');
-        $from = $this->date((string)($input['from'] ?? '')) ?: $today->modify('first day of this month')->format('Y-m-d');
-        $to = $this->date((string)($input['to'] ?? '')) ?: $today->format('Y-m-d');
-        if ($from > $to) { $swap=$from; $from=$to; $to=$swap; }
-        $out=['from'=>$from,'to'=>$to];
-        foreach (['customer','supplier','article','order','machine','operation'] as $key) $out[$key]=max(0,(int)($input[$key]??0));
-        $out['status']=substr(trim((string)($input['status']??'')),0,60);
-        return $out;
-    }
-
-    private function date(string $date) { $d=DateTimeImmutable::createFromFormat('!Y-m-d',$date); return $d&&$d->format('Y-m-d')===$date?$date:null; }
-
-    private function productionWhere(string $alias): array
-    {
-        $f=$this->filters; $clauses=['date('.$alias.'.created_at) BETWEEN ? AND ?']; $params=[$f['from'],$f['to']];
-        foreach (['customer'=>'customer_id','order'=>'id','article'=>'finished_product_id'] as $key=>$column) if($f[$key]){$clauses[]="$alias.$column=?";$params[]=$f[$key];}
-        if($f['status']!==''){$clauses[]="$alias.status=?";$params[]=$f['status'];}
-        if($f['machine']){$clauses[]='EXISTS(SELECT 1 FROM erp_production_order_operations bx WHERE bx.production_order_id='.$alias.'.id AND COALESCE(bx.selected_machine_id,bx.primary_machine_id)=?)';$params[]=$f['machine'];}
-        if($f['operation']){$clauses[]='EXISTS(SELECT 1 FROM erp_production_order_operations bo WHERE bo.production_order_id='.$alias.'.id AND bo.operation_id=?)';$params[]=$f['operation'];}
-        return ['sql'=>implode(' AND ',$clauses),'params'=>$params];
-    }
-
-    private function timeWhere(): array { $w=$this->productionWhere('o'); $w['sql']='date(COALESCE(t.ended_at,t.started_at)) BETWEEN ? AND ? AND '.preg_replace('/^date\(o\.created_at\) BETWEEN \? AND \?/','1=1',$w['sql']); return $w; }
-    private function monthlyProduction(): array { $w=$this->productionWhere('o'); return $this->groupRows('SELECT COALESCE(strftime("%Y-%m",o.created_at),"Sem data") label,ROUND(SUM(o.produced_quantity),2) value FROM erp_production_orders o WHERE '.$w['sql'].' GROUP BY label ORDER BY label',$w['params']); }
-
-    private function details(array $where): array
-    {
-        return $this->groupRows('SELECT o.id,o.order_number,o.status,o.planned_quantity,o.produced_quantity,o.due_date,c.name customer,fp.code article FROM erp_production_orders o LEFT JOIN erp_customers c ON c.id=o.customer_id LEFT JOIN erp_finished_products fp ON fp.id=o.finished_product_id WHERE '.$where['sql'].' ORDER BY o.created_at DESC LIMIT 250',$where['params']);
-    }
-
-    private function variation()
-    {
-        $from=new DateTimeImmutable($this->filters['from']);$to=new DateTimeImmutable($this->filters['to']);$days=(int)$from->diff($to)->days+1;
-        $current=$this->productionWhere('o');$previous=$this->filters;$this->filters['to']=$from->modify('-1 day')->format('Y-m-d');$this->filters['from']=$from->modify('-'.$days.' days')->format('Y-m-d');$prev=$this->productionWhere('o');$this->filters=$previous;
-        $a=(float)$this->value('SELECT COALESCE(SUM(o.produced_quantity),0) FROM erp_production_orders o WHERE '.$current['sql'],$current['params']);
-        $b=(float)$this->value('SELECT COALESCE(SUM(o.produced_quantity),0) FROM erp_production_orders o WHERE '.$prev['sql'],$prev['params']);
-        return $b>0?100*($a-$b)/$b:null;
-    }
-
-    private function settings(): array { $out=[];foreach($this->groupRows('SELECT key,value FROM erp_settings WHERE key LIKE "bi_%"',[]) as $r)$out[$r['key']]=(float)$r['value'];return $out; }
-    private function deadlineTone($rate,array $s): string { if($rate===null)return 'muted';return $rate>=($s['bi_target_deadline_percent']??95)?'success':($rate>=($s['bi_warning_deadline_percent']??85)?'warning':'danger'); }
-    private function wasteTone($rate,array $s): string { if($rate===null)return 'muted';return $rate<=($s['bi_target_waste_percent']??3)?'success':($rate<=($s['bi_warning_waste_percent']??6)?'warning':'danger'); }
-    private function card(string $id,string $label,$value,string $unit,$change,string $url,string $icon,string $tone='primary'): array { return compact('id','label','value','unit','change','url','icon','tone'); }
-    private function alerts(array $summary,$waste,array $settings): array { $a=[];if((int)$summary['overdue']>0)$a[]=['tone'=>'danger','icon'=>'bi-calendar-x','title'=>$summary['overdue'].' OF atrasada(s)','text'=>'Prazo ultrapassado e ordem ainda aberta.'];if($waste!==null&&$waste>($settings['bi_warning_waste_percent']??6))$a[]=['tone'=>'warning','icon'=>'bi-recycle','title'=>'Desperdício acima do limite','text'=>number_format($waste,1,',','.').'% no período selecionado.'];$low=(int)$this->value('SELECT COUNT(*) FROM erp_raw_materials rm WHERE rm.status="Ativo" AND (SELECT COALESCE(SUM(physical_qty-reserved_qty-blocked_qty),0) FROM erp_stock_balances b WHERE b.item_type="raw_material" AND b.item_id=rm.id)<rm.min_stock');if($low>0)$a[]=['tone'=>'warning','icon'=>'bi-box-seam','title'=>$low.' materiais abaixo do mínimo','text'=>'Stock disponível inferior ao stock mínimo configurado.'];return array_slice($a,0,5); }
-    private function row(string $sql,array $params=[]): array { $s=$this->pdo->prepare($sql);$s->execute($params);return $s->fetch(PDO::FETCH_ASSOC)?:[]; }
-    private function value(string $sql,array $params=[]){$s=$this->pdo->prepare($sql);$s->execute($params);return $s->fetchColumn();}
-    private function groupRows(string $sql,array $params): array {$s=$this->pdo->prepare($sql);$s->execute($params);return $s->fetchAll(PDO::FETCH_ASSOC);}
-    private function tableExists(string $name): bool {$s=$this->pdo->prepare('SELECT 1 FROM sqlite_master WHERE type="table" AND name=?');$s->execute([$name]);return(bool)$s->fetchColumn();}
+    public function options(): array { return ['customers'=>$this->groupRows('SELECT id value,name label FROM erp_customers WHERE is_active=1 ORDER BY name',[]),'suppliers'=>$this->groupRows('SELECT id value,name label FROM erp_suppliers WHERE is_active=1 ORDER BY name',[]),'articles'=>$this->groupRows('SELECT id value,code||" — "||description label FROM erp_finished_products WHERE status="Ativo" ORDER BY code',[]),'orders'=>$this->groupRows('SELECT id value,order_number label FROM erp_production_orders ORDER BY id DESC LIMIT 500',[]),'machines'=>$this->tableExists('erp_machines')?$this->groupRows('SELECT id value,code||" — "||name label FROM erp_machines WHERE is_active=1 ORDER BY code',[]):[],'operations'=>$this->groupRows('SELECT id value,code||" — "||name label FROM erp_operations WHERE is_active=1 ORDER BY code',[]),'statuses'=>$this->groupRows('SELECT DISTINCT status value,status label FROM erp_production_orders WHERE status<>"" ORDER BY status',[])]; }
+    private function normaliseFilters(array $i): array {$today=new DateTimeImmutable('today');$from=$this->date((string)($i['from']??''))?:$today->modify('first day of this month')->format('Y-m-d');$to=$this->date((string)($i['to']??''))?:$today->format('Y-m-d');if($from>$to){$x=$from;$from=$to;$to=$x;}$o=['from'=>$from,'to'=>$to];foreach(['customer','supplier','article','order','machine','operation'] as $k)$o[$k]=max(0,(int)($i[$k]??0));$o['status']=substr(trim((string)($i['status']??'')),0,60);return $o;}
+    private function date(string $v){$d=DateTimeImmutable::createFromFormat('!Y-m-d',$v);return $d&&$d->format('Y-m-d')===$v?$v:null;}
+    private function productionWhere(string $a): array {$f=$this->filters;$c=['date('.$a.'.created_at) BETWEEN ? AND ?'];$p=[$f['from'],$f['to']];foreach(['customer'=>'customer_id','order'=>'id','article'=>'finished_product_id'] as $k=>$col)if($f[$k]){$c[]="$a.$col=?";$p[]=$f[$k];}if($f['status']!==''){$c[]="$a.status=?";$p[]=$f['status'];}if($f['machine']){$c[]='EXISTS(SELECT 1 FROM erp_production_order_operations bx WHERE bx.production_order_id='.$a.'.id AND COALESCE(bx.selected_machine_id,bx.primary_machine_id)=?)';$p[]=$f['machine'];}if($f['operation']){$c[]='EXISTS(SELECT 1 FROM erp_production_order_operations bo WHERE bo.production_order_id='.$a.'.id AND bo.operation_id=?)';$p[]=$f['operation'];}return ['sql'=>implode(' AND ',$c),'params'=>$p];}
+    private function timeWhere(): array {$w=$this->productionWhere('o');$w['sql']='date(COALESCE(t.ended_at,t.started_at)) BETWEEN ? AND ? AND '.preg_replace('/^date\(o\.created_at\) BETWEEN \? AND \?/','1=1',$w['sql']);return $w;}
+    private function card($id,$label,$value,$unit,$target,$percent,$change,$direction,$icon,$secondary,$tooltip): array {$tone=$this->tone($percent,$direction);return compact('id','label','value','unit','target','percent','change','direction','icon','secondary','tooltip','tone');}
+    private function tone($percent,$direction): string {if($percent===null)return 'muted';if($direction==='negative')return $percent<=3?'success':($percent<=8?'warning':'danger');return $percent>=95?'success':($percent>=80?'warning':'danger');}
+    private function ratio($a,$b){return $a!==null&&$b!==null&&(float)$b>0?100*(float)$a/(float)$b:null;}
+    private function nullableSum(array $r,string $key,string $count){return (int)$r[$count]>0&&$r[$key]!==null?(float)$r[$key]:null;}
+    private function productionUnit(array $w): string {$r=$this->row('SELECT COUNT(DISTINCT op.production_unit) n,MAX(op.production_unit) unit FROM erp_production_orders o LEFT JOIN erp_production_order_operations opo ON opo.production_order_id=o.id LEFT JOIN erp_operations op ON op.id=opo.operation_id WHERE '.$w['sql'],$w['params']);if((int)$r['n']!==1)return 'qtd.';return ['unit'=>'un.','kg'=>'kg','meter'=>'m','meters'=>'m'][(string)$r['unit']]??(string)$r['unit'];}
+    private function bucket(): string {$days=(new DateTimeImmutable($this->filters['from']))->diff(new DateTimeImmutable($this->filters['to']))->days;return $days<=31?'%Y-%m-%d':($days<=180?'%Y-%W':'%Y-%m');}
+    private function planActual(array $w): array {return $this->groupRows('SELECT strftime("'.$this->bucket().'",o.created_at) label,SUM(o.planned_quantity) planned,SUM(o.produced_quantity) actual FROM erp_production_orders o WHERE '.$w['sql'].' GROUP BY label ORDER BY label',$w['params']);}
+    private function statusChart(array $w): array {return $this->groupRows('SELECT CASE WHEN o.due_date IS NOT NULL AND date(o.due_date)<date("now") AND o.status NOT IN ("Concluída","Fechada","Cancelada") THEN "Atrasada" ELSE o.status END label,COUNT(*) value FROM erp_production_orders o WHERE '.$w['sql'].' GROUP BY label ORDER BY value DESC',$w['params']);}
+    private function labourChart(array $w): array {return $this->groupRows('SELECT strftime("'.$this->bucket().'",COALESCE(t.ended_at,t.started_at)) label,SUM(MAX(0,(julianday(COALESCE(t.ended_at,CURRENT_TIMESTAMP))-julianday(t.started_at))*24-COALESCE(t.pause_seconds,0)/3600.0)) productive,SUM(MAX(0,(julianday(COALESCE(t.ended_at,CURRENT_TIMESTAMP))-julianday(t.started_at))*24-COALESCE(t.pause_seconds,0)/3600.0)) machine FROM erp_operation_time_entries t JOIN erp_production_order_operations opo ON opo.id=t.production_order_operation_id JOIN erp_production_orders o ON o.id=opo.production_order_id WHERE '.$w['sql'].' GROUP BY label ORDER BY label',$w['params']);}
+    private function machineUtilisation(array $w): array {return $this->groupRows('SELECT COALESCE(m.code,"Sem máquina") label,SUM(MAX(0,(julianday(COALESCE(t.ended_at,CURRENT_TIMESTAMP))-julianday(t.started_at))*24-COALESCE(t.pause_seconds,0)/3600.0)) production,0 setup,COALESCE(SUM((SELECT SUM(MAX(0,(julianday(COALESCE(s.ended_at,CURRENT_TIMESTAMP))-julianday(s.started_at))*24)) FROM erp_operation_stoppages s WHERE s.time_entry_id=t.id)),0) stoppage FROM erp_operation_time_entries t JOIN erp_production_order_operations opo ON opo.id=t.production_order_operation_id JOIN erp_production_orders o ON o.id=opo.production_order_id LEFT JOIN erp_machines m ON m.id=COALESCE(t.selected_machine_id,opo.selected_machine_id,opo.primary_machine_id) WHERE '.$w['sql'].' GROUP BY label ORDER BY production DESC',$w['params']);}
+    private function wasteBreakdown(array $w): array {return $this->groupRows('SELECT COALESCE(m.code,op.code,"Sem máquina") label,SUM(CASE WHEN lower(w.reason) LIKE "%arranque%" OR lower(w.reason) LIKE "%afina%" OR lower(w.reason) LIKE "%setup%" THEN w.quantity ELSE 0 END) startup,SUM(CASE WHEN lower(w.reason) NOT LIKE "%arranque%" AND lower(w.reason) NOT LIKE "%afina%" AND lower(w.reason) NOT LIKE "%setup%" THEN w.quantity ELSE 0 END) production FROM erp_operation_waste w JOIN erp_operation_time_entries t ON t.id=w.time_entry_id JOIN erp_production_order_operations opo ON opo.id=t.production_order_operation_id JOIN erp_production_orders o ON o.id=opo.production_order_id LEFT JOIN erp_operations op ON op.id=opo.operation_id LEFT JOIN erp_machines m ON m.id=COALESCE(t.selected_machine_id,opo.selected_machine_id,opo.primary_machine_id) WHERE '.$w['sql'].' GROUP BY label ORDER BY startup+production DESC',$w['params']);}
+    private function stopCauses(array $w): array {return $this->groupRows('SELECT s.reason label,SUM(MAX(0,(julianday(COALESCE(s.ended_at,CURRENT_TIMESTAMP))-julianday(s.started_at))*24)) value FROM erp_operation_stoppages s JOIN erp_operation_time_entries t ON t.id=s.time_entry_id JOIN erp_production_order_operations opo ON opo.id=t.production_order_operation_id JOIN erp_production_orders o ON o.id=opo.production_order_id WHERE '.$w['sql'].' GROUP BY s.reason ORDER BY value DESC',$w['params']);}
+    private function mainStopCause(array $w): string {$r=$this->stopCauses($w);return $r?'Principal causa: '.$r[0]['label']:'Sem causas registadas';}
+    private function setupMetrics(array $w): array {$rows=$this->groupRows('SELECT COALESCE(t.selected_machine_id,opo.selected_machine_id,opo.primary_machine_id) machine,o.id order_id,t.started_at,t.ended_at FROM erp_operation_time_entries t JOIN erp_production_order_operations opo ON opo.id=t.production_order_operation_id JOIN erp_production_orders o ON o.id=opo.production_order_id WHERE '.$w['sql'].' AND COALESCE(t.selected_machine_id,opo.selected_machine_id,opo.primary_machine_id) IS NOT NULL ORDER BY machine,t.started_at',$w['params']);$last=[];$sum=0;$n=0;foreach($rows as $r){$m=$r['machine'];if(isset($last[$m])&&$last[$m]['order']!=$r['order_id']&&$last[$m]['end']&&$r['started_at']){$gap=(strtotime($r['started_at'])-strtotime($last[$m]['end']))/60;if($gap>=0){$sum+=$gap;$n++;}}$last[$m]=['order'=>$r['order_id'],'end'=>$r['ended_at']];}return ['average'=>$n?$sum/$n:null,'count'=>$n?:null];}
+    private function previousMetrics(): array {$old=$this->filters;$from=new DateTimeImmutable($old['from']);$days=(int)$from->diff(new DateTimeImmutable($old['to']))->days+1;$this->filters['to']=$from->modify('-1 day')->format('Y-m-d');$this->filters['from']=$from->modify('-'.$days.' days')->format('Y-m-d');$w=$this->productionWhere('o');$t=$this->timeWhere();$o=$this->row('SELECT COUNT(*) total,SUM(CASE WHEN status NOT IN ("Concluída","Fechada","Cancelada") THEN 1 ELSE 0 END) open,SUM(CASE WHEN due_date IS NOT NULL AND date(due_date)<date("now") AND status NOT IN ("Concluída","Fechada","Cancelada") THEN 1 ELSE 0 END) overdue,SUM(produced_quantity) production FROM erp_production_orders o WHERE '.$w['sql'],$w['params']);$e=$this->row('SELECT COUNT(*) n,SUM(MAX(0,(julianday(COALESCE(t.ended_at,CURRENT_TIMESTAMP))-julianday(t.started_at))*24-COALESCE(t.pause_seconds,0)/3600.0)) productive FROM erp_operation_time_entries t JOIN erp_production_order_operations opo ON opo.id=t.production_order_operation_id JOIN erp_production_orders o ON o.id=opo.production_order_id WHERE '.$t['sql'],$t['params']);$this->filters=$old;return ['open'=>(int)$o['total']?(float)$o['open']:null,'overdue'=>(int)$o['total']?(float)$o['overdue']:null,'production'=>(int)$o['total']?(float)$o['production']:null,'productive'=>(int)$e['n']?(float)$e['productive']:null,'efficiency'=>null,'deadline'=>null,'downtime'=>null,'setup'=>null,'waste'=>null];}
+    private function details(array $w): array {return $this->groupRows('SELECT o.id,o.order_number,o.status,o.planned_quantity,o.produced_quantity,o.due_date,c.name customer,fp.code article FROM erp_production_orders o LEFT JOIN erp_customers c ON c.id=o.customer_id LEFT JOIN erp_finished_products fp ON fp.id=o.finished_product_id WHERE '.$w['sql'].' ORDER BY o.created_at DESC LIMIT 250',$w['params']);}
+    private function alerts(array $o,$w,array $s): array {$a=[];if((int)$o['overdue']>0)$a[]=['tone'=>'danger','icon'=>'bi-calendar-x','title'=>$o['overdue'].' OF atrasada(s)','text'=>'Prazo ultrapassado e ordem ainda aberta.'];if($w!==null&&$w>($s['bi_warning_waste_percent']??6))$a[]=['tone'=>'warning','icon'=>'bi-recycle','title'=>'Desperdício acima do limite','text'=>number_format($w,1,',','.').'% no período selecionado.'];return $a;}
+    private function settings(): array {$out=[];foreach($this->groupRows('SELECT key,value FROM erp_settings WHERE key LIKE "bi_%"',[]) as $r)$out[$r['key']]=(float)$r['value'];return $out;}
+    private function row(string $sql,array $p=[]): array {$s=$this->pdo->prepare($sql);$s->execute($p);return $s->fetch(PDO::FETCH_ASSOC)?:[];}
+    private function groupRows(string $sql,array $p): array {$s=$this->pdo->prepare($sql);$s->execute($p);return $s->fetchAll(PDO::FETCH_ASSOC);}
+    private function tableExists(string $n): bool {$s=$this->pdo->prepare('SELECT 1 FROM sqlite_master WHERE type="table" AND name=?');$s->execute([$n]);return(bool)$s->fetchColumn();}
 }
