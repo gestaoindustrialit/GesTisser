@@ -715,3 +715,111 @@ function initArticleMaterials() {
     });
 }
 initArticleMaterials();
+
+function initSortableTables() {
+    const collator = new Intl.Collator('pt', {
+        numeric: true,
+        sensitivity: 'base'
+    });
+
+    document.querySelectorAll('table[data-sortable-table]').forEach((table) => {
+        const body = table.tBodies[0];
+        const headers = Array.from(table.querySelectorAll('thead th'));
+        if (!body) return;
+
+        const dataRows = Array.from(body.rows).filter((row) => row.cells.length === headers.length);
+        const filters = new Map();
+
+        const applyFilters = () => {
+            let visibleRows = 0;
+            dataRows.forEach((row) => {
+                const visible = Array.from(filters).every(([index, query]) => (
+                    row.cells[index].textContent.toLocaleLowerCase('pt').includes(query)
+                ));
+                row.hidden = !visible;
+                if (visible) visibleRows += 1;
+            });
+
+            let noResults = body.querySelector('[data-sort-no-results]');
+            if (filters.size > 0 && visibleRows === 0) {
+                if (!noResults) {
+                    noResults = document.createElement('tr');
+                    noResults.dataset.sortNoResults = '';
+                    noResults.innerHTML = `<td colspan="${headers.length}" class="text-center text-muted py-4">Sem resultados para a pesquisa.</td>`;
+                    body.appendChild(noResults);
+                }
+                noResults.hidden = false;
+            } else if (noResults) {
+                noResults.hidden = true;
+            }
+        };
+
+        headers.forEach((header, columnIndex) => {
+            const label = header.textContent.trim();
+            if (!label || header.hasAttribute('data-no-sort')) return;
+
+            const button = document.createElement('button');
+            const icon = document.createElement('i');
+            const controls = document.createElement('div');
+            button.type = 'button';
+            button.className = 'sortable-table-button';
+            button.setAttribute('aria-label', `Pesquisar e ordenar por ${label}`);
+            button.setAttribute('aria-expanded', 'false');
+            button.append(...Array.from(header.childNodes));
+            icon.className = 'bi bi-arrow-down-up sortable-table-icon';
+            icon.setAttribute('aria-hidden', 'true');
+            button.appendChild(icon);
+            header.appendChild(button);
+
+            controls.className = 'sortable-table-controls';
+            controls.hidden = true;
+            controls.innerHTML = `<label><span class="visually-hidden">Pesquisar em ${label}</span><input type="search" class="form-control form-control-sm" placeholder="Pesquisar…" autocomplete="off"></label><div class="sortable-table-directions"><button type="button" data-sort-direction="ascending"><i class="bi bi-sort-up" aria-hidden="true"></i> Ascendente</button><button type="button" data-sort-direction="descending"><i class="bi bi-sort-down" aria-hidden="true"></i> Descendente</button></div>`;
+            header.appendChild(controls);
+
+            const search = controls.querySelector('input');
+            button.addEventListener('click', () => {
+                const opening = controls.hidden;
+                controls.hidden = !opening;
+                button.setAttribute('aria-expanded', opening ? 'true' : 'false');
+                if (opening) search.focus();
+            });
+
+            search.addEventListener('input', () => {
+                const query = search.value.trim().toLocaleLowerCase('pt');
+                if (query === '') filters.delete(columnIndex);
+                else filters.set(columnIndex, query);
+                header.classList.toggle('has-table-filter', query !== '');
+                applyFilters();
+            });
+
+            controls.querySelectorAll('[data-sort-direction]').forEach((sortButton) => {
+                sortButton.addEventListener('click', () => {
+                    const ascending = sortButton.dataset.sortDirection === 'ascending';
+
+                    headers.forEach((otherHeader) => {
+                        otherHeader.removeAttribute('aria-sort');
+                        const otherIcon = otherHeader.querySelector('.sortable-table-icon');
+                        if (otherIcon) otherIcon.className = 'bi bi-arrow-down-up sortable-table-icon';
+                    });
+
+                    header.setAttribute('aria-sort', ascending ? 'ascending' : 'descending');
+                    icon.className = `bi ${ascending ? 'bi-arrow-up' : 'bi-arrow-down'} sortable-table-icon`;
+
+                    dataRows.sort((rowA, rowB) => {
+                        const valueA = rowA.cells[columnIndex].textContent.trim();
+                        const valueB = rowB.cells[columnIndex].textContent.trim();
+                        if (valueA === '' && valueB !== '') return 1;
+                        if (valueB === '' && valueA !== '') return -1;
+                        const comparison = collator.compare(valueA, valueB);
+                        return ascending ? comparison : -comparison;
+                    });
+
+                    dataRows.forEach((row) => body.appendChild(row));
+                    const noResults = body.querySelector('[data-sort-no-results]');
+                    if (noResults) body.appendChild(noResults);
+                });
+            });
+        });
+    });
+}
+initSortableTables();
