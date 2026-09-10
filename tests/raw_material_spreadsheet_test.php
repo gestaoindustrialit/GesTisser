@@ -1,11 +1,11 @@
 <?php
 declare(strict_types=1);
-require_once dirname(__DIR__).'/app/Services/ArticleSpreadsheet.php';
+require_once dirname(__DIR__).'/app/Services/RawMaterialSpreadsheet.php';
 
 function assert_same($expected,$actual,string$message):void{if($expected!==$actual)throw new RuntimeException($message.' Esperado '.var_export($expected,true).', recebido '.var_export($actual,true));}
 
 $erpSource=file_get_contents(dirname(__DIR__).'/erp.php');
-if($erpSource===false||strpos($erpSource,'RawMaterialSpreadsheet.php')!==false)throw new RuntimeException('O ERP não deve depender do serviço legado RawMaterialSpreadsheet.php.');
+if($erpSource===false||strpos($erpSource,"require_once __DIR__ . '/app/Services/RawMaterialSpreadsheet.php';")===false)throw new RuntimeException('O ERP deve carregar explicitamente o serviço de matérias-primas, tal como os restantes importadores.');
 
 // Compatibility with previous templates (categoria, without grupo_produto) is retained.
 $tmp=tempnam(sys_get_temp_dir(),'raw_material_csv_');file_put_contents($tmp,"codigo;descricao;categoria;unidade;stock_minimo;alertas_ativos\nMP-01;Polipropileno;raw_material;KG;100;Sim\n");
