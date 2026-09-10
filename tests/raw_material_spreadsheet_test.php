@@ -35,6 +35,8 @@ assert_same('Produção',$rows[0]['observacoes'],'Os valores do CSV Windows-1252
 
 $templateHeaders=RawMaterialSpreadsheet::templateColumns();
 assert_same(count($templateHeaders),count(array_unique(array_values(RawMaterialSpreadsheet::columns()))),'O modelo não deve repetir aliases equivalentes.');
+assert_same('grupo_produto',$templateHeaders[2]??null,'O grupo_produto deve ser a terceira coluna do modelo e não pode ser removido pelos aliases de importação.');
+assert_same(true,in_array('categoria',$templateHeaders,true),'A coluna de categoria legada deve continuar disponível no modelo.');
 
 foreach(['matéria-prima','Materia Prima','materia prima','MATÉRIA PRIMA']as$value)assert_same('raw_material',RawMaterialSpreadsheet::normalizeProductGroup($value),'Falhou a normalização de matéria-prima.');
 foreach(['subsidiário','Subsidiario','SUBSIDIÁRIO']as$value)assert_same('subsidiary',RawMaterialSpreadsheet::normalizeProductGroup($value),'Falhou a normalização de subsidiário.');

@@ -12,6 +12,17 @@ final class RawMaterialSpreadsheet
         'packaging'=>'Embalagem', 'other'=>'Outro',
     ];
 
+    // Keep the model contract explicit. Import-only aliases in columns() must
+    // never alter or remove business fields from the downloadable spreadsheet.
+    // In particular, grupo_produto is required to classify each reference for
+    // later stock, purchasing and production workflows.
+    const TEMPLATE_COLUMNS = [
+        'codigo','descricao','grupo_produto','categoria','tipo','caracteristica','unidade','largura','gramagem',
+        'stock_minimo','stock_maximo','ponto_reposicao','prazo_entrega_dias','fornecedor_preferencial',
+        'preco_padrao','armazem_standard','localizacao_standard','email_alerta','alertas_ativos','controlar_lote',
+        'controlar_bobina','permitir_consumo_parcial','estado','observacoes',
+    ];
+
     public static function columns(): array
     {
         return [
@@ -31,12 +42,7 @@ final class RawMaterialSpreadsheet
     /** Headers shown in the model, excluding aliases accepted only on import. */
     public static function templateColumns(): array
     {
-        $headers=[];$targets=[];
-        foreach (self::columns() as $header=>$target) {
-            if (isset($targets[$target])) { continue; }
-            $targets[$target]=true;$headers[]=$header;
-        }
-        return $headers;
+        return self::TEMPLATE_COLUMNS;
     }
 
     public static function read(string $path, string $extension): array
