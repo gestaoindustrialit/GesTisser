@@ -4,6 +4,50 @@ body {
     color: #1f2937;
 }
 
+/* Use the compact type scale established by the Operations workspace throughout
+   the authenticated application. Keeping it on the application shell means
+   public/authentication screens and printable documents retain their own scale. */
+.gt-authenticated {
+    --gt-font-size-base: 0.875rem;
+    --gt-font-size-control: 0.82rem;
+    --bs-body-font-size: var(--gt-font-size-base);
+    font-size: var(--gt-font-size-base);
+    line-height: 1.45;
+}
+
+.gt-authenticated :where(.form-control, .form-select, .input-group-text, .btn, .dropdown-item, .page-link) {
+    font-size: var(--gt-font-size-control);
+}
+
+.gt-authenticated :where(.form-label, .form-text, small, .small) {
+    font-size: 0.75rem;
+}
+
+.gt-authenticated :where(.card-title, .modal-title, .offcanvas-title) {
+    font-size: 1rem;
+}
+
+.gt-authenticated :where(h1, .h1) {
+    font-size: 1.6rem;
+}
+
+.gt-authenticated :where(h2, .h2) {
+    font-size: 1.3rem;
+}
+
+.gt-authenticated :where(h3, .h3) {
+    font-size: 1.1rem;
+}
+
+.gt-authenticated :where(h4, .h4) {
+    font-size: 1rem;
+}
+
+.gt-authenticated :where(h5, .h5),
+.gt-authenticated :where(h6, .h6) {
+    font-size: 0.875rem;
+}
+
 /* PIN authentication is used on shared Shopfloor terminals. Keep that shell
    focused on the operation and do not expose the application's navigation. */
 .gt-app-shell.gt-pin-session {
@@ -34,8 +78,8 @@ body {
 }
 
 /* Keep dense data views readable without forcing columns to wrap or overflow. */
-.table {
-    font-size: 0.9rem;
+.gt-authenticated .table {
+    font-size: 0.82rem;
 }
 
 /* The extra specificity keeps these rules effective when the theme is loaded afterwards. */
