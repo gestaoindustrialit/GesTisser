@@ -1,11 +1,17 @@
 <?php
 require_once __DIR__ . '/helpers.php';
 require_once __DIR__ . '/erp_migrations.php';
-require_once __DIR__ . '/app/Services/ArticleSpreadsheet.php';
-require_once __DIR__ . '/app/Services/CustomerSpreadsheet.php';
-require_once __DIR__ . '/app/Services/SupplierSpreadsheet.php';
-require_once __DIR__ . '/app/Services/RoutingService.php';
 require_once __DIR__ . '/app/Services/MachineAttachment.php';
+$requestedPage = (string) ($_GET['page'] ?? 'overview');
+// The machines area does not use the spreadsheet/routing services. Loading
+// those unrelated files here made machine documents fail on older production
+// PHP runtimes before the attachment route could send the PDF.
+if ($requestedPage !== 'machines' && $requestedPage !== 'machine_attachment') {
+    require_once __DIR__ . '/app/Services/ArticleSpreadsheet.php';
+    require_once __DIR__ . '/app/Services/CustomerSpreadsheet.php';
+    require_once __DIR__ . '/app/Services/SupplierSpreadsheet.php';
+    require_once __DIR__ . '/app/Services/RoutingService.php';
+}
 require_login();
 erp_run_phase1_migrations($pdo);
 $userId = (int) $_SESSION['user_id'];
@@ -14,7 +20,7 @@ $isAdmin = is_admin($pdo, $userId);
 $profile = (string) ($user['access_profile'] ?? 'Utilizador');
 if (!erp_user_can($pdo, $user, 'erp.view')) { http_response_code(403); exit('Acesso reservado ao ERP.'); }
 
-if ((string) ($_GET['page'] ?? '') === 'machine_attachment') {
+if ($requestedPage === 'machine_attachment') {
     $attachmentId = filter_input(INPUT_GET, 'id', FILTER_VALIDATE_INT);
     if (!$attachmentId || $attachmentId < 1) {
         http_response_code(404);

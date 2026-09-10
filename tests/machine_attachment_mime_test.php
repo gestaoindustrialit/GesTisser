@@ -73,6 +73,9 @@ $erpSource = file_get_contents(dirname(__DIR__) . '/erp.php');
 if (strpos($erpSource, "=== 'machine_attachment'") === false) {
     throw new RuntimeException('O front controller do ERP não encaminha os pedidos de anexos.');
 }
+if (strpos($erpSource, "\$requestedPage !== 'machines' && \$requestedPage !== 'machine_attachment'") === false) {
+    throw new RuntimeException('As máquinas ainda carregam serviços ERP incompatíveis e desnecessários.');
+}
 $machinesSource = file_get_contents(dirname(__DIR__) . '/erp_machines.php');
 if (strpos($machinesSource, "'erp_machine_attachment.php?id='") !== false) {
     throw new RuntimeException('A interface ainda referencia a rota PHP que não é publicada pelo alojamento.');
