@@ -45,6 +45,13 @@ function erp_migrate_supplier_columns(PDO $pdo)
         END');
 }
 
+function erp_migrate_material_type_columns(PDO $pdo)
+{
+    if (!erp_column_exists($pdo, 'erp_material_types', 'is_active')) {
+        $pdo->exec('ALTER TABLE erp_material_types ADD COLUMN is_active INTEGER NOT NULL DEFAULT 1');
+    }
+}
+
 function erp_backup_database_once(PDO $pdo)
 {
     static $backupPath = null;
@@ -102,6 +109,9 @@ function erp_run_phase1_migrations(PDO $pdo)
             'CREATE TABLE IF NOT EXISTS erp_stock_balances (item_type TEXT NOT NULL, item_id INTEGER NOT NULL, warehouse_id INTEGER, location_id INTEGER, lot TEXT, physical_qty REAL NOT NULL DEFAULT 0, reserved_qty REAL NOT NULL DEFAULT 0, blocked_qty REAL NOT NULL DEFAULT 0, ordered_qty REAL NOT NULL DEFAULT 0, updated_at DATETIME DEFAULT CURRENT_TIMESTAMP, PRIMARY KEY(item_type, item_id, warehouse_id, location_id, lot))'
         ];
         foreach ($sql as $statement) { $pdo->exec($statement); }
+        /* The original material type table only contained code and name. Settings now
+           allows administrators to deactivate types, including on legacy databases. */
+        erp_migrate_material_type_columns($pdo);
         /* Supplier master data used by Purchasing. Keep the original compact table
            compatible while extending it with the fields from the current supplier sheet. */
         erp_migrate_supplier_columns($pdo);
