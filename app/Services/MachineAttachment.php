@@ -70,6 +70,7 @@ function gt_machine_attachment_document_meta(string $fileName): array
 {
     $normalized = strtoupper((string) preg_replace('/[^A-Z0-9]+/i', '-', pathinfo($fileName, PATHINFO_FILENAME)));
     $types = [
+        'DL50' => ['label' => 'DL50', 'icon' => 'bi-shield-check', 'tone' => 'compliance'],
         'MAN' => ['label' => 'Manual', 'icon' => 'bi-book', 'tone' => 'manual'],
         'SPR' => ['label' => 'Peças', 'icon' => 'bi-gear', 'tone' => 'spares'],
         'CIR' => ['label' => 'Circuito', 'icon' => 'bi-lightning-charge', 'tone' => 'circuit'],
