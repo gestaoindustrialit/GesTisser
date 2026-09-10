@@ -1146,9 +1146,20 @@ body {
 .machine-actions .btn { font-size: .8rem; }
 .machine-actions .btn-danger-subtle { color: #842029; background: #f8d7da; border-color: #f8d7da; }
 .machine-empty { grid-column: 1 / -1; padding: 2rem; border: 1px dashed #ced4da; border-radius: .75rem; color: #6c757d; text-align: center; }
-.machine-file-chips { display: flex; flex-wrap: wrap; gap: .5rem; margin-top: .75rem; }
-.machine-file-chips a { display: inline-flex; align-items: center; gap: .3rem; padding: .3rem .55rem; border: 1px solid #dee2e6; border-radius: 999px; color: #0d6efd; font-size: .75rem; font-weight: 600; text-decoration: none; }
-.machine-file-chips a:hover { background: #eef6ff; border-color: #0d6efd; }
+.machine-file-chips { display: flex; flex-wrap: wrap; gap: .4rem; margin-top: .75rem; }
+.machine-file-chips .machine-file-chip { display: inline-flex; align-items: center; min-width: 0; max-width: min(100%, 19rem); gap: .4rem; padding: .25rem .5rem .25rem .3rem; border: 1px solid #dbe3ec; border-radius: .55rem; color: #315f89; background: #fff; text-decoration: none; }
+.machine-file-chips .machine-file-chip:hover { background: #f4f8fc; border-color: #79a5ca; }
+.machine-file-icon { display: grid; flex: 0 0 auto; width: 1.65rem; height: 1.65rem; place-items: center; border-radius: .4rem; color: #315f89; background: #eaf2f9; font-size: .85rem; }
+.machine-file-copy { min-width: 0; line-height: 1.1; }
+.machine-file-copy strong, .machine-file-copy small { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.machine-file-copy strong { color: #273849; font-size: .67rem; font-weight: 750; }
+.machine-file-copy small { max-width: 15.5rem; margin-top: .12rem; color: #718090; font-size: .58rem; font-weight: 500; }
+.machine-file-spares .machine-file-icon { color: #8a6415; background: #fff3d6; }
+.machine-file-circuit .machine-file-icon { color: #a95016; background: #ffeadb; }
+.machine-file-certificate .machine-file-icon { color: #28703a; background: #e4f4e8; }
+.machine-file-modification .machine-file-icon { color: #7555a5; background: #f0eafb; }
+.machine-file-image .machine-file-icon { color: #24716d; background: #dff3f1; }
+.machine-file-spreadsheet .machine-file-icon { color: #28703a; background: #e4f4e8; }
 .machine-pdf-modal .modal-content { height: min(88vh, 900px); overflow: hidden; border: 0; border-radius: 1rem; }
 .machine-pdf-modal .modal-header { padding: .85rem 1rem; }
 .machine-pdf-modal .modal-title { max-width: min(75vw, 900px); overflow: hidden; font-size: 1rem; font-weight: 700; text-overflow: ellipsis; white-space: nowrap; }
@@ -1202,6 +1213,9 @@ body {
     .machines-filter-actions { display: grid; }
     .machine-meta { grid-template-columns: repeat(2, minmax(0, 1fr)); }
     .machine-actions { flex-wrap: wrap; }
+    .machine-file-chips { gap: .35rem; }
+    .machine-file-chips .machine-file-chip { max-width: calc(50% - .175rem); flex: 1 1 calc(50% - .175rem); }
+    .machine-file-copy small { font-size: .54rem; }
     .machine-modal .modal-content { max-height: 100vh; border-radius: 0; }
 }
 
