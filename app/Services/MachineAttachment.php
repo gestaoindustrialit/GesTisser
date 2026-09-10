@@ -52,3 +52,36 @@ function gt_machine_attachment_mime(string $path, string $originalName): string
 
     return '';
 }
+
+/**
+ * Build the application route used to serve an attachment.
+ *
+ * Files are deliberately not linked directly from storage: on installations
+ * where storage is outside the public document root, the web server otherwise
+ * falls back to the application HTML page instead of returning the file.
+ */
+function gt_machine_attachment_url(array $attachment): string
+{
+    return 'erp_machine_attachment.php?id=' . rawurlencode((string) ((int) ($attachment['id'] ?? 0)));
+}
+
+/**
+ * Resolve a stored machine path while preventing access outside its upload
+ * directory. Returns an empty string for missing or unsafe paths.
+ */
+function gt_machine_attachment_path(string $applicationRoot, string $storedPath): string
+{
+    $prefix = 'storage/uploads/machines/';
+    if (strncmp($storedPath, $prefix, strlen($prefix)) !== 0) {
+        return '';
+    }
+
+    $uploadRoot = realpath(rtrim($applicationRoot, '/\\') . '/' . rtrim($prefix, '/'));
+    $resolved = realpath(rtrim($applicationRoot, '/\\') . '/' . $storedPath);
+    if ($uploadRoot === false || $resolved === false || !is_file($resolved)) {
+        return '';
+    }
+
+    $uploadRoot .= DIRECTORY_SEPARATOR;
+    return strncmp($resolved, $uploadRoot, strlen($uploadRoot)) === 0 ? $resolved : '';
+}
