@@ -56,13 +56,13 @@ function gt_machine_attachment_mime(string $path, string $originalName): string
 /**
  * Build the application route used to serve an attachment.
  *
- * Files are deliberately not linked directly from storage: on installations
- * where storage is outside the public document root, the web server otherwise
- * falls back to the application HTML page instead of returning the file.
+ * Use the ERP front controller because some installations only publish the
+ * established application entry points. A separate PHP file can be handled by
+ * the hosting fallback and return an unrelated HTML site inside the PDF frame.
  */
 function gt_machine_attachment_url(array $attachment): string
 {
-    return 'erp_machine_attachment.php?id=' . rawurlencode((string) ((int) ($attachment['id'] ?? 0)));
+    return 'erp.php?page=machine_attachment&id=' . rawurlencode((string) ((int) ($attachment['id'] ?? 0)));
 }
 
 /**

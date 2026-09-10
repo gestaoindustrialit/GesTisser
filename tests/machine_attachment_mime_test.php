@@ -40,8 +40,16 @@ if (gt_machine_attachment_path($uploadRoot, 'storage/uploads/machines/manual.pdf
 if (gt_machine_attachment_path($uploadRoot, 'storage/uploads/machines/../../manual.pdf') !== '') {
     throw new RuntimeException('Foi aceite um caminho fora da pasta de anexos.');
 }
-if (gt_machine_attachment_url(['id' => 42]) !== 'erp_machine_attachment.php?id=42') {
+if (gt_machine_attachment_url(['id' => 42]) !== 'erp.php?page=machine_attachment&id=42') {
     throw new RuntimeException('A rota segura do anexo não foi gerada corretamente.');
+}
+$erpSource = file_get_contents(dirname(__DIR__) . '/erp.php');
+if (strpos($erpSource, "=== 'machine_attachment'") === false) {
+    throw new RuntimeException('O front controller do ERP não encaminha os pedidos de anexos.');
+}
+$machinesSource = file_get_contents(dirname(__DIR__) . '/erp_machines.php');
+if (strpos($machinesSource, "'erp_machine_attachment.php?id='") !== false) {
+    throw new RuntimeException('A interface ainda referencia a rota PHP que não é publicada pelo alojamento.');
 }
 
 unlink($pdfPath);

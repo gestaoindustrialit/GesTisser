@@ -423,7 +423,7 @@ document.addEventListener('DOMContentLoaded', function () {
             const item = document.createElement('div');
             item.className = 'machine-existing-file';
             const link = document.createElement('a');
-            link.href = file.id ? 'erp_machine_attachment.php?id=' + encodeURIComponent(file.id) : '#';
+            link.href = file.id ? 'erp.php?page=machine_attachment&id=' + encodeURIComponent(file.id) : '#';
             link.target = '_blank';
             link.rel = 'noopener';
             link.textContent = file.original_name || 'Ficheiro';
