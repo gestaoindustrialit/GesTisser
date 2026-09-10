@@ -173,7 +173,10 @@ final class ArticleSpreadsheet
  */
 final class RawMaterialSpreadsheet
 {
-    private const PRODUCT_GROUPS = [
+    // Visibility on class constants and nullable return types require PHP 7.1.
+    // Production installations can still run PHP 7.0, so keep this definition
+    // compatible with the same PHP baseline as the existing spreadsheet reader.
+    const PRODUCT_GROUPS = [
         'raw_material'=>'Materia Prima', 'subsidiary'=>'Subsidiario',
         'finished_product'=>'Produto Acabado', 'merchandise'=>'Mercadoria',
         'packaging'=>'Embalagem', 'other'=>'Outro',
@@ -202,7 +205,7 @@ final class RawMaterialSpreadsheet
 
     public static function productGroups(): array { return self::PRODUCT_GROUPS; }
 
-    public static function normalizeProductGroup($value): ?string
+    public static function normalizeProductGroup($value)
     {
         $value=trim((string)$value);if($value==='')return null;
         $value=strtr($value,['Á'=>'A','À'=>'A','Â'=>'A','Ã'=>'A','á'=>'a','à'=>'a','â'=>'a','ã'=>'a','É'=>'E','Ê'=>'E','é'=>'e','ê'=>'e','Í'=>'I','í'=>'i','Ó'=>'O','Ô'=>'O','Õ'=>'O','ó'=>'o','ô'=>'o','õ'=>'o','Ú'=>'U','ú'=>'u','Ç'=>'C','ç'=>'c']);
@@ -211,5 +214,5 @@ final class RawMaterialSpreadsheet
         return $aliases[$key]??null;
     }
 
-    public static function productGroupLabel(?string $group): string { return self::PRODUCT_GROUPS[$group]??($group==='consumable'?'Consumível (legado)':''); }
+    public static function productGroupLabel($group): string { return self::PRODUCT_GROUPS[$group]??($group==='consumable'?'Consumível (legado)':''); }
 }
