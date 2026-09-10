@@ -54,11 +54,11 @@
             this.control.setAttribute('role', 'combobox');
             this.control.setAttribute('aria-haspopup', 'listbox');
             this.control.setAttribute('aria-expanded', 'false');
-            this.control.setAttribute('aria-required', String(select.required));
-            const labelledBy = select.getAttribute('aria-labelledby');
-            const label = select.labels && select.labels[0];
+            this.control.setAttribute('aria-required', String(this.select.required));
+            const labelledBy = this.select.getAttribute('aria-labelledby');
+            const label = this.select.labels && this.select.labels[0];
             if (labelledBy) this.control.setAttribute('aria-labelledby', labelledBy);
-            else this.control.setAttribute('aria-label', select.getAttribute('aria-label') || (label && label.textContent.trim()) || 'Selecionar opção');
+            else this.control.setAttribute('aria-label', this.select.getAttribute('aria-label') || (label && label.textContent.trim()) || 'Selecionar opção');
             this.value = document.createElement('span');
             this.value.className = 'gt-search-select-value';
             this.clear = document.createElement('button');
@@ -105,6 +105,7 @@
             return Array.from(this.select.options).map((option) => ({
                 value: option.value,
                 title: option.dataset.title || option.text.trim(),
+                display: option.dataset.display || option.text.trim(),
                 meta: option.dataset.meta || option.dataset.description || '',
                 search: [option.text, option.value, option.dataset.search, option.dataset.code, option.dataset.reference, option.dataset.category, option.dataset.pantone, option.dataset.nif].filter(Boolean).join(' '),
                 selected: option.selected,
@@ -118,7 +119,7 @@
             const records = this.options().filter((item) => !q || normalize(item.search + ' ' + item.meta).includes(q));
             this.render(records, query || '');
             const selected = this.options().filter((item) => item.selected);
-            this.value.textContent = selected.length ? selected.map((item) => item.title).join(', ') : (this.select.dataset.placeholder || this.select.options[0]?.text || 'Selecionar…');
+            this.value.textContent = selected.length ? selected.map((item) => item.display).join(', ') : (this.select.dataset.placeholder || this.select.options[0]?.text || 'Selecionar…');
             this.value.classList.toggle('gt-search-select-placeholder', !selected.length || (selected.length === 1 && selected[0].value === ''));
             const canClear = !this.select.required && selected.some((item) => item.value !== '');
             this.clear.hidden = !canClear;
