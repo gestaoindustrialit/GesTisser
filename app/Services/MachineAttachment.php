@@ -71,6 +71,7 @@ function gt_machine_attachment_document_meta(string $fileName): array
     $normalized = strtoupper((string) preg_replace('/[^A-Z0-9]+/i', '-', pathinfo($fileName, PATHINFO_FILENAME)));
     $types = [
         'DL50' => ['label' => 'DL50', 'icon' => 'bi-shield-check', 'tone' => 'compliance'],
+        'CAL' => ['label' => 'Calibração', 'icon' => 'bi-bullseye', 'tone' => 'calibration'],
         'MAN' => ['label' => 'Manual', 'icon' => 'bi-book', 'tone' => 'manual'],
         'SPR' => ['label' => 'Peças', 'icon' => 'bi-gear', 'tone' => 'spares'],
         'CIR' => ['label' => 'Circuito', 'icon' => 'bi-lightning-charge', 'tone' => 'circuit'],
@@ -148,7 +149,7 @@ function gt_machine_attachment_target(string $directory, string $originalName): 
  * Move all existing documents to the folder derived from the current machine
  * name. Database paths are updated only after each file has moved successfully.
  */
-function gt_machine_relocate_attachments(PDO $pdo, string $applicationRoot, int $machineId, string $machineName): void
+function gt_machine_relocate_attachments(PDO $pdo, string $applicationRoot, int $machineId, string $machineName)
 {
     $relativeDirectory = 'storage/uploads/machines/' . gt_machine_attachment_directory_name($machineId, $machineName);
     $directory = rtrim($applicationRoot, '/\\') . '/' . $relativeDirectory;

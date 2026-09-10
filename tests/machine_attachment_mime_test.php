@@ -31,6 +31,7 @@ echo "Deteção MIME de anexos de máquinas validada.\n";
 
 $documentCases = [
     ['MCC_003-DL50-001-CONFORMIDADE-PT.pdf', 'DL50', 'bi-shield-check'],
+    ['MLA_001-CAL-001-CALIBRACAO-PT.pdf', 'CAL', 'bi-bullseye'],
     ['MCC_003-MAN-001-MANUAL-PT.pdf', 'MAN', 'bi-book'],
     ['MCC_003-SPR-001-SPARES-PT.pdf', 'SPR', 'bi-gear'],
     ['MCC_003-CIR-001-CIRCUITO-ELETRICO-PT.pdf', 'CIR', 'bi-lightning-charge'],
@@ -92,6 +93,10 @@ if (strpos($erpSource, "\$requestedPage !== 'machines' && \$requestedPage !== 'm
     throw new RuntimeException('As máquinas ainda carregam serviços ERP incompatíveis e desnecessários.');
 }
 $machinesSource = file_get_contents(dirname(__DIR__) . '/erp_machines.php');
+if (preg_match('/function\s+gt_machine_relocate_attachments\s*\([^)]*\)\s*:\s*void/', file_get_contents(dirname(__DIR__) . '/app/Services/MachineAttachment.php')) === 1
+    || preg_match('/function\s+gt_save_machine_upload\s*\([^)]*\)\s*:\s*void/', $machinesSource) === 1) {
+    throw new RuntimeException('As funções de documentos usam o tipo void, incompatível com os servidores PHP legados.');
+}
 if (strpos($machinesSource, "'erp_machine_attachment.php?id='") !== false) {
     throw new RuntimeException('A interface ainda referencia a rota PHP que não é publicada pelo alojamento.');
 }
