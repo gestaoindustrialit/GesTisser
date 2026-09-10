@@ -29,6 +29,20 @@ if ($actual === 'application/pdf') {
 
 echo "Deteção MIME de anexos de máquinas validada.\n";
 
+$documentCases = [
+    ['MCC_003-MAN-001-MANUAL-PT.pdf', 'MAN', 'bi-book'],
+    ['MCC_003-SPR-001-SPARES-PT.pdf', 'SPR', 'bi-gear'],
+    ['MCC_003-CIR-001-CIRCUITO-ELETRICO-PT.pdf', 'CIR', 'bi-lightning-charge'],
+    ['MCC_002-CRT-001-CERTIFICADO-CE-PT.pdf', 'CRT', 'bi-patch-check'],
+    ['fotografia frontal.png', 'IMG', 'bi-image'],
+];
+foreach ($documentCases as $case) {
+    $meta = gt_machine_attachment_document_meta($case[0]);
+    if ($meta['code'] !== $case[1] || $meta['icon'] !== $case[2]) {
+        throw new RuntimeException($case[0] . ': identidade documental incorreta.');
+    }
+}
+
 $uploadRoot = sys_get_temp_dir() . '/gt_machine_path_' . bin2hex(random_bytes(5));
 mkdir($uploadRoot . '/storage/uploads/machines', 0777, true);
 $pdfPath = $uploadRoot . '/storage/uploads/machines/manual.pdf';
