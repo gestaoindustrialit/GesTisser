@@ -18,7 +18,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     } else {
         $action = (string) ($_POST['action'] ?? 'save_settings');
         try {
-            if ($action === 'save_operation_type') {
+            if ($action === 'save_material_type') {
+                $id=(int)($_POST['id']??0);$code=strtoupper(trim((string)($_POST['code']??'')));$name=trim((string)($_POST['name']??''));
+                if($code===''||$name==='')throw new InvalidArgumentException('O código e o nome do tipo de material são obrigatórios.');
+                if($id){$exists=$pdo->prepare('SELECT 1 FROM erp_material_types WHERE id=?');$exists->execute([$id]);if(!$exists->fetchColumn())throw new InvalidArgumentException('Tipo de material inexistente.');$pdo->prepare('UPDATE erp_material_types SET code=?,name=?,is_active=? WHERE id=?')->execute([$code,$name,!empty($_POST['is_active'])?1:0,$id]);}
+                else{$pdo->prepare('INSERT INTO erp_material_types(code,name,is_active) VALUES (?,?,?)')->execute([$code,$name,!empty($_POST['is_active'])?1:0]);$id=(int)$pdo->lastInsertId();}
+                erp_audit($pdo,$userId,(int)($_POST['id']??0)?'update':'create','erp_material_types',$id,[],['code'=>$code,'name'=>$name]);$flashSuccess='Tipo de material guardado com sucesso.';
+            } elseif ($action === 'delete_material_type') {
+                $id=(int)($_POST['id']??0);$used=0;foreach([['erp_raw_materials','material_type_id'],['erp_finished_products','material_type_id'],['erp_material_features','material_type_id']]as$reference){$stmt=$pdo->prepare('SELECT COUNT(*) FROM '.$reference[0].' WHERE '.$reference[1].'=?');$stmt->execute([$id]);$used+=(int)$stmt->fetchColumn();}if($used)throw new DomainException('Não é possível remover um tipo de material que está a ser utilizado.');
+                $pdo->prepare('DELETE FROM erp_material_types WHERE id=?')->execute([$id]);erp_audit($pdo,$userId,'delete','erp_material_types',$id,[],[]);$flashSuccess='Tipo de material removido com sucesso.';
+            } elseif ($action === 'save_operation_type') {
                 $id = (int) ($_POST['id'] ?? 0);
                 $code = strtolower(trim((string) ($_POST['code'] ?? '')));
                 $name = trim((string) ($_POST['name'] ?? ''));
@@ -77,6 +86,7 @@ $settings = $pdo->query('SELECT key, value FROM erp_settings')->fetchAll(PDO::FE
 $sequences = $pdo->query('SELECT id, code, prefix, next_number, padding, suffix FROM erp_number_sequences ORDER BY code')->fetchAll(PDO::FETCH_ASSOC);
 $operationTypes = $pdo->query('SELECT id,code,name FROM erp_operation_types ORDER BY name COLLATE NOCASE')->fetchAll(PDO::FETCH_ASSOC);
 $operationSectors = $pdo->query('SELECT id,code,name,hourly_rate,is_active FROM erp_work_centers ORDER BY is_active DESC,code COLLATE NOCASE')->fetchAll(PDO::FETCH_ASSOC);
+$materialTypes = $pdo->query('SELECT id,code,name,is_active FROM erp_material_types ORDER BY is_active DESC,name COLLATE NOCASE')->fetchAll(PDO::FETCH_ASSOC);
 $sequenceLabels = [
     'customer' => 'Clientes',
     'finished_product' => 'Produtos acabados',
@@ -98,6 +108,13 @@ require __DIR__ . '/partials/header.php';
 <?php if ($flashError): ?><div class="alert alert-danger"><?= h($flashError) ?></div><?php endif; ?>
 
 <div class="row g-4 mb-4">
+    <div class="col-12">
+        <section class="card shadow-sm soft-card" aria-labelledby="material-types-title"><div class="card-body p-4">
+            <h2 class="h5" id="material-types-title">Tipos de material</h2><p class="text-muted">Crie e edite os tipos usados nos artigos. Só é possível eliminar tipos sem artigos ou características associados.</p>
+            <?php foreach($materialTypes as$type):?><form method="post" class="row g-2 align-items-center mb-2"><?=csrf_input()?><input type="hidden" name="action" value="save_material_type"><input type="hidden" name="id" value="<?=(int)$type['id']?>"><div class="col-md-3"><input class="form-control" name="code" required value="<?=h($type['code'])?>" aria-label="Código do tipo de material"></div><div class="col"><input class="form-control" name="name" required value="<?=h($type['name'])?>" aria-label="Nome do tipo de material"></div><div class="col-auto"><input type="hidden" name="is_active" value="0"><label class="form-check form-check-inline"><input class="form-check-input" type="checkbox" name="is_active" value="1" <?=$type['is_active']?'checked':''?>> Ativo</label><button class="btn btn-outline-primary" aria-label="Guardar tipo de material"><i class="bi bi-check-lg"></i></button> <button class="btn btn-outline-danger" name="action" value="delete_material_type" formnovalidate aria-label="Remover tipo de material" onclick="return confirm('Remover este tipo de material?')"><i class="bi bi-trash"></i></button></div></form><?php endforeach;?>
+            <form method="post" class="row g-2 align-items-center mt-3 pt-3 border-top"><?=csrf_input()?><input type="hidden" name="action" value="save_material_type"><input type="hidden" name="is_active" value="1"><div class="col-md-3"><input class="form-control" name="code" required placeholder="Código"></div><div class="col"><input class="form-control" name="name" required placeholder="Novo tipo de material"></div><div class="col-auto"><button class="btn btn-primary"><i class="bi bi-plus-lg me-1"></i>Adicionar</button></div></form>
+        </div></section>
+    </div>
     <div class="col-xl-6">
         <section class="card shadow-sm soft-card h-100" aria-labelledby="operation-types-title"><div class="card-body p-4">
             <h2 class="h5" id="operation-types-title">Tipos de operações</h2><p class="text-muted">Adicione, edite ou remova as opções apresentadas no campo Tipo das operações.</p>
