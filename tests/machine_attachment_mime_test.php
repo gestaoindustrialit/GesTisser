@@ -28,3 +28,25 @@ if ($actual === 'application/pdf') {
 }
 
 echo "Deteção MIME de anexos de máquinas validada.\n";
+
+$uploadRoot = sys_get_temp_dir() . '/gt_machine_path_' . bin2hex(random_bytes(5));
+mkdir($uploadRoot . '/storage/uploads/machines', 0777, true);
+$pdfPath = $uploadRoot . '/storage/uploads/machines/manual.pdf';
+file_put_contents($pdfPath, "%PDF-1.7\ntest");
+
+if (gt_machine_attachment_path($uploadRoot, 'storage/uploads/machines/manual.pdf') !== realpath($pdfPath)) {
+    throw new RuntimeException('Não foi possível resolver um anexo válido.');
+}
+if (gt_machine_attachment_path($uploadRoot, 'storage/uploads/machines/../../manual.pdf') !== '') {
+    throw new RuntimeException('Foi aceite um caminho fora da pasta de anexos.');
+}
+if (gt_machine_attachment_url(['id' => 42]) !== 'erp_machine_attachment.php?id=42') {
+    throw new RuntimeException('A rota segura do anexo não foi gerada corretamente.');
+}
+
+unlink($pdfPath);
+rmdir($uploadRoot . '/storage/uploads/machines');
+rmdir($uploadRoot . '/storage/uploads');
+rmdir($uploadRoot . '/storage');
+rmdir($uploadRoot);
+echo "Entrega segura de anexos de máquinas validada.\n";
