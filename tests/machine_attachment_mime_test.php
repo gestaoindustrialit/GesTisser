@@ -80,6 +80,22 @@ $machinesSource = file_get_contents(dirname(__DIR__) . '/erp_machines.php');
 if (strpos($machinesSource, "'erp_machine_attachment.php?id='") !== false) {
     throw new RuntimeException('A interface ainda referencia a rota PHP que não é publicada pelo alojamento.');
 }
+if (strpos($machinesSource, 'const chunkSize = 512 * 1024;') === false
+    || strpos($machinesSource, "searchParams.set('machine_upload', 'chunk')") === false) {
+    throw new RuntimeException('O upload segmentado pode ultrapassar os limites comuns do PHP.');
+}
+if (strpos($machinesSource, 'JSON.parse(responseText)') === false) {
+    throw new RuntimeException('O upload não trata respostas não-JSON do servidor.');
+}
+if (strpos($machinesSource, "modal.addEventListener('hidden.bs.modal'") === false
+    || strpos($machinesSource, 'previewReturnsToEditor') === false
+    || strpos($machinesSource, 'restoringEditorAfterPreview') === false) {
+    throw new RuntimeException('A pré-visualização pode ficar escondida atrás da edição da máquina.');
+}
+if (strpos($machinesSource, 'URL.createObjectURL(blob)') === false
+    || strpos($machinesSource, "fetch(url, { credentials: 'same-origin' })") === false) {
+    throw new RuntimeException('A pré-visualização continua dependente de incorporar diretamente a resposta do alojamento.');
+}
 
 unlink($pdfPath);
 unlink($namedTarget);
