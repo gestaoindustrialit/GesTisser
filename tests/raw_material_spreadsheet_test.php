@@ -12,6 +12,30 @@ $tmp=tempnam(sys_get_temp_dir(),'raw_material_csv_');file_put_contents($tmp,"cod
 try{$rows=RawMaterialSpreadsheet::read($tmp,'csv');}finally{@unlink($tmp);}
 assert_same('MP-01',$rows[0]['codigo'],'A folha antiga não foi interpretada corretamente.');
 
+// Files exported by other ERPs commonly use descriptive headings instead of
+// the short headings from our downloadable model.
+$tmp=tempnam(sys_get_temp_dir(),'raw_material_alias_csv_');file_put_contents($tmp,"Exportação de materiais\nCódigo matéria-prima;Designação;Unidade\nMP-02;Polietileno;KG\n");
+try{$rows=RawMaterialSpreadsheet::read($tmp,'csv');}finally{@unlink($tmp);}
+assert_same('MP-02',$rows[0]['codigo'],'O alias do código da matéria-prima não foi reconhecido.');
+assert_same('Polietileno',$rows[0]['descricao'],'O alias da descrição da matéria-prima não foi reconhecido.');
+
+$tmp=tempnam(sys_get_temp_dir(),'raw_material_english_csv_');file_put_contents($tmp,"code,description,unidade\nMP-03,Masterbatch,KG\n");
+try{$rows=RawMaterialSpreadsheet::read($tmp,'csv');}finally{@unlink($tmp);}
+assert_same('MP-03',$rows[0]['codigo'],'O cabeçalho code não foi reconhecido.');
+assert_same('Masterbatch',$rows[0]['descricao'],'O cabeçalho description não foi reconhecido.');
+
+$tmp=tempnam(sys_get_temp_dir(),'raw_material_windows_csv_');
+$windowsCsv=iconv('UTF-8','Windows-1252',"Código;Descrição;Observações\nMP-04;Polietileno reciclado;Produção\n");
+if($windowsCsv===false)throw new RuntimeException('Não foi possível preparar o CSV Windows-1252 de teste.');
+file_put_contents($tmp,$windowsCsv);
+try{$rows=RawMaterialSpreadsheet::read($tmp,'csv');}finally{@unlink($tmp);}
+assert_same('MP-04',$rows[0]['codigo'],'O código com acento num CSV Windows-1252 não foi reconhecido.');
+assert_same('Polietileno reciclado',$rows[0]['descricao'],'A descrição com acento num CSV Windows-1252 não foi reconhecida.');
+assert_same('Produção',$rows[0]['observacoes'],'Os valores do CSV Windows-1252 não foram convertidos para UTF-8.');
+
+$templateHeaders=RawMaterialSpreadsheet::templateColumns();
+assert_same(count($templateHeaders),count(array_unique(array_values(RawMaterialSpreadsheet::columns()))),'O modelo não deve repetir aliases equivalentes.');
+
 foreach(['matéria-prima','Materia Prima','materia prima','MATÉRIA PRIMA']as$value)assert_same('raw_material',RawMaterialSpreadsheet::normalizeProductGroup($value),'Falhou a normalização de matéria-prima.');
 foreach(['subsidiário','Subsidiario','SUBSIDIÁRIO']as$value)assert_same('subsidiary',RawMaterialSpreadsheet::normalizeProductGroup($value),'Falhou a normalização de subsidiário.');
 assert_same(null,RawMaterialSpreadsheet::normalizeProductGroup(''),'Uma célula vazia deve ser null.');
