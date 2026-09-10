@@ -30,6 +30,7 @@ if ($actual === 'application/pdf') {
 echo "Deteção MIME de anexos de máquinas validada.\n";
 
 $documentCases = [
+    ['MCC_003-DL50-001-CONFORMIDADE-PT.pdf', 'DL50', 'bi-shield-check'],
     ['MCC_003-MAN-001-MANUAL-PT.pdf', 'MAN', 'bi-book'],
     ['MCC_003-SPR-001-SPARES-PT.pdf', 'SPR', 'bi-gear'],
     ['MCC_003-CIR-001-CIRCUITO-ELETRICO-PT.pdf', 'CIR', 'bi-lightning-charge'],
