@@ -185,7 +185,9 @@ final class RawMaterialSpreadsheet
     public static function columns(): array
     {
         return [
-            'codigo'=>'code','descricao'=>'description','grupo_produto'=>'product_category','categoria'=>'legacy_product_category','tipo'=>'material_type',
+            'codigo'=>'code','cod_material'=>'code','codigo_material'=>'code','codigo_materia_prima'=>'code','codigo_produto'=>'code','referencia'=>'code','code'=>'code',
+            'descricao'=>'description','descricao_material'=>'description','descricao_materia_prima'=>'description','descricao_produto'=>'description','designacao'=>'description','description'=>'description',
+            'grupo_produto'=>'product_category','categoria'=>'legacy_product_category','tipo'=>'material_type',
             'caracteristica'=>'material_feature','unidade'=>'primary_unit','largura'=>'width','gramagem'=>'grammage',
             'stock_minimo'=>'min_stock','stock_maximo'=>'max_stock','ponto_reposicao'=>'reorder_point',
             'prazo_entrega_dias'=>'lead_time_days','fornecedor_preferencial'=>'preferred_supplier',
@@ -196,11 +198,23 @@ final class RawMaterialSpreadsheet
         ];
     }
 
-    public static function templateColumns(): array { return array_keys(self::columns()); }
+    /** Headers shown in the model, excluding aliases accepted only on import. */
+    public static function templateColumns(): array
+    {
+        $headers=[];$targets=[];
+        foreach (self::columns() as $header=>$target) {
+            if (isset($targets[$target])) { continue; }
+            $targets[$target]=true;$headers[]=$header;
+        }
+        return $headers;
+    }
 
     public static function read(string $path, string $extension): array
     {
-        return ArticleSpreadsheet::readWithColumns($path,$extension,self::columns(),['codigo','descricao']);
+        $rows=ArticleSpreadsheet::readWithColumns($path,$extension,self::columns(),['codigo','descricao']);
+        $canonical=[];foreach(self::columns() as$header=>$target){if(!isset($canonical[$target]))$canonical[$target]=$header;}
+        foreach($rows as$rowIndex=>$row){$normalized=[];foreach($row as$header=>$value){$normalized[$canonical[self::columns()[$header]]]=$value;}$rows[$rowIndex]=$normalized;}
+        return $rows;
     }
 
     public static function productGroups(): array { return self::PRODUCT_GROUPS; }
