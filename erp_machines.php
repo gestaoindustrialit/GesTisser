@@ -63,17 +63,20 @@ function gt_save_machine_upload(PDO $pdo, int $machineId, int $userId, array $fi
     if (!in_array($mime, $allowedMimeTypes, true)) {
         throw new RuntimeException('Tipo de ficheiro não permitido.');
     }
-    $extension = strtolower(pathinfo($originalName, PATHINFO_EXTENSION));
-    $safeName = 'machine_' . $machineId . '_' . bin2hex(random_bytes(10)) . ($extension !== '' ? '.' . $extension : '');
-    $uploadDir = __DIR__ . '/storage/uploads/machines';
+    $machineNameStmt = $pdo->prepare('SELECT name FROM erp_machines WHERE id=? AND deleted_at IS NULL');
+    $machineNameStmt->execute([$machineId]);
+    $machineName = (string) $machineNameStmt->fetchColumn();
+    if ($machineName === '') throw new RuntimeException('Máquina não encontrada.');
+    $relativeDir = 'storage/uploads/machines/' . gt_machine_attachment_directory_name($machineId, $machineName);
+    $uploadDir = __DIR__ . '/' . $relativeDir;
     if (!is_dir($uploadDir) && !mkdir($uploadDir, 0775, true) && !is_dir($uploadDir)) {
         throw new RuntimeException('Não foi possível preparar a pasta de uploads.');
     }
-    $targetPath = $uploadDir . '/' . $safeName;
+    $targetPath = gt_machine_attachment_target($uploadDir, $originalName);
     if (!move_uploaded_file($tmpName, $targetPath)) {
         throw new RuntimeException('Não foi possível guardar o ficheiro.');
     }
-    $relativePath = 'storage/uploads/machines/' . $safeName;
+    $relativePath = $relativeDir . '/' . basename($targetPath);
     $stmt = $pdo->prepare('INSERT INTO erp_machine_attachments(machine_id, original_name, file_path, mime_type, file_size, uploaded_by) VALUES (?, ?, ?, ?, ?, ?)');
     $stmt->execute([$machineId, $originalName, $relativePath, $mime, $size, $userId]);
 }
@@ -158,18 +161,22 @@ function gt_save_machine_chunk(PDO $pdo, int $machineId, int $userId, array $fil
     if (!in_array($mime, $allowedMimeTypes, true)) {
         throw new RuntimeException('Tipo de ficheiro não permitido.');
     }
-    $extension = strtolower(pathinfo($originalName, PATHINFO_EXTENSION));
-    $safeName = 'machine_' . $machineId . '_' . bin2hex(random_bytes(10)) . ($extension !== '' ? '.' . $extension : '');
-    $uploadDir = __DIR__ . '/storage/uploads/machines';
+    $machineNameStmt = $pdo->prepare('SELECT name FROM erp_machines WHERE id=? AND deleted_at IS NULL');
+    $machineNameStmt->execute([$machineId]);
+    $machineName = (string) $machineNameStmt->fetchColumn();
+    if ($machineName === '') throw new RuntimeException('Máquina não encontrada.');
+    $relativeDir = 'storage/uploads/machines/' . gt_machine_attachment_directory_name($machineId, $machineName);
+    $uploadDir = __DIR__ . '/' . $relativeDir;
     if (!is_dir($uploadDir) && !mkdir($uploadDir, 0775, true) && !is_dir($uploadDir)) {
         throw new RuntimeException('Não foi possível preparar a pasta de uploads.');
     }
-    if (!rename($assembled, $uploadDir . '/' . $safeName)) {
+    $targetPath = gt_machine_attachment_target($uploadDir, $originalName);
+    if (!rename($assembled, $targetPath)) {
         throw new RuntimeException('Não foi possível guardar o ficheiro.');
     }
     @rmdir($chunkDir);
     $pdo->prepare('INSERT INTO erp_machine_attachments(machine_id, original_name, file_path, mime_type, file_size, uploaded_by) VALUES (?, ?, ?, ?, ?, ?)')
-        ->execute([$machineId, $originalName, 'storage/uploads/machines/' . $safeName, $mime, $size, $userId]);
+        ->execute([$machineId, $originalName, $relativeDir . '/' . basename($targetPath), $mime, $size, $userId]);
     return true;
 }
 
@@ -214,6 +221,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     $old->execute([$id]);
                     $before = $old->fetch(PDO::FETCH_ASSOC) ?: [];
                     $pdo->prepare('UPDATE erp_machines SET code=?,name=?,brand=?,model=?,serial_number=?,manufacturing_year=?,department_id=?,location=?,owner_user_id=?,status=?,criticality=?,nominal_capacity=?,capacity_unit=?,cycle_time=?,cycle_time_unit=?,operators_required=?,supplier=?,service_provider=?,purchase_date=?,next_maintenance_date=?,manual_url=?,characteristics=?,risks=?,limitations=?,notes=?,updated_by=?,updated_at=CURRENT_TIMESTAMP,is_active=CASE WHEN ?="inactive" THEN 0 ELSE 1 END WHERE id=?')->execute(array_merge($data, [$data[9], $id]));
+                    gt_machine_relocate_attachments($pdo, __DIR__, $id, $data[1]);
                     gt_org_audit($pdo, $userId, 'erp.machines.update', 'erp_machines', $id, $before, $_POST);
                     $uploadedCount = gt_save_machine_uploads($pdo, $id, $userId, $_FILES['machine_files'] ?? [], $machineAttachmentMimeTypes);
                     $flashSuccess = 'Máquina atualizada.' . ($uploadedCount ? ' Ficheiros adicionados: ' . $uploadedCount . '.' : '');
