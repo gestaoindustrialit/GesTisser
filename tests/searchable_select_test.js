@@ -27,5 +27,6 @@ assert.equal(searchableSelect.shouldEnhance(select('machine_id', 50, [], 'off'))
 const componentSource = fs.readFileSync(require.resolve('../assets/searchable-select.js'), 'utf8');
 const buildSource = componentSource.slice(componentSource.indexOf('        build() {'), componentSource.indexOf('        options() {'));
 assert.equal(/(?<!this\.)\bselect\.(required|getAttribute|labels)\b/.test(buildSource), false);
+assert.match(componentSource, /dataset\.searchValue === 'off'/, 'selects can prevent internal IDs from being searchable');
 
 console.log('Searchable select normalization and selection policy: OK');

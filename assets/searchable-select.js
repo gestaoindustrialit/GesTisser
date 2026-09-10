@@ -107,7 +107,7 @@
                 title: option.dataset.title || option.text.trim(),
                 display: option.dataset.display || option.text.trim(),
                 meta: option.dataset.meta || option.dataset.description || '',
-                search: [option.text, option.value, option.dataset.search, option.dataset.code, option.dataset.reference, option.dataset.category, option.dataset.pantone, option.dataset.nif].filter(Boolean).join(' '),
+                search: [option.text, this.select.dataset.searchValue === 'off' ? '' : option.value, option.dataset.search, option.dataset.code, option.dataset.reference, option.dataset.category, option.dataset.pantone, option.dataset.nif].filter(Boolean).join(' '),
                 selected: option.selected,
                 disabled: option.disabled,
                 option
