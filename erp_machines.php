@@ -199,7 +199,20 @@ function gt_machine_ids(array $machines): array
 }
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+    // Keep the chunk endpoint identifiable even when PHP discards an oversized
+    // multipart body (and therefore leaves both $_POST and $_FILES empty).
+    $isChunkRequest = ($_POST['action'] ?? '') === 'upload_chunk'
+        || ($_GET['machine_upload'] ?? '') === 'chunk';
     if (!validate_csrf_or_abort(false)) {
+        if ($isChunkRequest) {
+            header('Content-Type: application/json');
+            http_response_code(413);
+            echo json_encode([
+                'ok' => false,
+                'error' => 'O servidor rejeitou esta parte do ficheiro. Atualize a página e tente novamente.',
+            ]);
+            exit;
+        }
         $flashError = 'Pedido inválido.';
     } else {
         try {
@@ -254,7 +267,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $flashSuccess = 'Máquina removida.';
             }
         } catch (Throwable $e) {
-            if (($_POST['action'] ?? '') === 'upload_chunk') {
+            if ($isChunkRequest) {
                 header('Content-Type: application/json');
                 http_response_code(422);
                 echo json_encode(['ok' => false, 'error' => $e->getMessage()]);
@@ -400,12 +413,28 @@ document.addEventListener('DOMContentLoaded', function () {
     const pdfFrame = document.getElementById('machinePdfFrame');
     const pdfTitle = document.getElementById('machinePdfModalLabel');
     const pdfOpen = document.getElementById('machinePdfOpen');
-    const showPdfPreview = function (url, name) {
-        if (!pdfModalElement || !pdfFrame || !pdfTitle || !pdfOpen || !window.bootstrap) return false;
+    let previewReturnsToEditor = false;
+    let restoringEditorAfterPreview = false;
+    let pendingPdfPreview = null;
+    const openPdfModal = function (url, name) {
         pdfTitle.textContent = name || 'Documento PDF';
         pdfFrame.src = url;
         pdfOpen.href = url;
         bootstrap.Modal.getOrCreateInstance(pdfModalElement).show();
+    };
+    const showPdfPreview = function (url, name) {
+        if (!pdfModalElement || !pdfFrame || !pdfTitle || !pdfOpen || !window.bootstrap) return false;
+        const editorIsOpen = modal && modal.classList.contains('show');
+        if (editorIsOpen) {
+            // Bootstrap does not support stacked modals: the second modal can
+            // otherwise be rendered behind the machine editor and look empty.
+            previewReturnsToEditor = true;
+            pendingPdfPreview = { url: url, name: name };
+            bootstrap.Modal.getOrCreateInstance(modal).hide();
+        } else {
+            previewReturnsToEditor = false;
+            openPdfModal(url, name);
+        }
         return true;
     };
     document.addEventListener('click', function (event) {
@@ -416,6 +445,19 @@ document.addEventListener('DOMContentLoaded', function () {
     if (pdfModalElement) {
         pdfModalElement.addEventListener('hidden.bs.modal', function () {
             if (pdfFrame) pdfFrame.removeAttribute('src');
+            if (previewReturnsToEditor && modal) {
+                previewReturnsToEditor = false;
+                restoringEditorAfterPreview = true;
+                bootstrap.Modal.getOrCreateInstance(modal).show();
+            }
+        });
+    }
+    if (modal) {
+        modal.addEventListener('hidden.bs.modal', function () {
+            if (!pendingPdfPreview) return;
+            const preview = pendingPdfPreview;
+            pendingPdfPreview = null;
+            openPdfModal(preview.url, preview.name);
         });
     }
     const renderFiles = function (files) {
@@ -466,7 +508,11 @@ document.addEventListener('DOMContentLoaded', function () {
         const submitButton = form.querySelector('.modal-footer button[type="submit"], .modal-footer button:not([type])');
         if (submitButton) submitButton.disabled = true;
         const csrf = form.querySelector('[name="_token"]');
-        const chunkSize = 1024 * 1024;
+        // Stay comfortably below common 1 MB PHP upload/post limits after the
+        // multipart headers are added. Twenty chunks still cover the 10 MB cap.
+        const chunkSize = 512 * 1024;
+        const chunkUrl = new URL(window.location.href);
+        chunkUrl.searchParams.set('machine_upload', 'chunk');
         const uploadFile = async function (file) {
             const uploadId = Array.from(crypto.getRandomValues(new Uint8Array(16)), function (byte) { return byte.toString(16).padStart(2, '0'); }).join('');
             const total = Math.ceil(file.size / chunkSize);
@@ -480,8 +526,14 @@ document.addEventListener('DOMContentLoaded', function () {
                 payload.append('chunk_total', String(total));
                 payload.append('file_name', file.name);
                 payload.append('chunk', file.slice(index * chunkSize, Math.min(file.size, (index + 1) * chunkSize)), 'chunk');
-                const response = await fetch(window.location.href, { method: 'POST', body: payload, credentials: 'same-origin' });
-                const result = await response.json();
+                const response = await fetch(chunkUrl.toString(), { method: 'POST', body: payload, credentials: 'same-origin' });
+                const responseText = await response.text();
+                let result;
+                try {
+                    result = JSON.parse(responseText);
+                } catch (parseError) {
+                    throw new Error('O servidor devolveu uma resposta inválida durante o upload. Atualize a página e tente novamente.');
+                }
                 if (!response.ok || !result.ok) throw new Error(result.error || 'Não foi possível carregar o ficheiro.');
             }
         };
@@ -498,6 +550,11 @@ document.addEventListener('DOMContentLoaded', function () {
         })();
     });
     modal.addEventListener('show.bs.modal', function (event) {
+        // Returning from the PDF must preserve unsaved values in the editor.
+        if (restoringEditorAfterPreview) {
+            restoringEditorAfterPreview = false;
+            return;
+        }
         form.reset();
         form.querySelector('[name="id"]').value = '';
         title.textContent = 'Nova máquina';
