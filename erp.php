@@ -8,6 +8,7 @@ $requestedPage = (string) ($_GET['page'] ?? 'overview');
 // PHP runtimes before the attachment route could send the PDF.
 if ($requestedPage !== 'machines' && $requestedPage !== 'machine_attachment') {
     require_once __DIR__ . '/app/Services/ArticleSpreadsheet.php';
+    require_once __DIR__ . '/app/Services/RawMaterialSpreadsheet.php';
     require_once __DIR__ . '/app/Services/CustomerSpreadsheet.php';
     require_once __DIR__ . '/app/Services/SupplierSpreadsheet.php';
     require_once __DIR__ . '/app/Services/RoutingService.php';

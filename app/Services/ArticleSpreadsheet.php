@@ -65,7 +65,12 @@ final class ArticleSpreadsheet
         elseif(substr($contents,0,2)==="\xFE\xFF"){$encoding='UTF-16BE';$contents=substr($contents,2);}
         elseif(substr($contents,0,3)==="\xEF\xBB\xBF") { return substr($contents,3); }
         elseif(strpos(substr($contents,0,200),"\0")!==false){$even=$odd=0;$sample=substr($contents,0,200);for($i=0,$length=strlen($sample);$i<$length;$i++){if($sample[$i]==="\0"){if($i%2===0)$even++;else$odd++;}}$encoding=$odd>=$even?'UTF-16LE':'UTF-16BE';}
-        if($encoding===''){return $contents;}
+        // Excel on Windows commonly saves a plain "CSV (Comma delimited)" in
+        // Windows-1252 without a BOM. Accented headings such as Código and
+        // Descrição are then invalid UTF-8 and used to normalize to c_digo and
+        // descri_o, preventing the required columns from being found.
+        if($encoding===''&&preg_match('//u',$contents)===1){return $contents;}
+        if($encoding===''){$encoding='Windows-1252';}
         if(function_exists('mb_convert_encoding')){return mb_convert_encoding($contents,'UTF-8',$encoding);}
         if(function_exists('iconv')){$converted=iconv($encoding,'UTF-8//IGNORE',$contents);if($converted!==false)return $converted;}
         throw new RuntimeException('O CSV está em '.$encoding.', mas o servidor não possui suporte para converter a codificação.');
@@ -162,57 +167,4 @@ final class ArticleSpreadsheet
     {
         $value=0; foreach (str_split($letters) as $letter) { $value=$value*26+(ord($letter)-64); } return $value-1;
     }
-}
-
-/**
- * Raw-material spreadsheet definition kept beside the shared spreadsheet reader.
- *
- * Keeping this small definition in the already deployed reader prevents the ERP
- * bootstrap from depending on an additional service file during incremental
- * production deployments.
- */
-final class RawMaterialSpreadsheet
-{
-    // Visibility on class constants and nullable return types require PHP 7.1.
-    // Production installations can still run PHP 7.0, so keep this definition
-    // compatible with the same PHP baseline as the existing spreadsheet reader.
-    const PRODUCT_GROUPS = [
-        'raw_material'=>'Materia Prima', 'subsidiary'=>'Subsidiario',
-        'finished_product'=>'Produto Acabado', 'merchandise'=>'Mercadoria',
-        'packaging'=>'Embalagem', 'other'=>'Outro',
-    ];
-
-    public static function columns(): array
-    {
-        return [
-            'codigo'=>'code','descricao'=>'description','grupo_produto'=>'product_category','categoria'=>'legacy_product_category','tipo'=>'material_type',
-            'caracteristica'=>'material_feature','unidade'=>'primary_unit','largura'=>'width','gramagem'=>'grammage',
-            'stock_minimo'=>'min_stock','stock_maximo'=>'max_stock','ponto_reposicao'=>'reorder_point',
-            'prazo_entrega_dias'=>'lead_time_days','fornecedor_preferencial'=>'preferred_supplier',
-            'preco_padrao'=>'standard_price','armazem_standard'=>'standard_warehouse',
-            'localizacao_standard'=>'preferred_location','email_alerta'=>'alert_email','alertas_ativos'=>'alert_enabled',
-            'controlar_lote'=>'lot_controlled','controlar_bobina'=>'roll_controlled',
-            'permitir_consumo_parcial'=>'allow_partial_consumption','estado'=>'status','observacoes'=>'notes',
-        ];
-    }
-
-    public static function templateColumns(): array { return array_keys(self::columns()); }
-
-    public static function read(string $path, string $extension): array
-    {
-        return ArticleSpreadsheet::readWithColumns($path,$extension,self::columns(),['codigo','descricao']);
-    }
-
-    public static function productGroups(): array { return self::PRODUCT_GROUPS; }
-
-    public static function normalizeProductGroup($value)
-    {
-        $value=trim((string)$value);if($value==='')return null;
-        $value=strtr($value,['Á'=>'A','À'=>'A','Â'=>'A','Ã'=>'A','á'=>'a','à'=>'a','â'=>'a','ã'=>'a','É'=>'E','Ê'=>'E','é'=>'e','ê'=>'e','Í'=>'I','í'=>'i','Ó'=>'O','Ô'=>'O','Õ'=>'O','ó'=>'o','ô'=>'o','õ'=>'o','Ú'=>'U','ú'=>'u','Ç'=>'C','ç'=>'c']);
-        $key=trim((string)preg_replace('/[^a-z0-9]+/','_',strtolower($value)),'_');
-        $aliases=['materia_prima'=>'raw_material','raw_material'=>'raw_material','subsidiario'=>'subsidiary','subsidiary'=>'subsidiary','produto_acabado'=>'finished_product','finished_product'=>'finished_product','mercadoria'=>'merchandise','merchandise'=>'merchandise','embalagem'=>'packaging','packaging'=>'packaging','outro'=>'other','other'=>'other','consumivel'=>'consumable','consumable'=>'consumable'];
-        return $aliases[$key]??null;
-    }
-
-    public static function productGroupLabel($group): string { return self::PRODUCT_GROUPS[$group]??($group==='consumable'?'Consumível (legado)':''); }
 }
