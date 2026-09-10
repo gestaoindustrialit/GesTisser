@@ -80,9 +80,9 @@ final class ArticleSpreadsheet
     {
         $zip=new ZipArchive(); if ($zip->open($path)!==true) { throw new RuntimeException('O ficheiro Excel não é um .xlsx válido.'); }
         $shared=[]; $sharedXml=$zip->getFromName('xl/sharedStrings.xml');
-        if ($sharedXml!==false) { $sharedXml=preg_replace('/\sxmlns="[^"]+"/','',$sharedXml,1); $xml=simplexml_load_string($sharedXml); foreach ($xml->si as $si) { $parts=[]; foreach ($si->xpath('.//t') as $text) { $parts[]=(string)$text; } $shared[]=implode('',$parts); } }
+        if ($sharedXml!==false) { $xml=simplexml_load_string(self::normalizeSpreadsheetXml($sharedXml)); if ($xml!==false) { foreach ($xml->si as $si) { $parts=[]; foreach ($si->xpath('.//t') as $text) { $parts[]=(string)$text; } $shared[]=implode('',$parts); } } }
         $matrices=[]; foreach (self::worksheetPaths($zip) as $sheetPath) { $sheetXml=$zip->getFromName($sheetPath); if ($sheetXml===false) { continue; }
-            $sheetXml=preg_replace('/\sxmlns="[^"]+"/','',$sheetXml,1); $xml=simplexml_load_string($sheetXml); if ($xml===false) { continue; } $matrix=[];
+            $xml=simplexml_load_string(self::normalizeSpreadsheetXml($sheetXml)); if ($xml===false) { continue; } $matrix=[];
             foreach ($xml->sheetData->row as $row) { $values=[];$sequentialIndex=0;foreach ($row->c as $cell) { preg_match('/[A-Z]+/i',(string)$cell['r'],$m);$index=isset($m[0])?self::columnIndex(strtoupper($m[0])):$sequentialIndex;$type=(string)$cell['t'];$value=$type==='inlineStr'?self::inlineString($cell):(string)$cell->v;if($type==='s'){$value=$shared[(int)$value]??'';}$values[$index]=$value;$sequentialIndex=$index+1;}if($values){$matrix[]=array_replace(array_fill(0,max(array_keys($values))+1,''),$values);} }
             $matrices[]=$matrix;
         } $zip->close(); if (!$matrices) { throw new RuntimeException('Não foram encontradas folhas no ficheiro Excel.'); } return $matrices;
@@ -101,15 +101,12 @@ final class ArticleSpreadsheet
         $relationshipsXml=$zip->getFromName('xl/_rels/workbook.xml.rels');
         if ($workbookXml===false || $relationshipsXml===false) { return self::archiveWorksheetPaths($zip); }
 
-        $workbookXml=preg_replace('/\sxmlns="[^"]+"/','',$workbookXml,1);
-        $relationshipsXml=preg_replace('/\sxmlns="[^"]+"/','',$relationshipsXml,1);
-        $workbook=simplexml_load_string($workbookXml);
-        $relationships=simplexml_load_string($relationshipsXml);
+        $workbook=simplexml_load_string(self::normalizeSpreadsheetXml($workbookXml));
+        $relationships=simplexml_load_string(self::normalizeSpreadsheetXml($relationshipsXml));
         if ($workbook===false || $relationships===false) { return self::archiveWorksheetPaths($zip); }
         $targets=[]; foreach ($relationships->Relationship as $relationship) { $targets[(string)$relationship['Id']]=(string)$relationship['Target']; }
         $paths=[]; foreach ($workbook->sheets->sheet ?? [] as $sheet) {
-            $attributes=$sheet->attributes('http://schemas.openxmlformats.org/officeDocument/2006/relationships');
-            $relationshipId=(string)($attributes['id'] ?? '');
+            $relationshipId=(string)($sheet['id'] ?? '');
             $target=str_replace('\\','/',$targets[$relationshipId]??''); if ($target==='') { continue; }
             if ($target[0]==='/') { $paths[]=ltrim($target,'/'); continue; }
             while (strpos($target,'../')===0) { $target=substr($target,3); }
@@ -120,6 +117,18 @@ final class ArticleSpreadsheet
         // worksheet stored in the archive instead of silently missing its header.
         foreach (self::archiveWorksheetPaths($zip) as $entry) { if (!in_array($entry,$paths,true)) { $paths[]=$entry; } }
         return $paths ?: ['xl/worksheets/sheet1.xml'];
+    }
+
+    private static function normalizeSpreadsheetXml(string $xml): string
+    {
+        if (substr($xml,0,3)==="\xEF\xBB\xBF") { $xml=substr($xml,3); }
+        // SimpleXML exposes prefixed spreadsheet elements through their namespace,
+        // while the reader deliberately uses the namespace-neutral OOXML names.
+        $xml=(string)preg_replace('/<(\/?)\s*[A-Za-z_][A-Za-z0-9_.-]*:([A-Za-z_][A-Za-z0-9_.-]*)/','<$1$2',$xml);
+        $xml=(string)preg_replace('/\s+xmlns(?::[A-Za-z_][A-Za-z0-9_.-]*)?\s*=\s*(["\'])[^"\']*\1/','',$xml);
+        // Namespace declarations have gone, so attributes such as r:id and
+        // x14ac:dyDescent must also be made namespace-neutral for valid XML.
+        return (string)preg_replace('/(\s)[A-Za-z_][A-Za-z0-9_.-]*:([A-Za-z_][A-Za-z0-9_.-]*)(\s*=)/','$1$2$3',$xml);
     }
 
     private static function archiveWorksheetPaths(ZipArchive $zip): array

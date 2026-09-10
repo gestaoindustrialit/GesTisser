@@ -58,4 +58,17 @@ assert_same('raw_material',RawMaterialSpreadsheet::normalizeProductGroup($rows[0
 assert_same('subsidiary',RawMaterialSpreadsheet::normalizeProductGroup($rows[1]['grupo_produto']),'A linha de tinta não ficou em Subsidiario.');
 assert_same(1.25,(float)str_replace(',','.',(string)$rows[0]['largura']),'O decimal com vírgula não foi aceite.');
 assert_same(2.5,(float)str_replace(',','.',(string)$rows[1]['largura']),'O decimal com ponto não foi aceite.');
+
+// Some XLSX producers qualify every OOXML element instead of using a default
+// namespace. The importer must treat those documents exactly like Excel files.
+$tmp=tempnam(sys_get_temp_dir(),'raw_material_prefixed_xlsx_');$zip=new ZipArchive();$zip->open($tmp,ZipArchive::CREATE|ZipArchive::OVERWRITE);
+$zip->addFromString('[Content_Types].xml','<?xml version="1.0"?><Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"/>');
+$zip->addFromString('xl/workbook.xml',"\xEF\xBB\xBF".'<?xml version="1.0"?><x:workbook xmlns:x="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><x:sheets><x:sheet name="Dados" sheetId="1" r:id="rId1"/></x:sheets></x:workbook>');
+$zip->addFromString('xl/_rels/workbook.xml.rels','<?xml version="1.0"?><p:Relationships xmlns:p="http://schemas.openxmlformats.org/package/2006/relationships"><p:Relationship Id="rId1" Target="worksheets/sheet1.xml"/></p:Relationships>');
+$zip->addFromString('xl/sharedStrings.xml','<?xml version="1.0"?><x:sst xmlns:x="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><x:si><x:t>codigo</x:t></x:si><x:si><x:r><x:t>descri</x:t></x:r><x:r><x:t>cao</x:t></x:r></x:si><x:si><x:t>MP-09</x:t></x:si><x:si><x:t>Polipropileno</x:t></x:si></x:sst>');
+$zip->addFromString('xl/worksheets/sheet1.xml','<?xml version="1.0"?><x:worksheet xmlns:x="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:x14ac="urn:test"><x:sheetData><x:row x14ac:dyDescent="0.25"><x:c r="A1" t="s"><x:v>0</x:v></x:c><x:c r="B1" t="s"><x:v>1</x:v></x:c></x:row><x:row><x:c r="A2" t="s"><x:v>2</x:v></x:c><x:c r="B2" t="s"><x:v>3</x:v></x:c></x:row></x:sheetData></x:worksheet>');
+$zip->close();
+try{$rows=RawMaterialSpreadsheet::read($tmp,'xlsx');}finally{@unlink($tmp);}
+assert_same('MP-09',$rows[0]['codigo'],'Os elementos XLSX com namespace prefixado não foram interpretados.');
+assert_same('Polipropileno',$rows[0]['descricao'],'As shared strings com namespace prefixado não foram interpretadas.');
 echo "XLSX validado: ráfia=Materia Prima; tinta=Subsidiario.\n";
