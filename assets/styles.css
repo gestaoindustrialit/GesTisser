@@ -1158,6 +1158,7 @@ body {
 .machine-file-circuit .machine-file-icon { color: #a95016; background: #ffeadb; }
 .machine-file-certificate .machine-file-icon { color: #28703a; background: #e4f4e8; }
 .machine-file-compliance .machine-file-icon { color: #176b54; background: #dff4ed; }
+.machine-file-calibration .machine-file-icon { color: #17669a; background: #e1f1fb; }
 .machine-file-modification .machine-file-icon { color: #7555a5; background: #f0eafb; }
 .machine-file-image .machine-file-icon { color: #24716d; background: #dff3f1; }
 .machine-file-spreadsheet .machine-file-icon { color: #28703a; background: #e4f4e8; }

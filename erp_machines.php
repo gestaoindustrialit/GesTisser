@@ -41,7 +41,7 @@ function gt_machine_upload_error_message(int $error): string
     return 'Não foi possível carregar um dos ficheiros.';
 }
 
-function gt_save_machine_upload(PDO $pdo, int $machineId, int $userId, array $file, array $allowedMimeTypes): void
+function gt_save_machine_upload(PDO $pdo, int $machineId, int $userId, array $file, array $allowedMimeTypes)
 {
     if (($file['error'] ?? UPLOAD_ERR_NO_FILE) === UPLOAD_ERR_NO_FILE) {
         return;
