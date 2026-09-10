@@ -24,6 +24,15 @@ try{$rows=RawMaterialSpreadsheet::read($tmp,'csv');}finally{@unlink($tmp);}
 assert_same('MP-03',$rows[0]['codigo'],'O cabeçalho code não foi reconhecido.');
 assert_same('Masterbatch',$rows[0]['descricao'],'O cabeçalho description não foi reconhecido.');
 
+$tmp=tempnam(sys_get_temp_dir(),'raw_material_windows_csv_');
+$windowsCsv=iconv('UTF-8','Windows-1252',"Código;Descrição;Observações\nMP-04;Polietileno reciclado;Produção\n");
+if($windowsCsv===false)throw new RuntimeException('Não foi possível preparar o CSV Windows-1252 de teste.');
+file_put_contents($tmp,$windowsCsv);
+try{$rows=RawMaterialSpreadsheet::read($tmp,'csv');}finally{@unlink($tmp);}
+assert_same('MP-04',$rows[0]['codigo'],'O código com acento num CSV Windows-1252 não foi reconhecido.');
+assert_same('Polietileno reciclado',$rows[0]['descricao'],'A descrição com acento num CSV Windows-1252 não foi reconhecida.');
+assert_same('Produção',$rows[0]['observacoes'],'Os valores do CSV Windows-1252 não foram convertidos para UTF-8.');
+
 $templateHeaders=RawMaterialSpreadsheet::templateColumns();
 assert_same(count($templateHeaders),count(array_unique(array_values(RawMaterialSpreadsheet::columns()))),'O modelo não deve repetir aliases equivalentes.');
 

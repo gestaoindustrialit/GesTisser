@@ -65,7 +65,12 @@ final class ArticleSpreadsheet
         elseif(substr($contents,0,2)==="\xFE\xFF"){$encoding='UTF-16BE';$contents=substr($contents,2);}
         elseif(substr($contents,0,3)==="\xEF\xBB\xBF") { return substr($contents,3); }
         elseif(strpos(substr($contents,0,200),"\0")!==false){$even=$odd=0;$sample=substr($contents,0,200);for($i=0,$length=strlen($sample);$i<$length;$i++){if($sample[$i]==="\0"){if($i%2===0)$even++;else$odd++;}}$encoding=$odd>=$even?'UTF-16LE':'UTF-16BE';}
-        if($encoding===''){return $contents;}
+        // Excel on Windows commonly saves a plain "CSV (Comma delimited)" in
+        // Windows-1252 without a BOM. Accented headings such as Código and
+        // Descrição are then invalid UTF-8 and used to normalize to c_digo and
+        // descri_o, preventing the required columns from being found.
+        if($encoding===''&&preg_match('//u',$contents)===1){return $contents;}
+        if($encoding===''){$encoding='Windows-1252';}
         if(function_exists('mb_convert_encoding')){return mb_convert_encoding($contents,'UTF-8',$encoding);}
         if(function_exists('iconv')){$converted=iconv($encoding,'UTF-8//IGNORE',$contents);if($converted!==false)return $converted;}
         throw new RuntimeException('O CSV está em '.$encoding.', mas o servidor não possui suporte para converter a codificação.');
