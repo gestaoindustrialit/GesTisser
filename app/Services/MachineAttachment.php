@@ -52,3 +52,36 @@ function gt_machine_attachment_mime(string $path, string $originalName): string
 
     return '';
 }
+
+/**
+ * Build the application route used to serve an attachment.
+ *
+ * Use the ERP front controller because some installations only publish the
+ * established application entry points. A separate PHP file can be handled by
+ * the hosting fallback and return an unrelated HTML site inside the PDF frame.
+ */
+function gt_machine_attachment_url(array $attachment): string
+{
+    return 'erp.php?page=machine_attachment&id=' . rawurlencode((string) ((int) ($attachment['id'] ?? 0)));
+}
+
+/**
+ * Resolve a stored machine path while preventing access outside its upload
+ * directory. Returns an empty string for missing or unsafe paths.
+ */
+function gt_machine_attachment_path(string $applicationRoot, string $storedPath): string
+{
+    $prefix = 'storage/uploads/machines/';
+    if (strncmp($storedPath, $prefix, strlen($prefix)) !== 0) {
+        return '';
+    }
+
+    $uploadRoot = realpath(rtrim($applicationRoot, '/\\') . '/' . rtrim($prefix, '/'));
+    $resolved = realpath(rtrim($applicationRoot, '/\\') . '/' . $storedPath);
+    if ($uploadRoot === false || $resolved === false || !is_file($resolved)) {
+        return '';
+    }
+
+    $uploadRoot .= DIRECTORY_SEPARATOR;
+    return strncmp($resolved, $uploadRoot, strlen($uploadRoot)) === 0 ? $resolved : '';
+}
