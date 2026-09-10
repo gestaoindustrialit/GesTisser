@@ -366,6 +366,7 @@ require __DIR__ . '/partials/header.php';
                 <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Fechar"></button>
             </div>
             <div class="modal-body">
+                <div class="machine-pdf-status" id="machinePdfStatus" role="status">A carregar documento…</div>
                 <iframe id="machinePdfFrame" title="Pré-visualização do documento PDF"></iframe>
             </div>
             <div class="modal-footer">
@@ -411,19 +412,45 @@ document.addEventListener('DOMContentLoaded', function () {
     const existingFiles = document.getElementById('machineExistingFiles');
     const pdfModalElement = document.getElementById('machinePdfModal');
     const pdfFrame = document.getElementById('machinePdfFrame');
+    const pdfStatus = document.getElementById('machinePdfStatus');
     const pdfTitle = document.getElementById('machinePdfModalLabel');
     const pdfOpen = document.getElementById('machinePdfOpen');
     let previewReturnsToEditor = false;
     let restoringEditorAfterPreview = false;
     let pendingPdfPreview = null;
+    let pdfObjectUrl = null;
+    let pdfRequestNumber = 0;
     const openPdfModal = function (url, name) {
         pdfTitle.textContent = name || 'Documento PDF';
-        pdfFrame.src = url;
         pdfOpen.href = url;
+        pdfFrame.removeAttribute('src');
+        pdfFrame.hidden = true;
+        pdfStatus.hidden = false;
+        pdfStatus.textContent = 'A carregar documento…';
         bootstrap.Modal.getOrCreateInstance(pdfModalElement).show();
+        const requestNumber = ++pdfRequestNumber;
+        fetch(url, { credentials: 'same-origin' })
+            .then(function (response) {
+                if (!response.ok) throw new Error('Não foi possível obter o documento.');
+                return response.blob();
+            })
+            .then(function (blob) {
+                if (requestNumber !== pdfRequestNumber) return;
+                if (pdfObjectUrl) URL.revokeObjectURL(pdfObjectUrl);
+                // A blob URL is not affected by X-Frame-Options/CSP headers
+                // injected by some hosts into the original PHP response.
+                pdfObjectUrl = URL.createObjectURL(blob);
+                pdfFrame.src = pdfObjectUrl;
+                pdfFrame.hidden = false;
+                pdfStatus.hidden = true;
+            })
+            .catch(function (error) {
+                if (requestNumber !== pdfRequestNumber) return;
+                pdfStatus.textContent = error.message || 'Não foi possível apresentar o documento.';
+            });
     };
     const showPdfPreview = function (url, name) {
-        if (!pdfModalElement || !pdfFrame || !pdfTitle || !pdfOpen || !window.bootstrap) return false;
+        if (!pdfModalElement || !pdfFrame || !pdfStatus || !pdfTitle || !pdfOpen || !window.bootstrap) return false;
         const editorIsOpen = modal && modal.classList.contains('show');
         if (editorIsOpen) {
             // Bootstrap does not support stacked modals: the second modal can
@@ -444,7 +471,12 @@ document.addEventListener('DOMContentLoaded', function () {
     });
     if (pdfModalElement) {
         pdfModalElement.addEventListener('hidden.bs.modal', function () {
+            pdfRequestNumber++;
             if (pdfFrame) pdfFrame.removeAttribute('src');
+            if (pdfObjectUrl) {
+                URL.revokeObjectURL(pdfObjectUrl);
+                pdfObjectUrl = null;
+            }
             if (previewReturnsToEditor && modal) {
                 previewReturnsToEditor = false;
                 restoringEditorAfterPreview = true;

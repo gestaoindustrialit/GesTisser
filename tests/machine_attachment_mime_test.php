@@ -92,6 +92,10 @@ if (strpos($machinesSource, "modal.addEventListener('hidden.bs.modal'") === fals
     || strpos($machinesSource, 'restoringEditorAfterPreview') === false) {
     throw new RuntimeException('A pré-visualização pode ficar escondida atrás da edição da máquina.');
 }
+if (strpos($machinesSource, 'URL.createObjectURL(blob)') === false
+    || strpos($machinesSource, "fetch(url, { credentials: 'same-origin' })") === false) {
+    throw new RuntimeException('A pré-visualização continua dependente de incorporar diretamente a resposta do alojamento.');
+}
 
 unlink($pdfPath);
 unlink($namedTarget);
