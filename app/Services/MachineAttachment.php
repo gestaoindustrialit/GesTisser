@@ -65,6 +65,34 @@ function gt_machine_attachment_url(array $attachment): string
     return 'erp.php?page=machine_attachment&id=' . rawurlencode((string) ((int) ($attachment['id'] ?? 0)));
 }
 
+/** Return the compact visual identity inferred from the document file name. */
+function gt_machine_attachment_document_meta(string $fileName): array
+{
+    $normalized = strtoupper((string) preg_replace('/[^A-Z0-9]+/i', '-', pathinfo($fileName, PATHINFO_FILENAME)));
+    $types = [
+        'MAN' => ['label' => 'Manual', 'icon' => 'bi-book', 'tone' => 'manual'],
+        'SPR' => ['label' => 'Peças', 'icon' => 'bi-gear', 'tone' => 'spares'],
+        'CIR' => ['label' => 'Circuito', 'icon' => 'bi-lightning-charge', 'tone' => 'circuit'],
+        'CRT' => ['label' => 'Certificado', 'icon' => 'bi-patch-check', 'tone' => 'certificate'],
+        'MOD' => ['label' => 'Modificação', 'icon' => 'bi-pencil-square', 'tone' => 'modification'],
+    ];
+    foreach ($types as $code => $meta) {
+        if (preg_match('/(?:^|-)' . $code . '(?:-|$)/', $normalized) === 1) {
+            return ['code' => $code] + $meta;
+        }
+    }
+
+    $extension = strtolower(pathinfo($fileName, PATHINFO_EXTENSION));
+    if (in_array($extension, ['jpg', 'jpeg', 'png', 'webp'], true)) {
+        return ['code' => 'IMG', 'label' => 'Imagem', 'icon' => 'bi-image', 'tone' => 'image'];
+    }
+    if (in_array($extension, ['xls', 'xlsx', 'csv'], true)) {
+        return ['code' => 'TAB', 'label' => 'Tabela', 'icon' => 'bi-file-earmark-spreadsheet', 'tone' => 'spreadsheet'];
+    }
+
+    return ['code' => 'DOC', 'label' => 'Documento', 'icon' => 'bi-file-earmark-text', 'tone' => 'document'];
+}
+
 /**
  * Resolve a stored machine path while preventing access outside its upload
  * directory. Returns an empty string for missing or unsafe paths.
