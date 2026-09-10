@@ -52,3 +52,93 @@ function gt_machine_attachment_mime(string $path, string $originalName): string
 
     return '';
 }
+
+/**
+ * Build the application route used to serve an attachment.
+ *
+ * Use the ERP front controller because some installations only publish the
+ * established application entry points. A separate PHP file can be handled by
+ * the hosting fallback and return an unrelated HTML site inside the PDF frame.
+ */
+function gt_machine_attachment_url(array $attachment): string
+{
+    return 'erp.php?page=machine_attachment&id=' . rawurlencode((string) ((int) ($attachment['id'] ?? 0)));
+}
+
+/**
+ * Resolve a stored machine path while preventing access outside its upload
+ * directory. Returns an empty string for missing or unsafe paths.
+ */
+function gt_machine_attachment_path(string $applicationRoot, string $storedPath): string
+{
+    $prefix = 'storage/uploads/machines/';
+    if (strncmp($storedPath, $prefix, strlen($prefix)) !== 0) {
+        return '';
+    }
+
+    $uploadRoot = realpath(rtrim($applicationRoot, '/\\') . '/' . rtrim($prefix, '/'));
+    $resolved = realpath(rtrim($applicationRoot, '/\\') . '/' . $storedPath);
+    if ($uploadRoot === false || $resolved === false || !is_file($resolved)) {
+        return '';
+    }
+
+    $uploadRoot .= DIRECTORY_SEPARATOR;
+    return strncmp($resolved, $uploadRoot, strlen($uploadRoot)) === 0 ? $resolved : '';
+}
+
+/** Keep the visible name while removing characters that can change the path. */
+function gt_machine_attachment_safe_name(string $name, string $fallback): string
+{
+    $name = preg_replace('/[\\x00-\\x1F\\x7F\\/\\\\]+/u', '_', trim($name));
+    $name = trim((string) $name, " .\t\n\r\0\x0B");
+    return $name !== '' && $name !== '.' && $name !== '..' ? $name : $fallback;
+}
+
+function gt_machine_attachment_directory_name(int $machineId, string $machineName): string
+{
+    return gt_machine_attachment_safe_name($machineName, 'maquina') . '__' . $machineId;
+}
+
+/** Return an unused path, preserving the original name whenever possible. */
+function gt_machine_attachment_target(string $directory, string $originalName): string
+{
+    $fileName = gt_machine_attachment_safe_name($originalName, 'documento');
+    $target = rtrim($directory, '/\\') . DIRECTORY_SEPARATOR . $fileName;
+    if (!file_exists($target)) return $target;
+
+    $extension = pathinfo($fileName, PATHINFO_EXTENSION);
+    $base = pathinfo($fileName, PATHINFO_FILENAME);
+    for ($copy = 2; file_exists($target); $copy++) {
+        $target = rtrim($directory, '/\\') . DIRECTORY_SEPARATOR . $base . ' (' . $copy . ')'
+            . ($extension !== '' ? '.' . $extension : '');
+    }
+    return $target;
+}
+
+/**
+ * Move all existing documents to the folder derived from the current machine
+ * name. Database paths are updated only after each file has moved successfully.
+ */
+function gt_machine_relocate_attachments(PDO $pdo, string $applicationRoot, int $machineId, string $machineName): void
+{
+    $relativeDirectory = 'storage/uploads/machines/' . gt_machine_attachment_directory_name($machineId, $machineName);
+    $directory = rtrim($applicationRoot, '/\\') . '/' . $relativeDirectory;
+    if (!is_dir($directory) && !mkdir($directory, 0775, true) && !is_dir($directory)) {
+        throw new RuntimeException('Não foi possível preparar a pasta de documentos da máquina.');
+    }
+
+    $stmt = $pdo->prepare('SELECT id, original_name, file_path FROM erp_machine_attachments WHERE machine_id=? AND deleted_at IS NULL');
+    $stmt->execute([$machineId]);
+    foreach ($stmt->fetchAll(PDO::FETCH_ASSOC) as $attachment) {
+        $source = gt_machine_attachment_path($applicationRoot, (string) $attachment['file_path']);
+        if ($source === '') continue;
+        if (dirname($source) === realpath($directory)) continue;
+        $target = gt_machine_attachment_target($directory, (string) $attachment['original_name']);
+        if (!rename($source, $target)) {
+            throw new RuntimeException('Não foi possível reorganizar os documentos da máquina.');
+        }
+        $newPath = $relativeDirectory . '/' . basename($target);
+        $pdo->prepare('UPDATE erp_machine_attachments SET file_path=? WHERE id=?')->execute([$newPath, (int) $attachment['id']]);
+        @rmdir(dirname($source));
+    }
+}

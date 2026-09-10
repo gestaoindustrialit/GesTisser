@@ -63,17 +63,20 @@ function gt_save_machine_upload(PDO $pdo, int $machineId, int $userId, array $fi
     if (!in_array($mime, $allowedMimeTypes, true)) {
         throw new RuntimeException('Tipo de ficheiro não permitido.');
     }
-    $extension = strtolower(pathinfo($originalName, PATHINFO_EXTENSION));
-    $safeName = 'machine_' . $machineId . '_' . bin2hex(random_bytes(10)) . ($extension !== '' ? '.' . $extension : '');
-    $uploadDir = __DIR__ . '/storage/uploads/machines';
+    $machineNameStmt = $pdo->prepare('SELECT name FROM erp_machines WHERE id=? AND deleted_at IS NULL');
+    $machineNameStmt->execute([$machineId]);
+    $machineName = (string) $machineNameStmt->fetchColumn();
+    if ($machineName === '') throw new RuntimeException('Máquina não encontrada.');
+    $relativeDir = 'storage/uploads/machines/' . gt_machine_attachment_directory_name($machineId, $machineName);
+    $uploadDir = __DIR__ . '/' . $relativeDir;
     if (!is_dir($uploadDir) && !mkdir($uploadDir, 0775, true) && !is_dir($uploadDir)) {
         throw new RuntimeException('Não foi possível preparar a pasta de uploads.');
     }
-    $targetPath = $uploadDir . '/' . $safeName;
+    $targetPath = gt_machine_attachment_target($uploadDir, $originalName);
     if (!move_uploaded_file($tmpName, $targetPath)) {
         throw new RuntimeException('Não foi possível guardar o ficheiro.');
     }
-    $relativePath = 'storage/uploads/machines/' . $safeName;
+    $relativePath = $relativeDir . '/' . basename($targetPath);
     $stmt = $pdo->prepare('INSERT INTO erp_machine_attachments(machine_id, original_name, file_path, mime_type, file_size, uploaded_by) VALUES (?, ?, ?, ?, ?, ?)');
     $stmt->execute([$machineId, $originalName, $relativePath, $mime, $size, $userId]);
 }
@@ -158,18 +161,22 @@ function gt_save_machine_chunk(PDO $pdo, int $machineId, int $userId, array $fil
     if (!in_array($mime, $allowedMimeTypes, true)) {
         throw new RuntimeException('Tipo de ficheiro não permitido.');
     }
-    $extension = strtolower(pathinfo($originalName, PATHINFO_EXTENSION));
-    $safeName = 'machine_' . $machineId . '_' . bin2hex(random_bytes(10)) . ($extension !== '' ? '.' . $extension : '');
-    $uploadDir = __DIR__ . '/storage/uploads/machines';
+    $machineNameStmt = $pdo->prepare('SELECT name FROM erp_machines WHERE id=? AND deleted_at IS NULL');
+    $machineNameStmt->execute([$machineId]);
+    $machineName = (string) $machineNameStmt->fetchColumn();
+    if ($machineName === '') throw new RuntimeException('Máquina não encontrada.');
+    $relativeDir = 'storage/uploads/machines/' . gt_machine_attachment_directory_name($machineId, $machineName);
+    $uploadDir = __DIR__ . '/' . $relativeDir;
     if (!is_dir($uploadDir) && !mkdir($uploadDir, 0775, true) && !is_dir($uploadDir)) {
         throw new RuntimeException('Não foi possível preparar a pasta de uploads.');
     }
-    if (!rename($assembled, $uploadDir . '/' . $safeName)) {
+    $targetPath = gt_machine_attachment_target($uploadDir, $originalName);
+    if (!rename($assembled, $targetPath)) {
         throw new RuntimeException('Não foi possível guardar o ficheiro.');
     }
     @rmdir($chunkDir);
     $pdo->prepare('INSERT INTO erp_machine_attachments(machine_id, original_name, file_path, mime_type, file_size, uploaded_by) VALUES (?, ?, ?, ?, ?, ?)')
-        ->execute([$machineId, $originalName, 'storage/uploads/machines/' . $safeName, $mime, $size, $userId]);
+        ->execute([$machineId, $originalName, $relativeDir . '/' . basename($targetPath), $mime, $size, $userId]);
     return true;
 }
 
@@ -214,6 +221,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     $old->execute([$id]);
                     $before = $old->fetch(PDO::FETCH_ASSOC) ?: [];
                     $pdo->prepare('UPDATE erp_machines SET code=?,name=?,brand=?,model=?,serial_number=?,manufacturing_year=?,department_id=?,location=?,owner_user_id=?,status=?,criticality=?,nominal_capacity=?,capacity_unit=?,cycle_time=?,cycle_time_unit=?,operators_required=?,supplier=?,service_provider=?,purchase_date=?,next_maintenance_date=?,manual_url=?,characteristics=?,risks=?,limitations=?,notes=?,updated_by=?,updated_at=CURRENT_TIMESTAMP,is_active=CASE WHEN ?="inactive" THEN 0 ELSE 1 END WHERE id=?')->execute(array_merge($data, [$data[9], $id]));
+                    gt_machine_relocate_attachments($pdo, __DIR__, $id, $data[1]);
                     gt_org_audit($pdo, $userId, 'erp.machines.update', 'erp_machines', $id, $before, $_POST);
                     $uploadedCount = gt_save_machine_uploads($pdo, $id, $userId, $_FILES['machine_files'] ?? [], $machineAttachmentMimeTypes);
                     $flashSuccess = 'Máquina atualizada.' . ($uploadedCount ? ' Ficheiros adicionados: ' . $uploadedCount . '.' : '');
@@ -327,7 +335,7 @@ require __DIR__ . '/partials/header.php';
                 <div class="machine-card-head"><div><span class="machine-status-pill"><?= h($statusLabels[$m['status']] ?? $m['status']) ?></span><h2><?= h($m['code'] . ' · ' . $m['name']) ?></h2><p><?= h(trim(($m['brand'] ?? '') . ' ' . ($m['model'] ?? '')) ?: 'Marca e modelo por definir') ?></p></div><span class="criticality <?= h($m['criticality'] ?? 'medium') ?>"><?= h($criticalityLabels[$m['criticality']] ?? $m['criticality']) ?></span></div>
                 <div class="machine-meta"><div><span>Localização</span><strong><?= h($m['department_name'] ?: $m['location'] ?: 'Por definir') ?></strong></div><div><span>Responsável</span><strong><?= h($m['owner_name'] ?: 'Por definir') ?></strong></div><div><span>Capacidade nominal</span><strong><?= h(trim(($m['nominal_capacity'] ?? '') . ' ' . ($m['capacity_unit'] ?? '')) ?: 'Por definir') ?></strong></div><div><span>Operadores autónomos</span><strong><?= h((string) $m['autonomous']) ?></strong></div><div><span>N.º série</span><strong><?= h($m['serial_number'] ?: '—') ?></strong></div><div><span>Próxima manutenção</span><strong><?= h($m['next_maintenance_date'] ?: '—') ?></strong></div></div>
                 <p class="machine-notes"><?= h($m['notes'] ?: 'Sem observações.') ?></p>
-                <?php if (!empty($m['_attachments'])): ?><div class="machine-file-chips"><?php foreach ($m['_attachments'] as $attachment): ?><?php $isPdf = ($attachment['mime_type'] ?? '') === 'application/pdf' || strtolower(pathinfo((string) ($attachment['original_name'] ?? ''), PATHINFO_EXTENSION)) === 'pdf'; ?><a href="<?= h($attachment['file_path']) ?>" target="_blank" rel="noopener"<?= $isPdf ? ' class="machine-pdf-preview" data-pdf-name="' . h((string) $attachment['original_name']) . '"' : '' ?>><i class="bi bi-paperclip"></i><?= h($attachment['original_name']) ?></a><?php endforeach; ?></div><?php endif; ?>
+                <?php if (!empty($m['_attachments'])): ?><div class="machine-file-chips"><?php foreach ($m['_attachments'] as $attachment): ?><?php $isPdf = ($attachment['mime_type'] ?? '') === 'application/pdf' || strtolower(pathinfo((string) ($attachment['original_name'] ?? ''), PATHINFO_EXTENSION)) === 'pdf'; ?><a href="<?= h(gt_machine_attachment_url($attachment)) ?>" target="_blank" rel="noopener"<?= $isPdf ? ' class="machine-pdf-preview" data-pdf-name="' . h((string) $attachment['original_name']) . '"' : '' ?>><i class="bi bi-paperclip"></i><?= h($attachment['original_name']) ?></a><?php endforeach; ?></div><?php endif; ?>
                 <div class="machine-actions"><a class="btn btn-outline-secondary" href="hr_skills.php?machine_id=<?= (int) $m['id'] ?>">Competências</a><button class="btn btn-primary" type="button" data-bs-toggle="modal" data-bs-target="#machineModal" data-machine='<?= h(json_encode($m, JSON_HEX_APOS | JSON_HEX_QUOT | JSON_UNESCAPED_UNICODE)) ?>'>Editar</button><form method="post" class="d-inline"><?= csrf_input() ?><input type="hidden" name="action" value="delete"><input type="hidden" name="id" value="<?= (int) $m['id'] ?>"><button class="btn btn-danger-subtle">Eliminar</button></form></div>
             </article>
         <?php endforeach; ?>
@@ -423,7 +431,7 @@ document.addEventListener('DOMContentLoaded', function () {
             const item = document.createElement('div');
             item.className = 'machine-existing-file';
             const link = document.createElement('a');
-            link.href = file.file_path || '#';
+            link.href = file.id ? 'erp.php?page=machine_attachment&id=' + encodeURIComponent(file.id) : '#';
             link.target = '_blank';
             link.rel = 'noopener';
             link.textContent = file.original_name || 'Ficheiro';
