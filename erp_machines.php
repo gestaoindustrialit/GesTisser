@@ -413,12 +413,28 @@ document.addEventListener('DOMContentLoaded', function () {
     const pdfFrame = document.getElementById('machinePdfFrame');
     const pdfTitle = document.getElementById('machinePdfModalLabel');
     const pdfOpen = document.getElementById('machinePdfOpen');
-    const showPdfPreview = function (url, name) {
-        if (!pdfModalElement || !pdfFrame || !pdfTitle || !pdfOpen || !window.bootstrap) return false;
+    let previewReturnsToEditor = false;
+    let restoringEditorAfterPreview = false;
+    let pendingPdfPreview = null;
+    const openPdfModal = function (url, name) {
         pdfTitle.textContent = name || 'Documento PDF';
         pdfFrame.src = url;
         pdfOpen.href = url;
         bootstrap.Modal.getOrCreateInstance(pdfModalElement).show();
+    };
+    const showPdfPreview = function (url, name) {
+        if (!pdfModalElement || !pdfFrame || !pdfTitle || !pdfOpen || !window.bootstrap) return false;
+        const editorIsOpen = modal && modal.classList.contains('show');
+        if (editorIsOpen) {
+            // Bootstrap does not support stacked modals: the second modal can
+            // otherwise be rendered behind the machine editor and look empty.
+            previewReturnsToEditor = true;
+            pendingPdfPreview = { url: url, name: name };
+            bootstrap.Modal.getOrCreateInstance(modal).hide();
+        } else {
+            previewReturnsToEditor = false;
+            openPdfModal(url, name);
+        }
         return true;
     };
     document.addEventListener('click', function (event) {
@@ -429,6 +445,19 @@ document.addEventListener('DOMContentLoaded', function () {
     if (pdfModalElement) {
         pdfModalElement.addEventListener('hidden.bs.modal', function () {
             if (pdfFrame) pdfFrame.removeAttribute('src');
+            if (previewReturnsToEditor && modal) {
+                previewReturnsToEditor = false;
+                restoringEditorAfterPreview = true;
+                bootstrap.Modal.getOrCreateInstance(modal).show();
+            }
+        });
+    }
+    if (modal) {
+        modal.addEventListener('hidden.bs.modal', function () {
+            if (!pendingPdfPreview) return;
+            const preview = pendingPdfPreview;
+            pendingPdfPreview = null;
+            openPdfModal(preview.url, preview.name);
         });
     }
     const renderFiles = function (files) {
@@ -521,6 +550,11 @@ document.addEventListener('DOMContentLoaded', function () {
         })();
     });
     modal.addEventListener('show.bs.modal', function (event) {
+        // Returning from the PDF must preserve unsaved values in the editor.
+        if (restoringEditorAfterPreview) {
+            restoringEditorAfterPreview = false;
+            return;
+        }
         form.reset();
         form.querySelector('[name="id"]').value = '';
         title.textContent = 'Nova máquina';

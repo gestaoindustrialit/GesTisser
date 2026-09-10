@@ -87,6 +87,11 @@ if (strpos($machinesSource, 'const chunkSize = 512 * 1024;') === false
 if (strpos($machinesSource, 'JSON.parse(responseText)') === false) {
     throw new RuntimeException('O upload não trata respostas não-JSON do servidor.');
 }
+if (strpos($machinesSource, "modal.addEventListener('hidden.bs.modal'") === false
+    || strpos($machinesSource, 'previewReturnsToEditor') === false
+    || strpos($machinesSource, 'restoringEditorAfterPreview') === false) {
+    throw new RuntimeException('A pré-visualização pode ficar escondida atrás da edição da máquina.');
+}
 
 unlink($pdfPath);
 unlink($namedTarget);
