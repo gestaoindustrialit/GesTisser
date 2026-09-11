@@ -327,9 +327,12 @@ $pageTitle='ERP industrial'; require __DIR__.'/partials/header.php';
 <?php elseif ($page === 'warehouse'): ?>
       <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-3">
         <div><h2 class="h4 mb-1">Armazéns e posições</h2><p class="text-muted mb-0">Configure os locais físicos utilizados na gestão de stock.</p></div>
-        <?php if(erp_user_can($pdo,$user,'erp.master_data')):?><div class="d-flex gap-2"><a class="btn btn-primary" href="<?=h(erp_page_url('warehouse').'&new_warehouse=1')?>"><i class="bi bi-plus-lg me-1"></i>Novo armazém</a><a class="btn btn-outline-primary" href="<?=h(erp_page_url('warehouse').'&new_location=1')?>"><i class="bi bi-plus-lg me-1"></i>Nova posição</a></div><?php endif;?>
+        <div class="d-flex flex-wrap gap-2">
+          <?php if(erp_user_can($pdo,$user,'erp.stock_adjust')):?><button class="btn btn-primary" type="button" data-stock-movement-toggle aria-controls="stock-movement" aria-expanded="false"><i class="bi bi-arrow-left-right me-1"></i>Movimento</button><?php endif;?>
+          <?php if(erp_user_can($pdo,$user,'erp.master_data')):?><a class="btn btn-outline-primary" href="<?=h(erp_page_url('warehouse').'&new_warehouse=1')?>"><i class="bi bi-plus-lg me-1"></i>Novo armazém</a><a class="btn btn-outline-primary" href="<?=h(erp_page_url('warehouse').'&new_location=1')?>"><i class="bi bi-plus-lg me-1"></i>Nova posição</a><?php endif;?>
+        </div>
       </div>
-      <div class="card mb-3" id="stock-movement"><div class="card-body">
+      <div class="card mb-3" id="stock-movement" data-stock-movement-panel hidden><div class="card-body">
         <h2 class="h5">Movimento de stock</h2>
         <p class="text-muted">Registe uma entrada ou saída. Nas saídas, a quantidade é descontada automaticamente e o stock disponível é validado.</p>
         <form method="post" class="row g-2 align-items-end"><?=csrf_input()?><input type="hidden" name="action" value="stock_adjust">
@@ -378,6 +381,11 @@ $pageTitle='ERP industrial'; require __DIR__.'/partials/header.php';
 </div>
 <script>
 (function () {
+  var stockMovementToggle=document.querySelector('[data-stock-movement-toggle]');
+  var stockMovementPanel=document.querySelector('[data-stock-movement-panel]');
+  function setStockMovementOpen(open){if(!stockMovementToggle||!stockMovementPanel)return;stockMovementPanel.hidden=!open;stockMovementToggle.setAttribute('aria-expanded',open?'true':'false');stockMovementToggle.classList.toggle('btn-primary',!open);stockMovementToggle.classList.toggle('btn-outline-primary',open);if(open)stockMovementPanel.scrollIntoView({behavior:'smooth',block:'start'});}
+  if(stockMovementToggle&&stockMovementPanel){stockMovementToggle.addEventListener('click',function(){setStockMovementOpen(stockMovementPanel.hidden);});if(window.location.hash==='#stock-movement')setStockMovementOpen(true);}
+
   var stockItemType=document.querySelector('[data-stock-item-type]');
   function refreshStockItemField(){if(!stockItemType)return;document.querySelectorAll('[data-stock-item-field]').forEach(function(field){var active=field.dataset.stockItemField===stockItemType.value;field.classList.toggle('d-none',!active);var select=field.querySelector('select');select.disabled=!active;select.required=active;select.dispatchEvent(new Event('change',{bubbles:true}));});}
   if(stockItemType){stockItemType.addEventListener('change',refreshStockItemField);refreshStockItemField();}
