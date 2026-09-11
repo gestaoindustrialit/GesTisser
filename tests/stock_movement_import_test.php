@@ -1,10 +1,10 @@
 <?php
 declare(strict_types=1);
 require_once dirname(__DIR__).'/app/Services/StockMovementSpreadsheet.php';
-require_once dirname(__DIR__).'/app/Services/StockMovementImportService.php';
 require_once dirname(__DIR__).'/app/Services/SimpleXlsx.php';
 
 function stock_assert($condition,string $message):void{if(!$condition)throw new RuntimeException($message);}
+stock_assert(class_exists('StockMovementImportService', false), 'O importador deve ser carregado com o contrato da folha de cálculo.');
 
 $pdo=new PDO('sqlite::memory:');$pdo->setAttribute(PDO::ATTR_ERRMODE,PDO::ERRMODE_EXCEPTION);
 $pdo->exec('CREATE TABLE erp_warehouses(id INTEGER PRIMARY KEY AUTOINCREMENT,code TEXT,name TEXT,location TEXT,is_active INTEGER);CREATE TABLE erp_locations(id INTEGER PRIMARY KEY AUTOINCREMENT,warehouse_id INTEGER,code TEXT,description TEXT,is_active INTEGER);CREATE TABLE erp_raw_materials(id INTEGER PRIMARY KEY AUTOINCREMENT,code TEXT,product_category TEXT,standard_warehouse_id INTEGER);CREATE TABLE erp_settings(key TEXT PRIMARY KEY,value TEXT);CREATE TABLE erp_stock_balances(item_type TEXT,item_id INTEGER,warehouse_id INTEGER,location_id INTEGER,lot TEXT,physical_qty REAL,reserved_qty REAL DEFAULT 0,blocked_qty REAL DEFAULT 0,ordered_qty REAL DEFAULT 0,updated_at TEXT);CREATE TABLE erp_stock_movements(id INTEGER PRIMARY KEY AUTOINCREMENT,movement_number TEXT UNIQUE,movement_date TEXT,movement_type TEXT,item_type TEXT,item_id INTEGER,lot TEXT,quantity REAL,warehouse_from_id INTEGER,location_from_id INTEGER,warehouse_to_id INTEGER,location_to_id INTEGER,unit_cost REAL,total_cost REAL,source_type TEXT,reason TEXT,notes TEXT,created_by INTEGER);INSERT INTO erp_settings VALUES ("allow_negative_stock","0");INSERT INTO erp_warehouses(code,name,location,is_active) VALUES ("ARM","Principal","",1);INSERT INTO erp_locations(warehouse_id,code,description,is_active) VALUES (1,"GERAL","Geral",1);INSERT INTO erp_raw_materials(code,product_category,standard_warehouse_id) VALUES ("MP-01","raw_material",1),("TINTA-01","subsidiary",NULL);');
