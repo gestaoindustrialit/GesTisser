@@ -12,7 +12,6 @@ if ($requestedPage !== 'machines' && $requestedPage !== 'machine_attachment') {
     require_once __DIR__ . '/app/Services/RawMaterialSpreadsheet.php';
     require_once __DIR__ . '/app/Services/RawMaterialImportReferenceResolver.php';
     require_once __DIR__ . '/app/Services/StockMovementSpreadsheet.php';
-    require_once __DIR__ . '/app/Services/StockMovementImportService.php';
     require_once __DIR__ . '/app/Services/CustomerSpreadsheet.php';
     require_once __DIR__ . '/app/Services/SupplierSpreadsheet.php';
     require_once __DIR__ . '/app/Services/RoutingService.php';
@@ -230,6 +229,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             } elseif ($action === 'import_stock_movements' && erp_user_can($pdo, $user, 'erp.stock_adjust')) {
                 if(empty($_FILES['stock_movements_file']['tmp_name'])||!is_uploaded_file($_FILES['stock_movements_file']['tmp_name']))throw new RuntimeException('Selecione um ficheiro Excel ou CSV.');
                 $extension=strtolower(pathinfo((string)($_FILES['stock_movements_file']['name']??''),PATHINFO_EXTENSION));if(!in_array($extension,['xlsx','csv'],true))throw new RuntimeException('Formato inválido. Utilize .xlsx ou .csv.');
+                $stockMovementImportService=__DIR__.'/app/Services/StockMovementImportService.php';
+                if(!is_file($stockMovementImportService))throw new RuntimeException('O serviço de importação de movimentos de stock não está instalado. Contacte o administrador.');
+                require_once $stockMovementImportService;
                 $rows=StockMovementSpreadsheet::read($_FILES['stock_movements_file']['tmp_name'],$extension);$summary=StockMovementImportService::import($pdo,$rows,$userId);
                 erp_audit($pdo,$userId,'bulk_import','erp_stock_movements',null,[],['rows'=>$summary['imported'],'duplicates'=>$summary['skipped'],'general'=>$summary['general'],'format'=>$extension]);
                 $flashSuccess=$summary['imported'].' movimento(s) importado(s); stock atualizado.'.($summary['skipped']?' '.$summary['skipped'].' duplicado(s) ignorado(s).':'').($summary['general']?' '.$summary['general'].' colocado(s) na localização GERAL.':'');
