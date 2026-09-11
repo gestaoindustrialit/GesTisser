@@ -284,11 +284,7 @@ $erpNav = [
 $pageTitle='ERP industrial'; require __DIR__.'/partials/header.php';
 ?>
 <div class="container-fluid py-4">
-  <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-3"><div><h1 class="h3 mb-1">ERP industrial gesTISSER</h1><p class="text-muted mb-0">Dashboard e fundações modulares para compras, produção, armazém, qualidade, custos e rastreabilidade.</p></div></div>
   <?php if($flashSuccess):?><div class="alert alert-success"><?=h($flashSuccess)?></div><?php endif;?><?php if($flashError):?><div class="alert alert-danger"><?=h($flashError)?></div><?php endif;?>
-  <div class="erp-module-tabs d-flex flex-wrap gap-2 mb-4">
-    <?php foreach($erpNav as $key=>$items):?><a class="btn btn-sm <?= $page===$key?'btn-primary':'btn-outline-primary' ?>" href="<?=h(erp_page_url($key))?>"><?=h($items[0])?></a><?php endforeach;?>
-  </div>
   <main>
 <?php if ($page === 'overview'): ?>
       <div class="row g-3 mb-3">
