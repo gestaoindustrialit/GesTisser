@@ -54,8 +54,8 @@ final class InventoryService
     private static function registerSearchNormalizer(PDO $pdo): void
     {
         if($pdo->getAttribute(PDO::ATTR_DRIVER_NAME)!=='sqlite')return;
-        $flags=defined('PDO::SQLITE_DETERMINISTIC')?PDO::SQLITE_DETERMINISTIC:0;
-        $pdo->sqliteCreateFunction('erp_search_normalize',[self::class,'normalizeSearchText'],1,$flags);
+        // The optional flags argument is unavailable in older PDO SQLite builds.
+        $pdo->sqliteCreateFunction('erp_search_normalize',[self::class,'normalizeSearchText'],1);
     }
 
     public static function normalizeSearchText(string $value): string
