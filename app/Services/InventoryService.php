@@ -41,7 +41,7 @@ final class InventoryService
         $sql.=' ORDER BY inventory.code,inventory.warehouse_code,inventory.location_code,inventory.lot';$stmt=$pdo->prepare($sql);$stmt->execute($params);return$stmt->fetchAll(PDO::FETCH_ASSOC);
     }
 
-    private static function appendWordSearch(string &$sql,array &$params,string $expression,string $query): void
+    private static function appendWordSearch(string &$sql,array &$params,string $expression,string $query)
     {
         $normalized=self::normalizeSearchText($query);
         if($normalized==='')return;
@@ -51,11 +51,11 @@ final class InventoryService
         }
     }
 
-    private static function registerSearchNormalizer(PDO $pdo): void
+    private static function registerSearchNormalizer(PDO $pdo)
     {
         if($pdo->getAttribute(PDO::ATTR_DRIVER_NAME)!=='sqlite')return;
-        $flags=defined('PDO::SQLITE_DETERMINISTIC')?PDO::SQLITE_DETERMINISTIC:0;
-        $pdo->sqliteCreateFunction('erp_search_normalize',[self::class,'normalizeSearchText'],1,$flags);
+        // The optional flags argument is unavailable in older PDO SQLite builds.
+        $pdo->sqliteCreateFunction('erp_search_normalize',[self::class,'normalizeSearchText'],1);
     }
 
     public static function normalizeSearchText(string $value): string
