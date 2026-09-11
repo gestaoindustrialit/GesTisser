@@ -2,6 +2,7 @@
 declare(strict_types=1);
 require_once dirname(__DIR__).'/app/Services/StockMovementSpreadsheet.php';
 require_once dirname(__DIR__).'/app/Services/StockMovementImportService.php';
+require_once dirname(__DIR__).'/app/Services/SimpleXlsx.php';
 
 function stock_assert($condition,string $message):void{if(!$condition)throw new RuntimeException($message);}
 
@@ -19,6 +20,6 @@ stock_assert((float)$pdo->query("SELECT physical_qty FROM erp_stock_balances b J
 stock_assert((string)$pdo->query("SELECT w.code FROM erp_stock_balances b JOIN erp_raw_materials r ON r.id=b.item_id JOIN erp_warehouses w ON w.id=b.warehouse_id WHERE r.code='TINTA-01'")->fetchColumn()==='GERAL','Uma tinta sem armazém standard não foi colocada no GERAL.');
 $again=StockMovementImportService::import($pdo,$rows,7);stock_assert($again['imported']===0&&$again['skipped']===2,'Movimentos repetidos não foram ignorados.');
 
-$tmp=tempnam(sys_get_temp_dir(),'stock_csv_');file_put_contents($tmp,"documento;data_movimento;codigo_material;tipo_movimento;qtd\nX-1;10/09/2026;MP-01;Entrada;1\n");try{$parsed=StockMovementSpreadsheet::read($tmp,'csv');}finally{@unlink($tmp);}
-stock_assert(($parsed[0]['numero_movimento']??null)==='X-1'&&($parsed[0]['codigo_artigo']??null)==='MP-01','Os aliases da folha de movimentos não foram normalizados.');
+$tmp=SimpleXlsx::create([['documento','data_movimento','codigo_material','tipo_movimento','qtd'],['X-1','10/09/2026','MP-01','Entrada','1']],'Movimentos');try{$parsed=StockMovementSpreadsheet::read($tmp,'xlsx');}finally{@unlink($tmp);}
+stock_assert(($parsed[0]['numero_movimento']??null)==='X-1'&&($parsed[0]['codigo_artigo']??null)==='MP-01','Os aliases da folha Excel de movimentos não foram normalizados.');
 echo "Importação de movimentos, stock, GERAL e duplicados validados.\n";
