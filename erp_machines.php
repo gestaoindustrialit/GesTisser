@@ -198,6 +198,42 @@ function gt_machine_ids(array $machines): array
     return $machineIds;
 }
 
+/** Validate and normalise the supplier identifiers submitted by the multi-select. */
+function gt_machine_supplier_ids(PDO $pdo, $submitted): array
+{
+    $ids = [];
+    foreach ((array) $submitted as $supplierId) {
+        $supplierId = (int) $supplierId;
+        if ($supplierId > 0) $ids[$supplierId] = $supplierId;
+    }
+    if (!$ids) return [];
+
+    $placeholders = implode(',', array_fill(0, count($ids), '?'));
+    $stmt = $pdo->prepare('SELECT id FROM erp_suppliers WHERE is_active=1 AND id IN (' . $placeholders . ')');
+    $stmt->execute(array_values($ids));
+    $valid = array_map('intval', $stmt->fetchAll(PDO::FETCH_COLUMN));
+    sort($valid);
+    if (count($valid) !== count($ids)) throw new RuntimeException('Foi selecionado um fornecedor inválido ou inativo.');
+    return $valid;
+}
+
+/** Replace all suppliers for a machine and keep the legacy searchable label in sync. */
+function gt_save_machine_suppliers(PDO $pdo, int $machineId, array $supplierIds): void
+{
+    $pdo->prepare('DELETE FROM erp_machine_suppliers WHERE machine_id=?')->execute([$machineId]);
+    $insert = $pdo->prepare('INSERT INTO erp_machine_suppliers(machine_id,supplier_id) VALUES (?,?)');
+    foreach ($supplierIds as $supplierId) $insert->execute([$machineId, $supplierId]);
+
+    $names = [];
+    if ($supplierIds) {
+        $placeholders = implode(',', array_fill(0, count($supplierIds), '?'));
+        $stmt = $pdo->prepare('SELECT name FROM erp_suppliers WHERE id IN (' . $placeholders . ') ORDER BY name');
+        $stmt->execute($supplierIds);
+        $names = $stmt->fetchAll(PDO::FETCH_COLUMN);
+    }
+    $pdo->prepare('UPDATE erp_machines SET supplier=? WHERE id=?')->execute([implode(', ', $names), $machineId]);
+}
+
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     // Keep the chunk endpoint identifiable even when PHP discards an oversized
     // multipart body (and therefore leaves both $_POST and $_FILES empty).
@@ -224,16 +260,18 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 exit;
             } elseif ($action === 'save') {
                 $id = (int) ($_POST['id'] ?? 0);
+                $supplierIds = gt_machine_supplier_ids($pdo, $_POST['supplier_ids'] ?? []);
                 $year = (int) ($_POST['manufacturing_year'] ?? 0);
                 if ($year && ($year < 1900 || $year > (int) date('Y') + 1)) {
                     throw new RuntimeException('Ano de fabrico inválido.');
                 }
-                $data = [trim($_POST['code'] ?? ''), trim($_POST['name'] ?? ''), trim($_POST['brand'] ?? ''), trim($_POST['model'] ?? ''), trim($_POST['serial_number'] ?? ''), $year ?: null, (int) ($_POST['department_id'] ?? 0) ?: null, trim($_POST['location'] ?? ''), (int) ($_POST['owner_user_id'] ?? 0) ?: null, trim($_POST['status'] ?? 'operational'), trim($_POST['criticality'] ?? 'medium'), trim($_POST['nominal_capacity'] ?? ''), trim($_POST['capacity_unit'] ?? ''), trim($_POST['cycle_time'] ?? ''), trim($_POST['cycle_time_unit'] ?? ''), max(0, (int) ($_POST['operators_required'] ?? 0)), trim($_POST['supplier'] ?? ''), trim($_POST['service_provider'] ?? ''), trim($_POST['purchase_date'] ?? '') ?: null, trim($_POST['next_maintenance_date'] ?? '') ?: null, trim($_POST['manual_url'] ?? ''), trim($_POST['characteristics'] ?? ''), trim($_POST['risks'] ?? ''), trim($_POST['limitations'] ?? ''), trim($_POST['notes'] ?? ''), $userId];
+                $data = [trim($_POST['code'] ?? ''), trim($_POST['name'] ?? ''), trim($_POST['brand'] ?? ''), trim($_POST['model'] ?? ''), trim($_POST['serial_number'] ?? ''), $year ?: null, (int) ($_POST['department_id'] ?? 0) ?: null, trim($_POST['location'] ?? ''), (int) ($_POST['owner_user_id'] ?? 0) ?: null, trim($_POST['status'] ?? 'operational'), trim($_POST['criticality'] ?? 'medium'), trim($_POST['nominal_capacity'] ?? ''), trim($_POST['capacity_unit'] ?? ''), trim($_POST['cycle_time'] ?? ''), trim($_POST['cycle_time_unit'] ?? ''), max(0, (int) ($_POST['operators_required'] ?? 0)), '', trim($_POST['service_provider'] ?? ''), trim($_POST['purchase_date'] ?? '') ?: null, trim($_POST['next_maintenance_date'] ?? '') ?: null, trim($_POST['manual_url'] ?? ''), trim($_POST['characteristics'] ?? ''), trim($_POST['risks'] ?? ''), trim($_POST['limitations'] ?? ''), trim($_POST['notes'] ?? ''), $userId];
                 if ($id) {
                     $old = $pdo->prepare('SELECT * FROM erp_machines WHERE id=?');
                     $old->execute([$id]);
                     $before = $old->fetch(PDO::FETCH_ASSOC) ?: [];
                     $pdo->prepare('UPDATE erp_machines SET code=?,name=?,brand=?,model=?,serial_number=?,manufacturing_year=?,department_id=?,location=?,owner_user_id=?,status=?,criticality=?,nominal_capacity=?,capacity_unit=?,cycle_time=?,cycle_time_unit=?,operators_required=?,supplier=?,service_provider=?,purchase_date=?,next_maintenance_date=?,manual_url=?,characteristics=?,risks=?,limitations=?,notes=?,updated_by=?,updated_at=CURRENT_TIMESTAMP,is_active=CASE WHEN ?="inactive" THEN 0 ELSE 1 END WHERE id=?')->execute(array_merge($data, [$data[9], $id]));
+                    gt_save_machine_suppliers($pdo, $id, $supplierIds);
                     gt_machine_relocate_attachments($pdo, __DIR__, $id, $data[1]);
                     gt_org_audit($pdo, $userId, 'erp.machines.update', 'erp_machines', $id, $before, $_POST);
                     $uploadedCount = gt_save_machine_uploads($pdo, $id, $userId, $_FILES['machine_files'] ?? [], $machineAttachmentMimeTypes);
@@ -241,6 +279,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 } else {
                     $pdo->prepare('INSERT INTO erp_machines(code,name,brand,model,serial_number,manufacturing_year,department_id,location,owner_user_id,status,criticality,nominal_capacity,capacity_unit,cycle_time,cycle_time_unit,operators_required,supplier,service_provider,purchase_date,next_maintenance_date,manual_url,characteristics,risks,limitations,notes,created_by,updated_by) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)')->execute(array_merge(array_slice($data, 0, 25), [$userId, $userId]));
                     $newMachineId = (int) $pdo->lastInsertId();
+                    gt_save_machine_suppliers($pdo, $newMachineId, $supplierIds);
                     $uploadedCount = gt_save_machine_uploads($pdo, $newMachineId, $userId, $_FILES['machine_files'] ?? [], $machineAttachmentMimeTypes);
                     gt_org_audit($pdo, $userId, 'erp.machines.create', 'erp_machines', $newMachineId, [], $_POST);
                     $flashSuccess = 'Máquina criada.' . ($uploadedCount ? ' Ficheiros adicionados: ' . $uploadedCount . '.' : '');
@@ -308,6 +347,14 @@ foreach ($machines as &$machineRow) {
 unset($machineRow);
 $deps = $pdo->query('SELECT * FROM hr_departments ORDER BY name')->fetchAll(PDO::FETCH_ASSOC);
 $people = $pdo->query('SELECT id,name FROM users WHERE COALESCE(is_active,1)=1 ORDER BY name')->fetchAll(PDO::FETCH_ASSOC);
+$suppliers = $pdo->query('SELECT id,name,tax_number FROM erp_suppliers WHERE is_active=1 ORDER BY name')->fetchAll(PDO::FETCH_ASSOC);
+$machineSupplierRows = $pdo->query('SELECT machine_id,supplier_id FROM erp_machine_suppliers')->fetchAll(PDO::FETCH_ASSOC);
+$supplierIdsByMachine = [];
+foreach ($machineSupplierRows as $machineSupplierRow) {
+    $supplierIdsByMachine[(int) $machineSupplierRow['machine_id']][] = (int) $machineSupplierRow['supplier_id'];
+}
+foreach ($machines as &$machineRow) $machineRow['_supplier_ids'] = $supplierIdsByMachine[(int) $machineRow['id']] ?? [];
+unset($machineRow);
 
 $machineOperational = $machineCritical = $machineNoOwner = 0;
 foreach ($machines as $machineCardRow) {
@@ -395,7 +442,7 @@ require __DIR__ . '/partials/header.php';
             <label><span>Capacidade nominal / unidade</span><input class="form-control" type="text" name="nominal_capacity"></label>
             <label><span>Tempo de ciclo</span><input class="form-control" type="text" name="cycle_time"></label>
             <label><span>Operadores necessários</span><input class="form-control" type="number" name="operators_required" min="0" value="1"></label>
-            <label><span>Fornecedor / assistência</span><input class="form-control" type="text" name="supplier"></label>
+            <label><span>Fornecedores / assistência</span><select class="form-select js-searchable-select" name="supplier_ids[]" multiple data-placeholder="Selecionar fornecedores…" data-search-placeholder="Pesquisar fornecedor…"><?php foreach ($suppliers as $supplier): ?><option value="<?= (int) $supplier['id'] ?>" data-nif="<?= h($supplier['tax_number'] ?? '') ?>"><?= h($supplier['name']) ?></option><?php endforeach; ?></select></label>
             <label><span>Data de aquisição</span><input class="form-control" type="date" name="purchase_date"></label>
             <label><span>Próxima manutenção</span><input class="form-control" type="date" name="next_maintenance_date"></label>
             <label class="full"><span>Manual / ligação documental</span><input class="form-control" type="url" name="manual_url"></label>
@@ -588,6 +635,8 @@ document.addEventListener('DOMContentLoaded', function () {
             return;
         }
         form.reset();
+        const resetSupplierSelect = form.querySelector('[name="supplier_ids[]"]');
+        if (resetSupplierSelect) resetSupplierSelect.dispatchEvent(new Event('change', { bubbles: true }));
         form.querySelector('[name="id"]').value = '';
         title.textContent = 'Nova máquina';
         form.querySelector('[name="action"]').value = 'save';
@@ -600,6 +649,12 @@ document.addEventListener('DOMContentLoaded', function () {
             const field = form.querySelector('[name="' + key + '"]');
             if (field) field.value = machine[key] || '';
         });
+        const supplierSelect = form.querySelector('[name="supplier_ids[]"]');
+        if (supplierSelect) {
+            const selectedSupplierIds = (machine._supplier_ids || []).map(String);
+            Array.from(supplierSelect.options).forEach(function (option) { option.selected = selectedSupplierIds.indexOf(option.value) !== -1; });
+            supplierSelect.dispatchEvent(new Event('change', { bubbles: true }));
+        }
         if (form.elements.nominal_capacity) form.elements.nominal_capacity.value = [machine.nominal_capacity || '', machine.capacity_unit || ''].join(' ').trim();
         if (form.elements.cycle_time) form.elements.cycle_time.value = [machine.cycle_time || '', machine.cycle_time_unit || ''].join(' ').trim();
         renderFiles(machine._attachments || []);
