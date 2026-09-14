@@ -123,6 +123,12 @@ function erp_run_phase1_migrations(PDO $pdo)
         if (!erp_column_exists($pdo, 'erp_stock_movements', 'order_reference')) {
             $pdo->exec('ALTER TABLE erp_stock_movements ADD COLUMN order_reference TEXT');
         }
+        if (!erp_column_exists($pdo, 'erp_stock_movements', 'purchase_order_line_id')) {
+            $pdo->exec('ALTER TABLE erp_stock_movements ADD COLUMN purchase_order_line_id INTEGER REFERENCES erp_purchase_order_lines(id)');
+        }
+        if (!erp_column_exists($pdo, 'erp_stock_movements', 'labels_to_print')) {
+            $pdo->exec('ALTER TABLE erp_stock_movements ADD COLUMN labels_to_print INTEGER NOT NULL DEFAULT 0');
+        }
         $supplierSeed = [
             ['CIF','CIF - COMPAGNIE INDUSTRIELLE','DOUAR HJAR NHAL','','90.025 WILAYA DE TANGER','MARROCOS','','','','','','','',0,0,0,0,0,''],
             ['DAMAN0201','KANDIL FABRICS PVT LTD','406 - LOTUS HOUSE 4TH FLOOR, 33A NEW MARINE LINE,','','MUMBAI - 400020','INDIA','0091 2266338751','','dpf@damanpolyfabs.com','Niranjan','','','',0,0,0,0,0,''],
@@ -223,6 +229,8 @@ function erp_run_phase1_migrations(PDO $pdo)
         $pdo->exec('CREATE TABLE IF NOT EXISTS erp_technical_sheets (id INTEGER PRIMARY KEY AUTOINCREMENT, production_order_id INTEGER NOT NULL UNIQUE, finished_product_id INTEGER NOT NULL, snapshot_json TEXT NOT NULL, created_by INTEGER, created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP, FOREIGN KEY(production_order_id) REFERENCES erp_production_orders(id) ON DELETE CASCADE, FOREIGN KEY(finished_product_id) REFERENCES erp_finished_products(id), FOREIGN KEY(created_by) REFERENCES users(id) ON DELETE SET NULL)');
         $pdo->exec('CREATE INDEX IF NOT EXISTS idx_erp_stock_movements_item ON erp_stock_movements(item_type, item_id, movement_date)');
         $pdo->exec('CREATE INDEX IF NOT EXISTS idx_erp_purchase_orders_status ON erp_purchase_orders(status, expected_date)');
+        $pdo->exec('CREATE INDEX IF NOT EXISTS idx_erp_purchase_order_lines_order ON erp_purchase_order_lines(purchase_order_id, line_no)');
+        $pdo->exec('CREATE INDEX IF NOT EXISTS idx_erp_stock_movements_purchase_line ON erp_stock_movements(purchase_order_line_id)');
         $pdo->exec('CREATE INDEX IF NOT EXISTS idx_erp_raw_materials_status ON erp_raw_materials(status, code)');
         $pdo->exec('CREATE INDEX IF NOT EXISTS idx_erp_finished_products_customer ON erp_finished_products(customer_id, status)');
         $pdo->exec('CREATE INDEX IF NOT EXISTS idx_erp_article_materials_article ON erp_article_materials(finished_product_id)');
