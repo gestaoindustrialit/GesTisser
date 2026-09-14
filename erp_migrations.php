@@ -52,6 +52,25 @@ function erp_migrate_material_type_columns(PDO $pdo)
     }
 }
 
+function erp_migrate_work_centers(PDO $pdo): void
+{
+    $pdo->exec('CREATE TABLE IF NOT EXISTS erp_printers (id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT NOT NULL UNIQUE, network_uri TEXT NOT NULL UNIQUE, location TEXT, driver_name TEXT, is_active INTEGER NOT NULL DEFAULT 1, created_at DATETIME DEFAULT CURRENT_TIMESTAMP, updated_at DATETIME DEFAULT CURRENT_TIMESTAMP)');
+    $columns = [
+        'center_type' => 'TEXT NOT NULL DEFAULT "administrative"',
+        'machine_id' => 'INTEGER REFERENCES erp_machines(id) ON DELETE RESTRICT',
+        'default_printer_id' => 'INTEGER REFERENCES erp_printers(id) ON DELETE SET NULL',
+        'daily_capacity_minutes' => 'INTEGER NOT NULL DEFAULT 480',
+        'efficiency_percent' => 'REAL NOT NULL DEFAULT 100',
+    ];
+    foreach ($columns as $column => $definition) {
+        if (!erp_column_exists($pdo, 'erp_work_centers', $column)) {
+            $pdo->exec('ALTER TABLE erp_work_centers ADD COLUMN ' . $column . ' ' . $definition);
+        }
+    }
+    $pdo->exec('CREATE UNIQUE INDEX IF NOT EXISTS idx_erp_work_centers_machine ON erp_work_centers(machine_id) WHERE machine_id IS NOT NULL');
+    $pdo->exec('CREATE INDEX IF NOT EXISTS idx_erp_work_centers_printer ON erp_work_centers(default_printer_id)');
+}
+
 function erp_backup_database_once(PDO $pdo)
 {
     static $backupPath = null;
@@ -117,6 +136,7 @@ function erp_run_phase1_migrations(PDO $pdo)
         /* The original material type table only contained code and name. Settings now
            allows administrators to deactivate types, including on legacy databases. */
         erp_migrate_material_type_columns($pdo);
+        erp_migrate_work_centers($pdo);
         /* Supplier master data used by Purchasing. Keep the original compact table
            compatible while extending it with the fields from the current supplier sheet. */
         erp_migrate_supplier_columns($pdo);
