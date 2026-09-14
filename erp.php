@@ -75,14 +75,8 @@ function erp_money(float $value): string { return number_format($value, 2, ',', 
 function erp_page_url(string $page): string { return 'erp.php?page=' . urlencode($page); }
 function erp_load_order_import_services()
 {
-    $files=['OrderPdfUpload.php','PdfTextExtractor.php','GenericPdfOrderParser.php','OrderImportMatcher.php','PurchaseOrderImportService.php'];
+    $files=['OrderPdfUpload.php','PdfTextExtractor.php','GenericPdfOrderParser.php','OrderSupplierDetector.php','OrderImportMatcher.php','PurchaseOrderImportService.php'];
     foreach($files as $file){$path=__DIR__.'/app/Services/'.$file;if(!is_file($path))throw new RuntimeException('A instalação da importação PDF está incompleta (falta '.$file.'). Atualize todos os ficheiros da aplicação.');require_once $path;}
-}
-function erp_detect_order_supplier(PDO $pdo,string $text): array
-{
-    $ascii=iconv('UTF-8','ASCII//TRANSLIT//IGNORE',strtoupper(trim($text)));$normalized=preg_replace('/[^A-Z0-9]+/','',$ascii!==false?$ascii:$text);$digits=preg_replace('/\D+/','',$text);$best=null;
-    foreach($pdo->query('SELECT id,code,name,tax_number,email FROM erp_suppliers WHERE is_active=1')->fetchAll(PDO::FETCH_ASSOC) as $supplier){$score=0;$method='';$tax=preg_replace('/\D+/','',(string)$supplier['tax_number']);$nameAscii=iconv('UTF-8','ASCII//TRANSLIT//IGNORE',strtoupper(trim((string)$supplier['name'])));$name=preg_replace('/[^A-Z0-9]+/','',$nameAscii!==false?$nameAscii:(string)$supplier['name']);if(strlen($tax)>=7&&strpos($digits,$tax)!==false){$score=100;$method='tax_number';}elseif(strlen((string)$supplier['code'])>=3&&preg_match('/\b'.preg_quote((string)$supplier['code'],'/').'\b/iu',$text)){$score=95;$method='supplier_code';}elseif(strlen($name)>=4&&strpos($normalized,$name)!==false){$score=82;$method='name';}elseif((string)$supplier['email']!==''&&stripos($text,(string)$supplier['email'])!==false){$score=80;$method='email';}if($score>($best['confidence']??0))$best=['id'=>(int)$supplier['id'],'name'=>$supplier['name'],'confidence'=>$score,'method'=>$method,'requires_confirmation'=>$score<95];}
-    return $best?:['id'=>null,'name'=>'','confidence'=>0,'method'=>'none','requires_confirmation'=>true];
 }
 function erp_raw_material_spreadsheet_columns(): array { return RawMaterialSpreadsheet::columns(); }
 function erp_read_raw_material_spreadsheet(string $path,string $extension): array { return RawMaterialSpreadsheet::read($path,$extension); }
@@ -236,7 +230,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $file=OrderPdfUpload::store($_FILES['order_pdf']??[],rtrim((string)app_config('paths.uploads'),'/').'/order-imports',$max);
                 $imports=new PurchaseOrderImportService($pdo);$duplicate=$imports->duplicate($file['file_hash']);
                 if($duplicate){@unlink($file['path']);throw new RuntimeException('Este PDF já foi processado'.(!empty($duplicate['order_number'])?' na encomenda '.$duplicate['order_number']:'').'.');}
-                $text=(new PdfTextExtractor())->extract($file['path']);$supplier=erp_detect_order_supplier($pdo,$text);$document=(new GenericPdfOrderParser())->parse($text,['supplier'=>$supplier]);
+                $text=(new PdfTextExtractor())->extract($file['path']);$supplier=(new OrderSupplierDetector($pdo))->detect($text);$document=(new GenericPdfOrderParser())->parse($text,['supplier'=>$supplier]);
                 if(!empty($supplier['id'])){$threshold=(int)($pdo->query("SELECT value FROM erp_settings WHERE key='order_import_match_threshold'")->fetchColumn()?:90);$matcher=new OrderImportMatcher($pdo,$threshold);foreach($document['lines'] as &$line){if($line['type']==='ARTICLE')$line=array_merge($line,$matcher->match((int)$supplier['id'],$line));}unset($line);}
                 $pdo->prepare('INSERT INTO erp_order_imports(original_filename,stored_filename,mime_type,file_size,file_hash,raw_extracted_text,parsed_data_json,status,uploaded_by) VALUES(?,?,?,?,?,?,?,?,?)')->execute([$file['original_filename'],$file['stored_filename'],$file['mime_type'],$file['file_size'],$file['file_hash'],$text,json_encode($document,JSON_UNESCAPED_UNICODE),'prepared',$userId]);
                 $_GET['new_purchase_order']=1;$_GET['order_import_id']=(int)$pdo->lastInsertId();$flashSuccess='PDF processado. Confirme o fornecedor, artigos, unidades e valores antes de criar a encomenda.';

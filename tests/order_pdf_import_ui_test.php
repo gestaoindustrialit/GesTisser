@@ -10,4 +10,5 @@ ui_check(strpos($source,'name="line_ignored[')!==false,'ignore control missing')
 ui_check(strpos($source,'data-pdf-progress')!==false,'progress feedback missing');
 ui_check(strpos($source,"require_once __DIR__ . '/app/Services/OrderSupplierDetector.php'")===false,'ERP must not fail at boot when an optional import service is absent');
 ui_check(strpos($source,'erp_load_order_import_services()')!==false,'PDF services must be loaded only when import is requested');
+ui_check(is_file(__DIR__.'/../app/Services/OrderSupplierDetector.php'),'compatibility detector must exist for rolling deployments of older erp.php');
 echo "order_pdf_import_ui_test: OK\n";
