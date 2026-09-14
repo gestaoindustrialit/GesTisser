@@ -106,6 +106,7 @@ function erp_run_phase1_migrations(PDO $pdo)
             'CREATE TABLE IF NOT EXISTS erp_stock_alert_log (id INTEGER PRIMARY KEY AUTOINCREMENT, raw_material_id INTEGER NOT NULL, available_qty REAL NOT NULL, threshold_qty REAL NOT NULL, recipient_email TEXT NOT NULL, delivery_status TEXT NOT NULL, error_message TEXT, created_at DATETIME DEFAULT CURRENT_TIMESTAMP, FOREIGN KEY(raw_material_id) REFERENCES erp_raw_materials(id) ON DELETE CASCADE)',
             'CREATE TABLE IF NOT EXISTS erp_product_documents (id INTEGER PRIMARY KEY AUTOINCREMENT, entity_type TEXT NOT NULL, entity_id INTEGER NOT NULL, document_type TEXT NOT NULL, title TEXT NOT NULL, file_url TEXT, version TEXT, author_user_id INTEGER, is_required INTEGER NOT NULL DEFAULT 0, valid_until TEXT, status TEXT NOT NULL DEFAULT "Ativo", notes TEXT, created_at DATETIME DEFAULT CURRENT_TIMESTAMP, FOREIGN KEY(author_user_id) REFERENCES users(id) ON DELETE SET NULL)',
             'CREATE TABLE IF NOT EXISTS erp_stock_movements (id INTEGER PRIMARY KEY AUTOINCREMENT, movement_number TEXT NOT NULL UNIQUE, movement_date DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP, movement_type TEXT NOT NULL, item_type TEXT NOT NULL CHECK(item_type IN ("raw_material","finished_product")), item_id INTEGER NOT NULL, lot TEXT, roll_id INTEGER, quantity REAL NOT NULL, weight REAL NOT NULL DEFAULT 0, warehouse_from_id INTEGER, location_from_id INTEGER, warehouse_to_id INTEGER, location_to_id INTEGER, unit_cost REAL NOT NULL DEFAULT 0, total_cost REAL NOT NULL DEFAULT 0, source_type TEXT, source_id INTEGER, reversal_of_id INTEGER, reason TEXT, notes TEXT, created_by INTEGER, created_at DATETIME DEFAULT CURRENT_TIMESTAMP, FOREIGN KEY(created_by) REFERENCES users(id) ON DELETE SET NULL, FOREIGN KEY(warehouse_from_id) REFERENCES erp_warehouses(id) ON DELETE SET NULL, FOREIGN KEY(warehouse_to_id) REFERENCES erp_warehouses(id) ON DELETE SET NULL, FOREIGN KEY(location_from_id) REFERENCES erp_locations(id) ON DELETE SET NULL, FOREIGN KEY(location_to_id) REFERENCES erp_locations(id) ON DELETE SET NULL, FOREIGN KEY(reversal_of_id) REFERENCES erp_stock_movements(id) ON DELETE RESTRICT)',
+            'CREATE TABLE IF NOT EXISTS erp_purchase_orders (id INTEGER PRIMARY KEY AUTOINCREMENT, order_number TEXT NOT NULL UNIQUE, supplier_id INTEGER NOT NULL, order_date TEXT NOT NULL, expected_date TEXT, supplier_reference TEXT, status TEXT NOT NULL DEFAULT "Aberta" CHECK(status IN ("Rascunho","Aberta","Parcial","Recebida","Cancelada")), notes TEXT, created_by INTEGER, created_at DATETIME DEFAULT CURRENT_TIMESTAMP, updated_at DATETIME DEFAULT CURRENT_TIMESTAMP, FOREIGN KEY(supplier_id) REFERENCES erp_suppliers(id) ON DELETE RESTRICT, FOREIGN KEY(created_by) REFERENCES users(id) ON DELETE SET NULL)',
             'CREATE TABLE IF NOT EXISTS erp_stock_balances (item_type TEXT NOT NULL, item_id INTEGER NOT NULL, warehouse_id INTEGER, location_id INTEGER, lot TEXT, physical_qty REAL NOT NULL DEFAULT 0, reserved_qty REAL NOT NULL DEFAULT 0, blocked_qty REAL NOT NULL DEFAULT 0, ordered_qty REAL NOT NULL DEFAULT 0, updated_at DATETIME DEFAULT CURRENT_TIMESTAMP, PRIMARY KEY(item_type, item_id, warehouse_id, location_id, lot))'
         ];
         foreach ($sql as $statement) { $pdo->exec($statement); }
@@ -115,6 +116,9 @@ function erp_run_phase1_migrations(PDO $pdo)
         /* Supplier master data used by Purchasing. Keep the original compact table
            compatible while extending it with the fields from the current supplier sheet. */
         erp_migrate_supplier_columns($pdo);
+        if (!erp_column_exists($pdo, 'erp_stock_movements', 'order_reference')) {
+            $pdo->exec('ALTER TABLE erp_stock_movements ADD COLUMN order_reference TEXT');
+        }
         $supplierSeed = [
             ['CIF','CIF - COMPAGNIE INDUSTRIELLE','DOUAR HJAR NHAL','','90.025 WILAYA DE TANGER','MARROCOS','','','','','','','',0,0,0,0,0,''],
             ['DAMAN0201','KANDIL FABRICS PVT LTD','406 - LOTUS HOUSE 4TH FLOOR, 33A NEW MARINE LINE,','','MUMBAI - 400020','INDIA','0091 2266338751','','dpf@damanpolyfabs.com','Niranjan','','','',0,0,0,0,0,''],
@@ -214,6 +218,7 @@ function erp_run_phase1_migrations(PDO $pdo)
         }
         $pdo->exec('CREATE TABLE IF NOT EXISTS erp_technical_sheets (id INTEGER PRIMARY KEY AUTOINCREMENT, production_order_id INTEGER NOT NULL UNIQUE, finished_product_id INTEGER NOT NULL, snapshot_json TEXT NOT NULL, created_by INTEGER, created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP, FOREIGN KEY(production_order_id) REFERENCES erp_production_orders(id) ON DELETE CASCADE, FOREIGN KEY(finished_product_id) REFERENCES erp_finished_products(id), FOREIGN KEY(created_by) REFERENCES users(id) ON DELETE SET NULL)');
         $pdo->exec('CREATE INDEX IF NOT EXISTS idx_erp_stock_movements_item ON erp_stock_movements(item_type, item_id, movement_date)');
+        $pdo->exec('CREATE INDEX IF NOT EXISTS idx_erp_purchase_orders_status ON erp_purchase_orders(status, expected_date)');
         $pdo->exec('CREATE INDEX IF NOT EXISTS idx_erp_raw_materials_status ON erp_raw_materials(status, code)');
         $pdo->exec('CREATE INDEX IF NOT EXISTS idx_erp_finished_products_customer ON erp_finished_products(customer_id, status)');
         $pdo->exec('CREATE INDEX IF NOT EXISTS idx_erp_article_materials_article ON erp_article_materials(finished_product_id)');
@@ -228,7 +233,7 @@ function erp_run_phase1_migrations(PDO $pdo)
         $rolePermission->execute(['Chefias','erp.bi.view']);
         foreach(['erp.operations.manage','erp.routings.edit','erp.routings.activate','erp.work_order_routing.edit','erp.execution.correct'] as $permission)$rolePermission->execute(['Chefias',$permission]);
         $seq = $pdo->prepare('INSERT OR IGNORE INTO erp_number_sequences(code,prefix,next_number,padding) VALUES (?,?,?,?)');
-        foreach ([['stock_movement','MOV-',1,6],['raw_material','MP-',1,5],['subsidiary','SUB-',1,5],['consumable','CON-',1,5],['finished_product','PA-',1,5],['customer','CLI-',1,4],['supplier','FOR-',1,4],['work_order','OF-',1,5]] as $s) { $seq->execute($s); }
+        foreach ([['stock_movement','MOV-',1,6],['purchase_order','ENC-',1,5],['raw_material','MP-',1,5],['subsidiary','SUB-',1,5],['consumable','CON-',1,5],['finished_product','PA-',1,5],['customer','CLI-',1,4],['supplier','FOR-',1,4],['work_order','OF-',1,5]] as $s) { $seq->execute($s); }
         $set = $pdo->prepare('INSERT OR IGNORE INTO erp_settings(key,value) VALUES (?,?)');
         $set->execute(['allow_negative_stock','0']);
         $set->execute(['raw_material_code_pattern','{tipo}{caracteristica}{largura}{gramagem}{seq}']);
