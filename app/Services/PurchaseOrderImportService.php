@@ -5,7 +5,7 @@ final class PurchaseOrderImportService
 {
     private $pdo;
     public function __construct(PDO $pdo){$this->pdo=$pdo;}
-    public function duplicate(string $hash,?int $supplierId=null,string $reference=''):?array
+    public function duplicate(string $hash,$supplierId=null,string $reference='')
     {$q=$this->pdo->prepare('SELECT i.*,o.order_number FROM erp_order_imports i LEFT JOIN erp_purchase_orders o ON o.id=i.purchase_order_id WHERE i.file_hash=? LIMIT 1');$q->execute([$hash]);if($r=$q->fetch(PDO::FETCH_ASSOC))return $r;if($supplierId&&$reference!==''){$q=$this->pdo->prepare('SELECT i.*,o.order_number FROM erp_order_imports i JOIN erp_purchase_orders o ON o.id=i.purchase_order_id WHERE o.supplier_id=? AND o.supplier_reference=? LIMIT 1');$q->execute([$supplierId,$reference]);return $q->fetch(PDO::FETCH_ASSOC)?:null;}return null;}
     public function create(array $document,int $importId,int $userId):int
     {
@@ -17,6 +17,6 @@ final class PurchaseOrderImportService
             if(!$created)throw new RuntimeException('A encomenda deve conter pelo menos uma linha de artigo.');$this->pdo->prepare('UPDATE erp_order_imports SET purchase_order_id=?,validated_data_json=?,status="completed",validated_by=?,validated_at=CURRENT_TIMESTAMP WHERE id=?')->execute([$orderId,json_encode($document,JSON_UNESCAPED_UNICODE),$userId,$importId]);if($ownsTransaction)$this->pdo->commit();return $orderId;
         }catch(Throwable $e){if($ownsTransaction&&$this->pdo->inTransaction())$this->pdo->rollBack();throw $e;}
     }
-    public function saveMapping(int $supplierId,string $reference,string $itemType,int $itemId,int $userId,bool $authorized=false):void
+    public function saveMapping(int $supplierId,string $reference,string $itemType,int $itemId,int $userId,bool $authorized=false)
     {$q=$this->pdo->prepare('SELECT item_type,item_id FROM erp_supplier_item_mappings WHERE supplier_id=? AND supplier_reference=?');$q->execute([$supplierId,$reference]);$old=$q->fetch(PDO::FETCH_ASSOC);if($old&&($old['item_type']!==$itemType||(int)$old['item_id']!==$itemId)&&!$authorized)throw new DomainException('Esta referência já está associada a outro artigo.');if($old)$this->pdo->prepare('UPDATE erp_supplier_item_mappings SET item_type=?,item_id=?,confirmed_by=?,updated_at=CURRENT_TIMESTAMP WHERE supplier_id=? AND supplier_reference=?')->execute([$itemType,$itemId,$userId,$supplierId,$reference]);else $this->pdo->prepare('INSERT INTO erp_supplier_item_mappings(supplier_id,supplier_reference,item_type,item_id,confirmed_by) VALUES(?,?,?,?,?)')->execute([$supplierId,$reference,$itemType,$itemId,$userId]);}
 }

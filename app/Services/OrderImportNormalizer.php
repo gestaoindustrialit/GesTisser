@@ -3,9 +3,9 @@ declare(strict_types=1);
 
 final class OrderImportNormalizer
 {
-    private const UNITS = ['UN'=>'UN','UND'=>'UN','PCS'=>'UN','PC'=>'UN','KG'=>'KG','KGS'=>'KG','M'=>'M','MT'=>'M','ML'=>'M','ROL'=>'ROL','ROLO'=>'ROL','PALETE'=>'PALETE'];
+    const UNITS = ['UN'=>'UN','UND'=>'UN','PCS'=>'UN','PC'=>'UN','KG'=>'KG','KGS'=>'KG','M'=>'M','MT'=>'M','ML'=>'M','ROL'=>'ROL','ROLO'=>'ROL','PALETE'=>'PALETE'];
 
-    public static function number(string $value): ?float
+    public static function number(string $value)
     {
         $v = preg_replace('/[\s\x{00A0}]/u', '', trim($value));
         if ($v === '' || !preg_match('/^-?[0-9.,]+$/', $v)) return null;
@@ -16,7 +16,7 @@ final class OrderImportNormalizer
         return is_numeric($v) ? (float) $v : null;
     }
 
-    public static function date(string $value): ?string
+    public static function date(string $value)
     {
         $value=trim($value);$months=['janvier'=>'Jan','février'=>'Feb','fevrier'=>'Feb','mars'=>'Mar','avril'=>'Apr','mai'=>'May','juin'=>'Jun','juillet'=>'Jul','août'=>'Aug','aout'=>'Aug','septembre'=>'Sep','octobre'=>'Oct','novembre'=>'Nov','décembre'=>'Dec','decembre'=>'Dec'];$value=str_ireplace(array_keys($months),array_values($months),$value); $formats=['!d/m/Y','!d-m-Y','!Y-m-d','!d M Y','!j F Y'];
         foreach($formats as $format){$d=DateTimeImmutable::createFromFormat($format,$value);$errors=DateTimeImmutable::getLastErrors();if($d && ($errors===false||(!$errors['warning_count']&&!$errors['error_count'])))return $d->format('Y-m-d');}
