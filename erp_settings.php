@@ -50,12 +50,26 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 if ((int)$used->fetchColumn()>0) throw new DomainException('Não é possível remover um tipo associado a operações.');
                 $pdo->prepare('DELETE FROM erp_operation_types WHERE id=?')->execute([$id]);
                 erp_audit($pdo,$userId,'delete','erp_operation_types',$id,['code'=>$code],[]); $flashSuccess='Tipo de operação removido com sucesso.';
+            } elseif ($action === 'save_printer') {
+                $id=(int)($_POST['id']??0);$name=trim((string)($_POST['name']??''));$uri=trim((string)($_POST['network_uri']??''));
+                if($name===''||!preg_match('#^(ipp|ipps|lpd|socket|smb)://[^\s]+$#i',$uri))throw new InvalidArgumentException('Indique um nome e um endereço de rede válido (IPP, IPPS, LPD, socket ou SMB).');
+                $values=[$name,$uri,trim((string)($_POST['location']??'')),trim((string)($_POST['driver_name']??'')),!empty($_POST['is_active'])?1:0];
+                if($id){$pdo->prepare('UPDATE erp_printers SET name=?,network_uri=?,location=?,driver_name=?,is_active=?,updated_at=CURRENT_TIMESTAMP WHERE id=?')->execute(array_merge($values,[$id]));}
+                else{$pdo->prepare('INSERT INTO erp_printers(name,network_uri,location,driver_name,is_active) VALUES (?,?,?,?,?)')->execute($values);$id=(int)$pdo->lastInsertId();}
+                erp_audit($pdo,$userId,(int)($_POST['id']??0)?'update':'create','erp_printers',$id,[],['name'=>$name,'network_uri'=>$uri]);$flashSuccess='Impressora de rede guardada com sucesso.';
+            } elseif ($action === 'delete_printer') {
+                $id=(int)($_POST['id']??0);$used=$pdo->prepare('SELECT COUNT(*) FROM erp_work_centers WHERE default_printer_id=?');$used->execute([$id]);if((int)$used->fetchColumn())throw new DomainException('Não é possível remover uma impressora associada a um centro de trabalho.');
+                $pdo->prepare('DELETE FROM erp_printers WHERE id=?')->execute([$id]);erp_audit($pdo,$userId,'delete','erp_printers',$id,[],[]);$flashSuccess='Impressora removida com sucesso.';
             } elseif ($action === 'save_operation_sector') {
                 $id=(int)($_POST['id']??0);$code=strtoupper(trim((string)($_POST['code']??'')));$name=trim((string)($_POST['name']??''));
-                if ($code===''||$name==='') throw new InvalidArgumentException('O código e o nome do setor são obrigatórios.');
-                $values=[$code,$name,max(0,(float)str_replace(',','.',(string)($_POST['hourly_rate']??0))),!empty($_POST['is_active'])?1:0];
-                if($id){$pdo->prepare('UPDATE erp_work_centers SET code=?,name=?,hourly_rate=?,is_active=? WHERE id=?')->execute(array_merge($values,[$id]));}
-                else{$pdo->prepare('INSERT INTO erp_work_centers(code,name,hourly_rate,is_active) VALUES (?,?,?,?)')->execute($values);$id=(int)$pdo->lastInsertId();}
+                $centerType=(string)($_POST['center_type']??'administrative');$machineId=(int)($_POST['machine_id']??0);$printerId=(int)($_POST['default_printer_id']??0);$capacity=(int)($_POST['daily_capacity_minutes']??480);$efficiency=(float)str_replace(',','.',(string)($_POST['efficiency_percent']??100));
+                if ($code===''||$name==='') throw new InvalidArgumentException('O código e o nome do centro são obrigatórios.');
+                if(!in_array($centerType,['administrative','machine'],true))throw new InvalidArgumentException('Selecione um tipo de centro válido.');
+                if($centerType==='machine'&&!$machineId)throw new InvalidArgumentException('Um centro do tipo máquina exige a seleção da máquina utilizada.');
+                if($centerType==='administrative')$machineId=0;if($capacity<=0||$efficiency<=0||$efficiency>100)throw new InvalidArgumentException('A capacidade deve ser positiva e a eficiência deve estar entre 0 e 100%.');
+                $values=[$code,$name,max(0,(float)str_replace(',','.',(string)($_POST['hourly_rate']??0))),$centerType,$machineId?:null,$printerId?:null,$capacity,$efficiency,!empty($_POST['is_active'])?1:0];
+                if($id){$pdo->prepare('UPDATE erp_work_centers SET code=?,name=?,hourly_rate=?,center_type=?,machine_id=?,default_printer_id=?,daily_capacity_minutes=?,efficiency_percent=?,is_active=? WHERE id=?')->execute(array_merge($values,[$id]));}
+                else{$pdo->prepare('INSERT INTO erp_work_centers(code,name,hourly_rate,center_type,machine_id,default_printer_id,daily_capacity_minutes,efficiency_percent,is_active) VALUES (?,?,?,?,?,?,?,?,?)')->execute($values);$id=(int)$pdo->lastInsertId();}
                 erp_audit($pdo,$userId,(int)($_POST['id']??0)?'update':'create','erp_work_centers',$id,[],['code'=>$code,'name'=>$name]);$flashSuccess='Setor de operações guardado com sucesso.';
             } elseif ($action === 'delete_operation_sector') {
                 $id=(int)($_POST['id']??0);$references=['erp_operations'=>'default_work_center_id','erp_machines'=>'work_center_id','erp_article_routing_steps'=>'work_center_id','erp_shift_assignments'=>'work_center_id'];
@@ -85,7 +99,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 $settings = $pdo->query('SELECT key, value FROM erp_settings')->fetchAll(PDO::FETCH_KEY_PAIR);
 $sequences = $pdo->query('SELECT id, code, prefix, next_number, padding, suffix FROM erp_number_sequences ORDER BY code')->fetchAll(PDO::FETCH_ASSOC);
 $operationTypes = $pdo->query('SELECT id,code,name FROM erp_operation_types ORDER BY name COLLATE NOCASE')->fetchAll(PDO::FETCH_ASSOC);
-$operationSectors = $pdo->query('SELECT id,code,name,hourly_rate,is_active FROM erp_work_centers ORDER BY is_active DESC,code COLLATE NOCASE')->fetchAll(PDO::FETCH_ASSOC);
+$operationSectors = $pdo->query('SELECT wc.*,m.code machine_code,p.name printer_name FROM erp_work_centers wc LEFT JOIN erp_machines m ON m.id=wc.machine_id LEFT JOIN erp_printers p ON p.id=wc.default_printer_id ORDER BY wc.is_active DESC,wc.code COLLATE NOCASE')->fetchAll(PDO::FETCH_ASSOC);
+$machines = $pdo->query('SELECT id,code,name FROM erp_machines WHERE is_active=1 AND deleted_at IS NULL ORDER BY code')->fetchAll(PDO::FETCH_ASSOC);
+$printers = $pdo->query('SELECT * FROM erp_printers ORDER BY is_active DESC,name COLLATE NOCASE')->fetchAll(PDO::FETCH_ASSOC);
 $materialTypes = $pdo->query('SELECT id,code,name,is_active FROM erp_material_types ORDER BY is_active DESC,name COLLATE NOCASE')->fetchAll(PDO::FETCH_ASSOC);
 $sequenceLabels = [
     'customer' => 'Clientes',
@@ -122,11 +138,29 @@ require __DIR__ . '/partials/header.php';
             <form method="post" class="row g-2 align-items-center mt-3 pt-3 border-top"><?=csrf_input()?><input type="hidden" name="action" value="save_operation_type"><div class="col-4"><input class="form-control" name="code" required placeholder="Código"></div><div class="col"><input class="form-control" name="name" required placeholder="Novo tipo"></div><div class="col-auto"><button class="btn btn-primary"><i class="bi bi-plus-lg me-1"></i>Adicionar</button></div></form>
         </div></section>
     </div>
-    <div class="col-xl-6">
-        <section class="card shadow-sm soft-card h-100" aria-labelledby="operation-sectors-title"><div class="card-body p-4">
-            <h2 class="h5" id="operation-sectors-title">Setores de operações</h2><p class="text-muted">Gira os setores disponíveis para associar às operações.</p>
-            <?php foreach($operationSectors as $sector): ?><form method="post" class="row g-2 align-items-center mb-2"><?=csrf_input()?><input type="hidden" name="action" value="save_operation_sector"><input type="hidden" name="id" value="<?=(int)$sector['id']?>"><div class="col-3"><input class="form-control" name="code" required value="<?=h($sector['code'])?>" aria-label="Código do setor"></div><div class="col"><input class="form-control" name="name" required value="<?=h($sector['name'])?>" aria-label="Nome do setor"></div><div class="col-2"><input class="form-control" type="number" min="0" step="0.01" name="hourly_rate" value="<?=h((string)$sector['hourly_rate'])?>" aria-label="Custo por hora"></div><div class="col-auto"><input type="hidden" name="is_active" value="0"><input class="form-check-input me-2" type="checkbox" name="is_active" value="1" <?=(int)$sector['is_active']?'checked':''?> aria-label="Setor ativo"><button class="btn btn-outline-primary" aria-label="Guardar setor"><i class="bi bi-check-lg"></i></button><button class="btn btn-outline-danger" name="action" value="delete_operation_sector" formnovalidate aria-label="Remover setor" onclick="return confirm('Remover este setor de operações?')"><i class="bi bi-trash"></i></button></div></form><?php endforeach; ?>
-            <form method="post" class="row g-2 align-items-center mt-3 pt-3 border-top"><?=csrf_input()?><input type="hidden" name="action" value="save_operation_sector"><input type="hidden" name="is_active" value="1"><div class="col-3"><input class="form-control" name="code" required placeholder="Código"></div><div class="col"><input class="form-control" name="name" required placeholder="Novo setor"></div><div class="col-2"><input class="form-control" type="number" min="0" step="0.01" name="hourly_rate" value="0" aria-label="Custo por hora"></div><div class="col-auto"><button class="btn btn-primary"><i class="bi bi-plus-lg me-1"></i>Adicionar</button></div></form>
+    <div class="col-12">
+        <section class="card shadow-sm soft-card" aria-labelledby="work-centers-title"><div class="card-body p-4">
+            <h2 class="h5" id="work-centers-title">Centros de trabalho e capacidade</h2>
+            <p class="text-muted">Defina se o posto é administrativo ou utiliza uma máquina. A capacidade líquida alimenta automaticamente a previsão das operações.</p>
+            <?php foreach($operationSectors as $sector): ?>
+            <form method="post" class="row g-2 align-items-end mb-3 pb-3 border-bottom"><?=csrf_input()?><input type="hidden" name="action" value="save_operation_sector"><input type="hidden" name="id" value="<?=(int)$sector['id']?>">
+                <div class="col-md-2"><label class="form-label">Código</label><input class="form-control" name="code" required value="<?=h($sector['code'])?>"></div>
+                <div class="col-md-3"><label class="form-label">Nome</label><input class="form-control" name="name" required value="<?=h($sector['name'])?>"></div>
+                <div class="col-md-2"><label class="form-label">Tipo</label><select class="form-select js-center-type" name="center_type"><option value="administrative" <?=$sector['center_type']==='administrative'?'selected':''?>>Administrativo</option><option value="machine" <?=$sector['center_type']==='machine'?'selected':''?>>Máquina</option></select></div>
+                <div class="col-md-3 js-center-machine"><label class="form-label">Máquina utilizada</label><select class="form-select" name="machine_id"><option value="">Selecione…</option><?php foreach($machines as$m):?><option value="<?=$m['id']?>" <?=(int)$sector['machine_id']===(int)$m['id']?'selected':''?>><?=h($m['code'].' · '.$m['name'])?></option><?php endforeach;?></select></div>
+                <div class="col-md-2"><label class="form-label">Impressora</label><select class="form-select" name="default_printer_id"><option value="">Sem impressora</option><?php foreach($printers as$p):if(!$p['is_active']&&(int)$sector['default_printer_id']!==(int)$p['id'])continue;?><option value="<?=$p['id']?>" <?=(int)$sector['default_printer_id']===(int)$p['id']?'selected':''?>><?=h($p['name'])?></option><?php endforeach;?></select></div>
+                <div class="col-md-2"><label class="form-label">Capacidade/dia</label><div class="input-group"><input class="form-control" type="number" min="1" name="daily_capacity_minutes" value="<?=(int)$sector['daily_capacity_minutes']?>"><span class="input-group-text">min</span></div></div>
+                <div class="col-md-2"><label class="form-label">Eficiência</label><div class="input-group"><input class="form-control" type="number" min="1" max="100" step="0.1" name="efficiency_percent" value="<?=h((string)$sector['efficiency_percent'])?>"><span class="input-group-text">%</span></div></div>
+                <div class="col-md-2"><label class="form-label">Custo/hora</label><input class="form-control" type="number" min="0" step="0.01" name="hourly_rate" value="<?=h((string)$sector['hourly_rate'])?>"></div>
+                <div class="col"><input type="hidden" name="is_active" value="0"><label class="form-check d-inline-block me-2"><input class="form-check-input" type="checkbox" name="is_active" value="1" <?=$sector['is_active']?'checked':''?>> Ativo</label><button class="btn btn-outline-primary"><i class="bi bi-check-lg"></i> Guardar</button> <button class="btn btn-outline-danger" name="action" value="delete_operation_sector" formnovalidate onclick="return confirm('Remover este centro de trabalho?')"><i class="bi bi-trash"></i></button></div>
+            </form><?php endforeach; ?>
+            <form method="post" class="row g-2 align-items-end"><?=csrf_input()?><input type="hidden" name="action" value="save_operation_sector"><input type="hidden" name="is_active" value="1"><div class="col-md-2"><label class="form-label">Código</label><input class="form-control" name="code" required></div><div class="col-md-3"><label class="form-label">Novo centro</label><input class="form-control" name="name" required></div><div class="col-md-2"><label class="form-label">Tipo</label><select class="form-select js-center-type" name="center_type"><option value="administrative">Administrativo</option><option value="machine">Máquina</option></select></div><div class="col-md-3 js-center-machine"><label class="form-label">Máquina utilizada</label><select class="form-select" name="machine_id"><option value="">Selecione…</option><?php foreach($machines as$m):?><option value="<?=$m['id']?>"><?=h($m['code'].' · '.$m['name'])?></option><?php endforeach;?></select></div><div class="col-md-2"><label class="form-label">Impressora</label><select class="form-select" name="default_printer_id"><option value="">Sem impressora</option><?php foreach($printers as$p):if(!$p['is_active'])continue;?><option value="<?=$p['id']?>"><?=h($p['name'])?></option><?php endforeach;?></select></div><div class="col-md-2"><label class="form-label">Capacidade/dia</label><input class="form-control" type="number" min="1" name="daily_capacity_minutes" value="480"></div><div class="col-md-2"><label class="form-label">Eficiência %</label><input class="form-control" type="number" min="1" max="100" name="efficiency_percent" value="100"></div><div class="col-md-2"><label class="form-label">Custo/hora</label><input class="form-control" type="number" min="0" step=".01" name="hourly_rate" value="0"></div><div class="col"><button class="btn btn-primary"><i class="bi bi-plus-lg me-1"></i>Adicionar centro</button></div></form>
+        </div></section>
+    </div>
+    <div class="col-12">
+        <section class="card shadow-sm soft-card" aria-labelledby="printers-title"><div class="card-body p-4"><h2 class="h5" id="printers-title">Impressoras de rede</h2><p class="text-muted">Configure os destinos disponíveis para documentos e etiquetas em cada posto.</p>
+        <?php foreach($printers as$p):?><form method="post" class="row g-2 align-items-end mb-2"><?=csrf_input()?><input type="hidden" name="action" value="save_printer"><input type="hidden" name="id" value="<?=$p['id']?>"><div class="col-md-3"><label class="form-label">Nome</label><input class="form-control" name="name" required value="<?=h($p['name'])?>"></div><div class="col-md-3"><label class="form-label">Endereço de rede</label><input class="form-control" name="network_uri" required value="<?=h($p['network_uri'])?>"></div><div class="col-md-2"><label class="form-label">Local</label><input class="form-control" name="location" value="<?=h((string)$p['location'])?>"></div><div class="col-md-2"><label class="form-label">Controlador</label><input class="form-control" name="driver_name" value="<?=h((string)$p['driver_name'])?>"></div><div class="col"><input type="hidden" name="is_active" value="0"><label class="form-check d-inline-block"><input class="form-check-input" type="checkbox" name="is_active" value="1" <?=$p['is_active']?'checked':''?>> Ativa</label><button class="btn btn-outline-primary"><i class="bi bi-check-lg"></i></button> <button class="btn btn-outline-danger" name="action" value="delete_printer" formnovalidate><i class="bi bi-trash"></i></button></div></form><?php endforeach;?>
+        <form method="post" class="row g-2 align-items-end mt-3 pt-3 border-top"><?=csrf_input()?><input type="hidden" name="action" value="save_printer"><input type="hidden" name="is_active" value="1"><div class="col-md-3"><label class="form-label">Nome</label><input class="form-control" name="name" required placeholder="Etiquetas produção"></div><div class="col-md-3"><label class="form-label">Endereço de rede</label><input class="form-control" name="network_uri" required placeholder="ipp://192.168.1.20/ipp/print"></div><div class="col-md-2"><label class="form-label">Local</label><input class="form-control" name="location"></div><div class="col-md-2"><label class="form-label">Controlador</label><input class="form-control" name="driver_name"></div><div class="col"><button class="btn btn-primary"><i class="bi bi-plus-lg me-1"></i>Adicionar</button></div></form>
         </div></section>
     </div>
 </div>
@@ -192,4 +226,15 @@ require __DIR__ . '/partials/header.php';
         <button class="btn btn-primary"><i class="bi bi-check-lg me-1"></i>Guardar configuração ERP</button>
     </div>
 </form>
+<script>
+document.querySelectorAll('.js-center-type').forEach(function (type) {
+    function toggleMachine() {
+        var field = type.closest('form').querySelector('.js-center-machine');
+        if (!field) return;
+        field.classList.toggle('d-none', type.value !== 'machine');
+        field.querySelector('select').required = type.value === 'machine';
+    }
+    type.addEventListener('change', toggleMachine); toggleMachine();
+});
+</script>
 <?php require __DIR__ . '/partials/footer.php'; ?>
