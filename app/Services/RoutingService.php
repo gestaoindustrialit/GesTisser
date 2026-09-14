@@ -15,6 +15,8 @@ final class RoutingService
         if(!$this->scalar('SELECT 1 FROM erp_operation_types WHERE code=?',[$type])) throw new InvalidArgumentException('Tipo de operação inválido.');
         $machineIds=array_values(array_unique(array_filter(array_map('intval',$machineIds))));
         $default=(int)($data['default_machine_id']??0);
+        $workCenterId=(int)($data['work_center_id']??0);
+        if($workCenterId){$centerMachine=(int)$this->scalar('SELECT machine_id FROM erp_work_centers WHERE id=? AND is_active=1',[$workCenterId]);if($centerMachine&&!in_array($centerMachine,$machineIds,true))$machineIds[]=$centerMachine;if($centerMachine&&!$default)$default=$centerMachine;}
         if($default && !in_array($default,$machineIds,true)) throw new InvalidArgumentException('A máquina predefinida tem de ser compatível.');
         $checklistTemplateId=(int)($data['checklist_template_id']??0);$checklistTiming=trim((string)($data['checklist_timing']??''));
         if($checklistTemplateId && !$this->scalar('SELECT 1 FROM checklist_templates WHERE id=?',[$checklistTemplateId])) throw new InvalidArgumentException('Checklist inválida.');
