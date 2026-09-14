@@ -1,15 +1,20 @@
 <?php
 require_once __DIR__.'/helpers.php';
+require_once __DIR__.'/integrations_migrations.php';
+require_once __DIR__.'/includes/integrations/IntegrationClient.php';
+require_once __DIR__.'/includes/integrations/IntegrationManager.php';
 require_admin();
+integrations_migrate($pdo);
 
 // Some hosting configurations route unknown PHP files to the public website.
 // Keep the integration editor reachable through this established entry point.
 if (($_GET['action'] ?? '') === 'edit') {
+    $integrationManager = new IntegrationManager($pdo);
     require __DIR__.'/integration_edit.php';
     return;
 }
 
-require_once __DIR__.'/integrations_migrations.php';require_once __DIR__.'/includes/integrations/IntegrationClient.php';integrations_migrate($pdo);$notice=$error='';
+$notice=$error='';
 if($_SERVER['REQUEST_METHOD']==='POST'&&validate_csrf_or_abort(false)){try{$id=(int)($_POST['id']??0);if(($_POST['action']??'')==='toggle'){$pdo->prepare('UPDATE integrations SET is_active=1-is_active,status=CASE WHEN is_active=1 THEN "off" ELSE "on" END WHERE id=?')->execute([$id]);$notice='Estado atualizado.';}elseif(($_POST['action']??'')==='test'){$s=$pdo->prepare('SELECT * FROM integrations WHERE id=?');$s->execute([$id]);$i=$s->fetch();$r=(new IntegrationClient($pdo))->request($i);$notice=$r['ok']?'Ligação estabelecida (HTTP '.$r['status'].').':'Erro HTTP '.$r['status'].': '.$r['error'];$pdo->prepare('UPDATE integrations SET status=?,last_result=? WHERE id=?')->execute([$r['ok']?'on':'error',$notice,$id]);}}catch(Throwable $e){$error=$e->getMessage();}}
 $rows=$pdo->query('SELECT i.*,(SELECT COUNT(*) FROM integration_flows f WHERE f.integration_id=i.id AND f.is_active=1) active_flows,(SELECT MAX(started_at) FROM integration_runs r WHERE r.integration_id=i.id) last_run,(SELECT MIN(next_run_at) FROM integration_flows f WHERE f.integration_id=i.id AND f.is_active=1) next_run FROM integrations i ORDER BY i.name')->fetchAll();$pageTitle='Integrações';require __DIR__.'/partials/header.php';
 ?>

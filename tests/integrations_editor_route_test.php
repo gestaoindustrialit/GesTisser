@@ -20,6 +20,19 @@ integration_editor_route_assert(
     'The integrations entry point must dispatch editor requests.'
 );
 integration_editor_route_assert(
+    strpos($listSource, 'integrations_migrate($pdo);') < strpos($listSource, "require __DIR__.'/integration_edit.php'"),
+    'The integration schema must be initialized before dispatching the editor.'
+);
+integration_editor_route_assert(
+    strpos($listSource, '$integrationManager = new IntegrationManager($pdo);') !== false,
+    'The routed editor must receive the initialized integration manager.'
+);
+integration_editor_route_assert(
+    strpos($editorSource, '$isRoutedEditor=isset($integrationManager)') !== false
+        && strpos($editorSource, 'if(!$isRoutedEditor){require_admin();}') !== false,
+    'The editor must identify routed requests without relying on rewritten server paths.'
+);
+integration_editor_route_assert(
     strpos($editorSource, "'integrations.php?action=edit'") !== false,
     'The editor must preserve the routed URL after saving.'
 );
