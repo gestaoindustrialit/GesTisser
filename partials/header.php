@@ -13,6 +13,7 @@ $user = current_user($pdo);
 $navbarLogo = app_setting($pdo, 'logo_navbar_light');
 $showHrMenu = $user && ((int) ($user['is_admin'] ?? 0) === 1 || (string) ($user['access_profile'] ?? '') === 'RH');
 $showBiMenu = $user && (int)($user['is_admin'] ?? 0) === 1;
+$showCrmMenu = $user && (int)($user['is_admin'] ?? 0) === 1;
 if ($user && !$showBiMenu) {
     if (function_exists('erp_user_can')) {
         $showBiMenu = erp_user_can($pdo, $user, 'erp.bi.view');
@@ -23,6 +24,27 @@ if ($user && !$showBiMenu) {
             $biPermission->execute([(int)$user['id'], (string)($user['access_profile'] ?? '')]);
             $showBiMenu = (int)$biPermission->fetchColumn() === 1;
         }
+    }
+}
+if ($user && !$showCrmMenu) {
+    if (function_exists('erp_user_can')) {
+        $showCrmMenu = erp_user_can($pdo, $user, 'crm.view');
+    } else {
+        $crmPermissionTable = $pdo->query("SELECT 1 FROM sqlite_master WHERE type='table' AND name='erp_user_permissions'")->fetchColumn();
+        if ($crmPermissionTable) {
+            $crmPermission = $pdo->prepare('SELECT COALESCE((SELECT is_allowed FROM erp_user_permissions WHERE user_id=? AND permission_code="crm.view"),(SELECT 1 FROM erp_role_permissions WHERE profile=? AND permission_code="crm.view"))');
+            $crmPermission->execute([(int)$user['id'], (string)($user['access_profile'] ?? '')]);
+            $showCrmMenu = (int)$crmPermission->fetchColumn() === 1;
+        }
+    }
+}
+$navbarCrmReminderCount = 0;
+if ($user && $showCrmMenu) {
+    $crmActivitiesTable = $pdo->query("SELECT 1 FROM sqlite_master WHERE type='table' AND name='crm_activities'")->fetchColumn();
+    if ($crmActivitiesTable) {
+        $crmReminderStmt = $pdo->prepare('SELECT COUNT(*) FROM crm_activities WHERE assigned_to=? AND status="PENDING" AND (due_datetime<=datetime("now","+1 day") OR reminder_datetime<=datetime("now"))');
+        $crmReminderStmt->execute([(int)$user['id']]);
+        $navbarCrmReminderCount = (int)$crmReminderStmt->fetchColumn();
     }
 }
 $isShopfloorOnlyNavigation = $user && has_shopfloor_only_navigation($user);
@@ -141,6 +163,18 @@ header('Content-Type: text/html; charset=UTF-8');
                         <i class="bi bi-bar-chart-line"></i><span>Business Intelligence</span>
                     </a>
                 <?php endif; ?>
+                <?php if ($showCrmMenu): ?>
+                    <details class="gt-nav-group"<?= $isCurrentFile('crm.php') ? ' open' : '' ?>>
+                        <summary><span><i class="bi bi-bullseye"></i>CRM</span><i class="bi bi-chevron-down gt-nav-chevron"></i></summary>
+                        <div class="gt-nav-submenu">
+                            <?php foreach ([
+                                'dashboard'=>['Dashboard','bi-grid-1x2'],'day'=>['Meu Dia','bi-sun'],'leads'=>['Leads','bi-person-plus'],'pipeline'=>['Pipeline','bi-kanban'],'customers'=>['Clientes','bi-buildings'],'contacts'=>['Contactos','bi-person-vcard'],'projects'=>['Projetos','bi-folder2-open'],'activities'=>['Atividades','bi-lightning'],'agenda'=>['Agenda','bi-calendar3'],'tasks'=>['Tarefas','bi-check2-square'],'reports'=>['Relatórios','bi-graph-up'],'settings'=>['Configurações','bi-gear']
+                            ] as $crmView=>$crmItem): ?>
+                                <a class="<?= $isCurrentFile('crm.php') && (string)($_GET['view']??'dashboard')===$crmView ? 'is-active' : '' ?>" href="crm.php?view=<?=h($crmView)?>"><i class="bi <?=h($crmItem[1])?>"></i><span><?=h($crmItem[0])?></span></a>
+                            <?php endforeach; ?>
+                        </div>
+                    </details>
+                <?php endif; ?>
                 <a class="gt-nav-link<?= $isCurrentFile('shopfloor.php') ? ' is-active' : '' ?>" href="<?= h(route_url('shopfloor', 'shopfloor.php')) ?>">
                     <i class="bi bi-speedometer2"></i><span>Shopfloor</span>
                 </a>
@@ -249,6 +283,12 @@ header('Content-Type: text/html; charset=UTF-8');
                 </div>
             <?php endif; ?>
             <div class="gt-top-actions">
+                <?php if ($showCrmMenu): ?>
+                    <a class="btn btn-sm btn-outline-secondary position-relative" href="crm.php?view=day" aria-label="<?= $navbarCrmReminderCount ?> lembretes CRM">
+                        <i class="bi bi-bell"></i><span class="d-none d-md-inline"> CRM</span>
+                        <?php if ($navbarCrmReminderCount): ?><span class="position-absolute top-0 start-100 translate-middle badge rounded-pill text-bg-danger"><?= $navbarCrmReminderCount ?></span><?php endif; ?>
+                    </a>
+                <?php endif; ?>
                 <?php if (isset($navbarClockControl) && is_array($navbarClockControl)): ?>
                     <form method="post" action="<?= h((string) ($navbarClockControl['form_action'] ?? 'shopfloor.php')) ?>" class="gt-clock-form">
                         <input type="hidden" name="action" value="clock_entry">
