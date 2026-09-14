@@ -18,10 +18,12 @@ function select(name, optionCount, classes = [], setting) {
 }
 
 assert.equal(searchableSelect.shouldEnhance(select('raw_material_id', 50)), true);
-assert.equal(searchableSelect.shouldEnhance(select('customer_id', 2)), false);
-assert.equal(searchableSelect.shouldEnhance(select('status', 50)), false);
+assert.equal(searchableSelect.shouldEnhance(select('customer_id', 2)), true);
+assert.equal(searchableSelect.shouldEnhance(select('status', 50)), true);
+assert.equal(searchableSelect.shouldEnhance(select('anything', 2)), true);
 assert.equal(searchableSelect.shouldEnhance(select('anything', 2, ['js-searchable-select'])), true);
 assert.equal(searchableSelect.shouldEnhance(select('machine_id', 50, [], 'off')), false);
+assert.equal(searchableSelect.shouldEnhance(select('machine_id', 50, ['gt-search-select-native'])), false);
 
 // Regression: build() must only access the select stored on the instance.
 const componentSource = fs.readFileSync(require.resolve('../assets/searchable-select.js'), 'utf8');

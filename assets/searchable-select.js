@@ -5,18 +5,13 @@
 }(typeof window !== 'undefined' ? window : globalThis, function (document) {
     'use strict';
 
-    const relationshipPattern = /(^|\[|_)(raw_material|material|ink|article|product|customer|supplier|machine|operation|employee|collaborator|user|warehouse|location|production_order|order|category|department|team|project|assignee|manager|responsible|backup|schedule|reason|work_center|checklist|address)(_|\]|$)/i;
-    const excludedPattern = /(^|\[|_)(status|state|active|enabled|type|level|score|period|month|year|timezone|per_page|timing|unit)(_|\]|$)/i;
-
     function normalize(value) {
         return String(value == null ? '' : value).normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLocaleLowerCase('pt-PT');
     }
 
     function shouldEnhance(select) {
         if (!select || select.dataset.searchableSelect === 'off' || select.classList.contains('gt-search-select-native')) return false;
-        if (select.classList.contains('js-searchable-select')) return true;
-        const name = select.name || select.id || '';
-        return !excludedPattern.test(name) && relationshipPattern.test(name) && select.options.length >= 6;
+        return true;
     }
 
     function highlight(container, text, query) {
