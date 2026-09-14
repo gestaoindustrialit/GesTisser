@@ -52,7 +52,7 @@ function erp_migrate_material_type_columns(PDO $pdo)
     }
 }
 
-function erp_migrate_work_centers(PDO $pdo): void
+function erp_migrate_work_centers(PDO $pdo)
 {
     $pdo->exec('CREATE TABLE IF NOT EXISTS erp_printers (id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT NOT NULL UNIQUE, network_uri TEXT NOT NULL UNIQUE, location TEXT, driver_name TEXT, is_active INTEGER NOT NULL DEFAULT 1, created_at DATETIME DEFAULT CURRENT_TIMESTAMP, updated_at DATETIME DEFAULT CURRENT_TIMESTAMP)');
     $columns = [

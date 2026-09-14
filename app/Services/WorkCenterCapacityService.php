@@ -12,7 +12,8 @@ final class WorkCenterCapacityService
         return round(max(0, (float) ($center['daily_capacity_minutes'] ?? 0)) * min(100, max(0, (float) ($center['efficiency_percent'] ?? 100))) / 100, 2);
     }
 
-    public static function forecastDate(float $queuedMinutes, float $dailyMinutes, ?DateTimeImmutable $from = null): ?DateTimeImmutable
+    /** @return DateTimeImmutable|null */
+    public static function forecastDate(float $queuedMinutes, float $dailyMinutes, DateTimeImmutable $from = null)
     {
         if ($dailyMinutes <= 0) return null;
         $days = (int) ceil(max(0, $queuedMinutes) / $dailyMinutes);

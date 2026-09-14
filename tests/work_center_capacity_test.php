@@ -4,7 +4,11 @@ declare(strict_types=1);
 require_once __DIR__ . '/../app/Services/WorkCenterCapacityService.php';
 require_once __DIR__ . '/../erp_migrations.php';
 
-function assertSameValue($expected, $actual, string $message): void
+if ((new ReflectionFunction('erp_migrate_work_centers'))->hasReturnType()) {
+    throw new RuntimeException('A migração deve manter compatibilidade com PHP 7.0 e não declarar retorno void.');
+}
+
+function assertSameValue($expected, $actual, string $message)
 {
     if ($expected !== $actual) throw new RuntimeException($message . ': esperado ' . var_export($expected, true) . ', obtido ' . var_export($actual, true));
 }
