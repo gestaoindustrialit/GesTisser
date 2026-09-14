@@ -31,4 +31,11 @@ const buildSource = componentSource.slice(componentSource.indexOf('        build
 assert.equal(/(?<!this\.)\bselect\.(required|getAttribute|labels)\b/.test(buildSource), false);
 assert.match(componentSource, /dataset\.searchValue === 'off'/, 'selects can prevent internal IDs from being searchable');
 
+// Purchase-order article rows must opt in explicitly and new rows must be
+// cloned from pristine markup, before searchable-select enhances the source.
+const erpSource = fs.readFileSync(require.resolve('../erp.php'), 'utf8');
+assert.match(erpSource, /class="form-select js-searchable-select" name="line_item_id\[\]"/, 'order articles use the searchable select');
+assert.match(erpSource, /var rowTemplate=source&&source\.cloneNode\(true\)/, 'order row template is captured before enhancement');
+assert.match(erpSource, /var row=rowTemplate\.cloneNode\(true\)/, 'new order rows use the pristine template');
+
 console.log('Searchable select normalization and selection policy: OK');
