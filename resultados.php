@@ -1312,9 +1312,6 @@ require __DIR__ . '/partials/header.php';
                 </div>
             </div>
             <div class="col-md-1 d-grid"><button class="btn btn-dark">Filtrar</button></div>
-            <div class="col-md-12 d-flex justify-content-end">
-                <a class="btn btn-outline-secondary btn-sm" href="?start_date=<?= h($startDate) ?>&end_date=<?= h($endDate) ?>&team_id=<?= (int) $teamId ?><?php foreach ($selectedUsers as $exportUserId): ?>&user_ids[]=<?= (int) $exportUserId ?><?php endforeach; ?>&action=export_sage_payroll">Exportar payroll Sage</a>
-            </div>
         <?php else: ?>
             <div class="col-md-2 d-grid"><button class="btn btn-dark">Filtrar</button></div>
         <?php endif; ?>
