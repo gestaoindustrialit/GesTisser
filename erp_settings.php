@@ -75,6 +75,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $id=(int)($_POST['id']??0);$references=['erp_operations'=>'default_work_center_id','erp_machines'=>'work_center_id','erp_article_routing_steps'=>'work_center_id','erp_shift_assignments'=>'work_center_id'];
                 foreach($references as $table=>$column){$stmt=$pdo->prepare("SELECT COUNT(*) FROM $table WHERE $column=?");$stmt->execute([$id]);if((int)$stmt->fetchColumn()>0)throw new DomainException('Não é possível remover um setor que está a ser utilizado.');}
                 $pdo->prepare('DELETE FROM erp_work_centers WHERE id=?')->execute([$id]);erp_audit($pdo,$userId,'delete','erp_work_centers',$id,[],[]);$flashSuccess='Setor de operações removido com sucesso.';
+            } elseif ($action === 'reset_work_order_sequence') {
+                $nextNumber = filter_var($_POST['work_order_next_number'] ?? null, FILTER_VALIDATE_INT, ['options'=>['min_range'=>1]]);
+                if ($nextNumber === false) throw new InvalidArgumentException('Indique um número válido para a próxima OF.');
+                $sequence = $pdo->query("SELECT id,prefix,next_number,padding,suffix FROM erp_number_sequences WHERE code='work_order'")->fetch(PDO::FETCH_ASSOC);
+                if (!$sequence) throw new RuntimeException('A sequência das ordens de fabrico não está configurada.');
+                $pdo->prepare('UPDATE erp_number_sequences SET next_number=?,updated_at=CURRENT_TIMESTAMP WHERE id=?')->execute([$nextNumber,(int)$sequence['id']]);
+                erp_audit($pdo,$userId,'reset_sequence','erp_number_sequences',(int)$sequence['id'],['next_number'=>(int)$sequence['next_number']],['next_number'=>$nextNumber]);
+                $flashSuccess='A próxima Ordem de Fabrico será a n.º '.(string)$sequence['prefix'].str_pad((string)$nextNumber,(int)$sequence['padding'],'0',STR_PAD_LEFT).(string)($sequence['suffix']??'').'.';
             } else {
                 $allowNegativeStock = isset($_POST['allow_negative_stock']) && $_POST['allow_negative_stock'] === '1';
                 $codePattern = trim((string) ($_POST['raw_material_code_pattern'] ?? ''));
@@ -98,6 +106,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 }
 $settings = $pdo->query('SELECT key, value FROM erp_settings')->fetchAll(PDO::FETCH_KEY_PAIR);
 $sequences = $pdo->query('SELECT id, code, prefix, next_number, padding, suffix FROM erp_number_sequences ORDER BY code')->fetchAll(PDO::FETCH_ASSOC);
+$workOrderSequence = null;
+foreach ($sequences as $sequence) if ($sequence['code'] === 'work_order') $workOrderSequence = $sequence;
 $operationTypes = $pdo->query('SELECT id,code,name FROM erp_operation_types ORDER BY name COLLATE NOCASE')->fetchAll(PDO::FETCH_ASSOC);
 $operationSectors = $pdo->query('SELECT wc.*,m.code machine_code,p.name printer_name FROM erp_work_centers wc LEFT JOIN erp_machines m ON m.id=wc.machine_id LEFT JOIN erp_printers p ON p.id=wc.default_printer_id ORDER BY wc.is_active DESC,wc.code COLLATE NOCASE')->fetchAll(PDO::FETCH_ASSOC);
 $machines = $pdo->query('SELECT id,code,name FROM erp_machines WHERE is_active=1 AND deleted_at IS NULL ORDER BY code')->fetchAll(PDO::FETCH_ASSOC);
@@ -164,6 +174,17 @@ require __DIR__ . '/partials/header.php';
         </div></section>
     </div>
 </div>
+
+<?php if ($workOrderSequence): ?>
+<form method="post" class="card shadow-sm soft-card border-primary mb-4">
+    <?= csrf_input() ?><input type="hidden" name="action" value="reset_work_order_sequence">
+    <div class="card-body p-4"><div class="row g-3 align-items-end">
+        <div class="col-lg-7"><h2 class="h5 mb-1">Reiniciar numeração das Ordens de Fabrico</h2><p class="text-muted mb-0">Defina o contador para continuar a numeração já utilizada neste ano. Esta operação não elimina nem altera OF existentes.</p></div>
+        <div class="col-md-3"><label class="form-label" for="work-order-next-number">N.º da próxima OF</label><input class="form-control" id="work-order-next-number" name="work_order_next_number" type="number" min="1" step="1" required value="<?= (int)$workOrderSequence['next_number'] ?>"><div class="form-text">Será criada como <strong><?=h((string)$workOrderSequence['prefix'])?><?=str_pad((string)$workOrderSequence['next_number'],(int)$workOrderSequence['padding'],'0',STR_PAD_LEFT)?><?=h((string)$workOrderSequence['suffix'])?></strong>.</div></div>
+        <div class="col-md-2"><button class="btn btn-outline-primary w-100" onclick="return confirm('Confirmar o novo número da próxima OF?')"><i class="bi bi-arrow-counterclockwise me-1"></i>Reiniciar contador</button></div>
+    </div></div>
+</form>
+<?php endif; ?>
 
 <form method="post" class="card shadow-sm soft-card">
     <?= csrf_input() ?>
