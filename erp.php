@@ -5,7 +5,7 @@ require_once __DIR__ . '/app/Services/MachineAttachment.php';
 require_once __DIR__ . '/app/Services/InventoryService.php';
 require_once __DIR__ . '/app/Services/StockTransferService.php';
 require_once __DIR__ . '/app/Services/PurchaseReceiptService.php';
-require_once __DIR__ . '/app/Services/ProductionDossierService.php';
+require_once __DIR__ . '/production_dossier_service.php';
 require_once __DIR__ . '/app/Services/SimpleXlsx.php';
 require_once __DIR__ . '/app/Services/OrderPdfUpload.php';
 require_once __DIR__ . '/app/Services/PdfTextExtractor.php';

@@ -1,7 +1,7 @@
 <?php
 require_once __DIR__.'/helpers.php';
 require_once __DIR__.'/erp_migrations.php';
-require_once __DIR__.'/app/Services/ProductionDossierService.php';
+require_once __DIR__ . '/production_dossier_service.php';
 require_login();erp_run_phase1_migrations($pdo);
 $user=current_user($pdo)?:[];if(!erp_user_can($pdo,$user,'erp.view')){http_response_code(403);exit('Sem acesso à Ordem de Fabrico.');}
 $id=filter_input(INPUT_GET,'id',FILTER_VALIDATE_INT)?:0;$service=new ProductionDossierService($pdo);
