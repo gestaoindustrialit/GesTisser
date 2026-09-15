@@ -6,6 +6,7 @@ require_once __DIR__ . '/app/Services/InventoryService.php';
 require_once __DIR__ . '/app/Services/StockTransferService.php';
 require_once __DIR__ . '/app/Services/PurchaseReceiptService.php';
 require_once __DIR__ . '/app/Services/NumberSequenceService.php';
+require_once __DIR__ . '/app/Services/LegacyProductBridge.php';
 require_once __DIR__ . '/production_dossier_service.php';
 require_once __DIR__ . '/app/Services/SimpleXlsx.php';
 require_once __DIR__ . '/app/Services/OrderPdfUpload.php';
@@ -193,7 +194,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $orderNumber=NumberSequenceService::take($pdo,'work_order');
                 $articleId=(int)($_POST['finished_product_id']??0); $article=$pdo->prepare('SELECT fp.*,c.name customer_name FROM erp_finished_products fp LEFT JOIN erp_customers c ON c.id=fp.customer_id WHERE fp.id=?'); $article->execute([$articleId]); $snapshot=$article->fetch(PDO::FETCH_ASSOC); if (!$snapshot) throw new RuntimeException('Artigo inválido.');
                 $deliveryAddressId=(int)($_POST['delivery_address_id']??0);if(empty($snapshot['customer_id']))throw new RuntimeException('O artigo deve ter um cliente para selecionar a morada de entrega.');$delivery=$pdo->prepare('SELECT * FROM erp_customer_delivery_addresses WHERE id=? AND customer_id=?');$delivery->execute([$deliveryAddressId,(int)$snapshot['customer_id']]);$delivery=$delivery->fetch(PDO::FETCH_ASSOC);if(!$delivery)throw new RuntimeException('Selecione uma morada de entrega válida para o cliente do artigo.');$deliveryText=trim($delivery['address'].', '.$delivery['postal_code'].' '.$delivery['city'].', '.$delivery['country'],', ');
-                $legacyId=$pdo->query('SELECT id FROM erp_products ORDER BY id LIMIT 1')->fetchColumn(); if (!$legacyId) throw new RuntimeException('É necessário um artigo legado base para compatibilidade com o Shopfloor.');
+                $legacyId=LegacyProductBridge::productIdForFinishedProduct($pdo,$snapshot);
                 $pdo->prepare('INSERT INTO erp_production_orders(order_number,product_id,finished_product_id,planned_quantity,due_date,notes,created_by,customer_id,delivery_address_id,delivery_address_snapshot,transporter) VALUES (?,?,?,?,?,?,?,?,?,?,?)')->execute([$orderNumber,(int)$legacyId,$articleId,(float)($_POST['planned_quantity']??0),trim($_POST['due_date']??'')?:null,trim($_POST['notes']??'')?:null,$userId,(int)$snapshot['customer_id'],$deliveryAddressId,$deliveryText,$delivery['transporter']]); $of=(int)$pdo->lastInsertId();
                 $bom=$pdo->prepare('SELECT am.quantity_per_unit,am.waste_percent,am.notes,rm.code,rm.description,u.code unit_code FROM erp_article_materials am JOIN erp_raw_materials rm ON rm.id=am.raw_material_id LEFT JOIN erp_units u ON u.id=rm.primary_unit_id WHERE am.finished_product_id=? ORDER BY rm.code');$bom->execute([$articleId]);$snapshot['_materials']=$bom->fetchAll(PDO::FETCH_ASSOC);
                 $documents=$pdo->prepare('SELECT title,file_url,document_type FROM erp_product_documents WHERE entity_type="finished_product" AND entity_id=? AND status="Ativo" ORDER BY id');$documents->execute([$articleId]);$snapshot['_documents']=$documents->fetchAll(PDO::FETCH_ASSOC);
