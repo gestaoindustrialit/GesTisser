@@ -76,13 +76,13 @@ final class RoutingService
         });
     }
 
-    private function saveStepMaterials(int $stepId,array $data): void
+    private function saveStepMaterials(int $stepId,array $data)
     {
         $ids=(array)($data['material_id']??[]);$quantities=(array)($data['material_quantity']??[]);$reserve=(array)($data['material_reserve']??[]);$seen=[];$insert=$this->pdo->prepare('INSERT INTO erp_routing_step_materials(routing_step_id,material_id,quantity_per_unit,reserve_on_order) VALUES (?,?,?,?)');
         foreach($ids as $index=>$rawId){$materialId=(int)$rawId;$qty=(float)str_replace(',','.',(string)($quantities[$index]??0));if(!$materialId&&$qty==0.0)continue;if(!$materialId||$qty<=0)throw new InvalidArgumentException('Cada material da operação deve indicar um produto e uma quantidade superior a zero.');if(isset($seen[$materialId]))throw new InvalidArgumentException('O mesmo produto não pode ser repetido na operação.');$material=$this->one('SELECT id FROM erp_raw_materials WHERE id=? AND status="Ativo"',[$materialId]);if(!$material)throw new InvalidArgumentException('Selecione apenas materiais ativos.');$seen[$materialId]=true;$insert->execute([$stepId,$materialId,$qty,!empty($reserve[$index])?1:0]);}
     }
 
-    private function reserveMaterial(int $orderId,int $orderOperationId,array $material,float $required): void
+    private function reserveMaterial(int $orderId,int $orderOperationId,array $material,float $required)
     {
         if($required<=0)return;$reserve=!empty($material['reserve_on_order']);$remaining=$required;$rows=$reserve?$this->all('SELECT rowid balance_rowid,item_type,item_id,COALESCE(warehouse_id,0) warehouse_id,COALESCE(location_id,0) location_id,COALESCE(lot,"") lot,physical_qty,reserved_qty,blocked_qty FROM erp_stock_balances WHERE item_type="raw_material" AND item_id=? AND physical_qty-reserved_qty-blocked_qty>0 ORDER BY updated_at,rowid',[(int)$material['material_id']]):[];
         if(!$reserve){$this->insertReservation($orderId,$orderOperationId,$material,$required,0,0,0,'');return;}
@@ -90,7 +90,7 @@ final class RoutingService
         if($remaining>0.0000001)throw new DomainException('Stock disponível insuficiente para reservar '.$material['code'].' (falta '.number_format($remaining,3,',',' ').').');
     }
 
-    private function insertReservation(int $orderId,int $orderOperationId,array $material,float $required,float $reserved,int $warehouseId,int $locationId,string $lot): void
+    private function insertReservation(int $orderId,int $orderOperationId,array $material,float $required,float $reserved,int $warehouseId,int $locationId,string $lot)
     {$this->pdo->prepare('INSERT INTO erp_production_order_material_reservations(production_order_id,production_order_operation_id,material_id,material_category,required_qty,reserved_qty,warehouse_id,location_id,lot) VALUES (?,?,?,?,?,?,?,?,?)')->execute([$orderId,$orderOperationId,(int)$material['material_id'],(string)$material['product_category'],$required,$reserved,$warehouseId,$locationId,$lot]);}
 
     public function plannedMinutes(array $s,float $qty): float { $qty*=(1+(float)$s['waste_percent']/100);$run=(float)$s['run_value'];$base=max(.000001,(float)$s['base_quantity']);switch($s['calculation_unit']){case'seconds_per_unit':$minutes=$qty*$run/$base/60;break;case'units_per_hour':$minutes=$run>0?$qty/$run*60:0;break;case'meters_per_minute':$minutes=$run>0?$qty/$run:0;break;default:$minutes=$qty*$run/$base;}return round((float)$s['setup_time']+$minutes+(float)$s['wait_minutes']+(float)$s['transfer_minutes'],3);}
