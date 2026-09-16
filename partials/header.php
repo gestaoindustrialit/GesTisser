@@ -215,15 +215,14 @@ header('Content-Type: text/html; charset=UTF-8');
                             <a class="<?= $isCurrentFile('hr_skills.php') ? 'is-active' : '' ?>" href="hr_skills.php"><i class="bi bi-stars" aria-hidden="true"></i><span>Matriz de competências</span></a>
                             <a class="<?= $isCurrentFile('hr_job_descriptions.php') ? 'is-active' : '' ?>" href="hr_job_descriptions.php"><i class="bi bi-journal-text" aria-hidden="true"></i><span>Cadernos de encargos</span></a>
                             <span class="gt-nav-label">Operação diária</span>
-                            <a class="<?= $isCurrentFile('resultados.php') ? 'is-active' : '' ?>" href="resultados.php"><i class="bi bi-graph-up-arrow" aria-hidden="true"></i><span>Resultados</span></a>
                             <a class="<?= $isCurrentFile('hr_calendar.php') ? 'is-active' : '' ?>" href="hr_calendar.php"><i class="bi bi-calendar3" aria-hidden="true"></i><span>Calendário</span></a>
                             <a class="<?= $isCurrentFile('hr_absences.php') ? 'is-active' : '' ?>" href="hr_absences.php"><i class="bi bi-person-dash" aria-hidden="true"></i><span>Ausências</span></a>
                             <a class="<?= $isCurrentFile('hr_vacations.php') ? 'is-active' : '' ?>" href="hr_vacations.php"><i class="bi bi-sun" aria-hidden="true"></i><span>Férias</span></a>
-                            <a class="<?= $isCurrentFile('payroll.php') ? 'is-active' : '' ?>" href="payroll.php"><i class="bi bi-file-earmark-arrow-down" aria-hidden="true"></i><span>Export Payroll</span></a>
                             <a class="<?= $isCurrentFile('hr_bank.php') ? 'is-active' : '' ?>" href="hr_bank.php"><i class="bi bi-hourglass-split" aria-hidden="true"></i><span>Banco de horas</span></a>
                             <a class="<?= $isCurrentFile('hr_alerts.php') ? 'is-active' : '' ?>" href="hr_alerts.php"><i class="bi bi-bell" aria-hidden="true"></i><span>Alertas RH</span></a>
-                            <a class="<?= $isCurrentFile('hr_evaluations.php') ? 'is-active' : '' ?>" href="hr_evaluations.php"><i class="bi bi-clipboard-check" aria-hidden="true"></i><span>Avaliações</span></a>
+                            <a class="<?= $isCurrentFile('resultados.php') ? 'is-active' : '' ?>" href="resultados.php"><i class="bi bi-graph-up-arrow" aria-hidden="true"></i><span>Resultados</span></a>
                             <a class="<?= $isCurrentFile('shopfloor_break_dashboard.php') ? 'is-active' : '' ?>" href="shopfloor_break_dashboard.php"><i class="bi bi-pie-chart" aria-hidden="true"></i><span>Dashboard de pausas</span></a>
+                            <a class="<?= $isCurrentFile('payroll.php') ? 'is-active' : '' ?>" href="payroll.php"><i class="bi bi-file-earmark-arrow-down" aria-hidden="true"></i><span>Export Payroll</span></a>
                             <a class="<?= $isCurrentFile('shopfloor_break_reasons.php') ? 'is-active' : '' ?>" href="shopfloor_break_reasons.php"><i class="bi bi-cup-hot" aria-hidden="true"></i><span>Pausas e paragens</span></a>
                             <a class="<?= $isCurrentFile('shopfloor_absence_reasons.php') ? 'is-active' : '' ?>" href="shopfloor_absence_reasons.php"><i class="bi bi-card-list" aria-hidden="true"></i><span>Motivos de ausência</span></a>
                             <a class="<?= $isCurrentFile('hr_evaluation_rules.php') ? 'is-active' : '' ?>" href="hr_evaluation_rules.php"><i class="bi bi-sliders" aria-hidden="true"></i><span>Regras de avaliação</span></a>
