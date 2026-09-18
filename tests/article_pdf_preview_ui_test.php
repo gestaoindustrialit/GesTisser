@@ -8,6 +8,7 @@ function article_pdf_preview_check($condition, $message)
 
 article_pdf_preview_check(strpos($source, 'class="btn btn-sm btn-light border article-pdf-preview"') !== false, 'article PDF trigger missing');
 article_pdf_preview_check(strpos($source, 'id="articlePdfModal"') !== false, 'article PDF preview modal missing');
+article_pdf_preview_check(strpos($source, "ArticleDocument::url((int)\$document['id'])") !== false, 'authenticated article document route missing');
 article_pdf_preview_check(strpos($source, "fetch(url,{credentials:'same-origin'})") !== false, 'authenticated PDF fetch missing');
 article_pdf_preview_check(strpos($source, 'URL.createObjectURL(blob)') !== false, 'blob preview URL missing');
 article_pdf_preview_check(strpos($source, "articlePdfModal.addEventListener('hidden.bs.modal'") !== false, 'preview cleanup missing');
