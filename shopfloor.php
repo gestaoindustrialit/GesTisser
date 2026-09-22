@@ -2,6 +2,7 @@
 require_once __DIR__ . '/helpers.php';
 require_once __DIR__ . '/app/Services/ShopfloorAttachment.php';
 require_once __DIR__ . '/app/Services/OperationChecklistService.php';
+require_once __DIR__ . '/app/Services/ValidatedHourBankCalculator.php';
 require_once __DIR__ . '/hr_organization_lib.php';
 require_once __DIR__ . '/erp_migrations.php';
 require_login();
@@ -821,8 +822,9 @@ if ($rangeEnd >= $rangeStart) {
     }
 }
 
-$displayedHourBankHours = (float) ($hourBank['balance_hours'] ?? 0) + ($bhAdjustmentMinutes / 60);
-$displayedHourBankMinutes = (int) round($displayedHourBankHours * 60);
+$validatedHourBankMinutes = ValidatedHourBankCalculator::calculateMinutes($pdo, $userId);
+$storedHourBankMinutes = (int) round(((float) ($hourBank['balance_hours'] ?? 0)) * 60);
+$displayedHourBankMinutes = ($validatedHourBankMinutes ?? $storedHourBankMinutes) + $bhAdjustmentMinutes;
 $displayedHourBankAbsMinutes = abs($displayedHourBankMinutes);
 $formattedHourBank = sprintf('%s%02dh%02dm', $displayedHourBankMinutes < 0 ? '-' : '', intdiv($displayedHourBankAbsMinutes, 60), $displayedHourBankAbsMinutes % 60);
 
@@ -856,7 +858,7 @@ require __DIR__ . '/partials/header.php';
         <div class="shopfloor-topbar-kpis" aria-label="Resumo rápido de horas e férias">
             <article class="shopfloor-kpi-card shopfloor-kpi-card-compact">
                 <h2>Balanço de BH</h2>
-                <strong><?= h($formattedHourBank) ?></strong>
+                <strong class="<?= $displayedHourBankMinutes < 0 ? 'text-danger' : '' ?>"><?= h($formattedHourBank) ?></strong>
             </article>
             <article class="shopfloor-kpi-card shopfloor-kpi-card-compact">
                 <h2>Dias de férias</h2>
