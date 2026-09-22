@@ -28,7 +28,7 @@ function current_user(PDO $pdo)
         return null;
     }
 
-    $stmt = $pdo->prepare('SELECT id, name, email, is_admin, access_profile, pin_only_login FROM users WHERE id = ?');
+    $stmt = $pdo->prepare('SELECT id, name, email, is_admin, access_profile, pin_only_login, crm_enabled FROM users WHERE id = ?');
     $stmt->execute([$_SESSION['user_id']]);
     $user = $stmt->fetch(PDO::FETCH_ASSOC);
 

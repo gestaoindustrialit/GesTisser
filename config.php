@@ -246,6 +246,9 @@ if (!in_array('pin_code', $userColumns, true)) {
 if (!in_array('pin_only_login', $userColumns, true)) {
     $pdo->exec('ALTER TABLE users ADD COLUMN pin_only_login INTEGER DEFAULT 0');
 }
+if (!in_array('crm_enabled', $userColumns, true)) {
+    $pdo->exec('ALTER TABLE users ADD COLUMN crm_enabled INTEGER NOT NULL DEFAULT 1');
+}
 if (!in_array('award_profile', $userColumns, true)) {
     $pdo->exec('ALTER TABLE users ADD COLUMN award_profile TEXT DEFAULT "operador"');
 }
@@ -279,6 +282,9 @@ $pdo->exec('UPDATE users SET sms_notifications_active = 0 WHERE sms_notification
 $pdo->exec('UPDATE users SET timezone = "Europe/Lisbon" WHERE timezone IS NULL OR TRIM(timezone) = ""');
 $pdo->exec('UPDATE users SET send_access_email = 0 WHERE send_access_email IS NULL');
 $pdo->exec('UPDATE users SET pin_only_login = 0 WHERE pin_only_login IS NULL');
+$pdo->exec('UPDATE users SET crm_enabled = 1 WHERE crm_enabled IS NULL');
+// PIN-only accounts are restricted to Shopfloor, including imported records.
+$pdo->exec('UPDATE users SET crm_enabled = 0 WHERE pin_only_login = 1 AND crm_enabled <> 0');
 $pdo->exec('UPDATE users SET award_profile = "operador" WHERE award_profile IS NULL OR TRIM(award_profile) = ""');
 $pdo->exec('UPDATE users SET award_eligible = 1 WHERE award_eligible IS NULL');
 
