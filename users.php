@@ -481,6 +481,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $pinCode = preg_replace('/\D+/', '', (string) ($_POST['pin_code'] ?? ''));
         $pinCodeHash = $pinCode !== '' ? password_hash($pinCode, PASSWORD_DEFAULT) : null;
         $pinOnlyLogin = (int) ($_POST['pin_only_login'] ?? 0);
+        $crmEnabled = $pinOnlyLogin === 1 ? 0 : (int) ($_POST['crm_enabled'] ?? 0);
 
         $userType = trim((string) ($_POST['user_type'] ?? 'Funcionário'));
         $userNumber = trim((string) ($_POST['user_number'] ?? ''));
@@ -589,6 +590,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     $municipality, $district, $placeOfBirth, $nationality,
                     $citizenCardNumber, $citizenCardExpiryDate !== '' ? $citizenCardExpiryDate : null, $maritalStatus, $dependentsCount,
                 ]);
+                $pdo->prepare('UPDATE users SET crm_enabled = ? WHERE id = ?')->execute([$crmEnabled, (int) $pdo->lastInsertId()]);
                 $flashSuccess = 'Utilizador criado com sucesso.';
             } catch (PDOException $e) {
                 if (stripos($e->getMessage(), 'users.email') !== false) {
@@ -616,6 +618,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $pinCode = preg_replace('/\D+/', '', (string) ($_POST['pin_code'] ?? ''));
         $pinCodeHash = $pinCode !== '' ? password_hash($pinCode, PASSWORD_DEFAULT) : null;
         $pinOnlyLogin = (int) ($_POST['pin_only_login'] ?? 0);
+        $crmEnabled = $pinOnlyLogin === 1 ? 0 : (int) ($_POST['crm_enabled'] ?? 0);
 
         $userType = trim((string) ($_POST['user_type'] ?? 'Funcionário'));
         $userNumber = trim((string) ($_POST['user_number'] ?? ''));
@@ -703,12 +706,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             try {
                 $passwordWasUpdated = false;
                 if ($password !== '') {
-                    $stmt = $pdo->prepare('UPDATE users SET name = ?, username = ?, email = ?, password = ?, is_admin = ?, access_profile = ?, is_active = ?, must_change_password = ?, pin_code_hash = COALESCE(?, pin_code_hash), pin_code = COALESCE(?, pin_code), pin_only_login = ?, user_type = ?, user_number = ?, title = ?, short_name = ?, initials = ?, email_notifications_active = ?, sms_notifications_active = ?, profession = ?, category = ?, manager_name = ?, department = ?, department_id = ?, schedule_id = ?, hire_date = ?, birth_date = ?, termination_date = ?, timezone = ?, phone = ?, mobile = ?, notes = ?, send_access_email = ?, personal_email = ?, tax_number = ?, social_security_number = ?, address = ?, postal_code = ?, parish = ?, municipality = ?, district = ?, place_of_birth = ?, nationality = ?, citizen_card_number = ?, citizen_card_expiry_date = ?, marital_status = ?, dependents_count = ? WHERE id = ?');
-                    $stmt->execute([$name, $username, $email, password_hash($password, PASSWORD_DEFAULT), $isTargetAdmin, $accessProfile, $isActive, $mustChangePassword, $pinCodeHash, $pinCodeHash, $pinOnlyLogin, $userType, $userNumber, $title, $shortName, $initials, $emailNotificationsActive, $smsNotificationsActive, $profession, $category, $managerName, $department, $departmentId > 0 ? $departmentId : null, $scheduleId > 0 ? $scheduleId : null, $hireDate, $birthDate, $terminationDate, $timezone, $phone, $mobile, $notes, $sendAccessEmail, $personalEmail, $taxNumber, $socialSecurityNumber, $address, $postalCode, $parish, $municipality, $district, $placeOfBirth, $nationality, $citizenCardNumber, $citizenCardExpiryDate !== '' ? $citizenCardExpiryDate : null, $maritalStatus, $dependentsCount, $targetUserId]);
+                    $stmt = $pdo->prepare('UPDATE users SET name = ?, username = ?, email = ?, password = ?, is_admin = ?, access_profile = ?, is_active = ?, must_change_password = ?, pin_code_hash = COALESCE(?, pin_code_hash), pin_code = COALESCE(?, pin_code), pin_only_login = ?, user_type = ?, user_number = ?, title = ?, short_name = ?, initials = ?, email_notifications_active = ?, sms_notifications_active = ?, profession = ?, category = ?, manager_name = ?, department = ?, department_id = ?, schedule_id = ?, hire_date = ?, birth_date = ?, termination_date = ?, timezone = ?, phone = ?, mobile = ?, notes = ?, send_access_email = ?, personal_email = ?, tax_number = ?, social_security_number = ?, address = ?, postal_code = ?, parish = ?, municipality = ?, district = ?, place_of_birth = ?, nationality = ?, citizen_card_number = ?, citizen_card_expiry_date = ?, marital_status = ?, dependents_count = ?, crm_enabled = ? WHERE id = ?');
+                    $stmt->execute([$name, $username, $email, password_hash($password, PASSWORD_DEFAULT), $isTargetAdmin, $accessProfile, $isActive, $mustChangePassword, $pinCodeHash, $pinCodeHash, $pinOnlyLogin, $userType, $userNumber, $title, $shortName, $initials, $emailNotificationsActive, $smsNotificationsActive, $profession, $category, $managerName, $department, $departmentId > 0 ? $departmentId : null, $scheduleId > 0 ? $scheduleId : null, $hireDate, $birthDate, $terminationDate, $timezone, $phone, $mobile, $notes, $sendAccessEmail, $personalEmail, $taxNumber, $socialSecurityNumber, $address, $postalCode, $parish, $municipality, $district, $placeOfBirth, $nationality, $citizenCardNumber, $citizenCardExpiryDate !== '' ? $citizenCardExpiryDate : null, $maritalStatus, $dependentsCount, $crmEnabled, $targetUserId]);
                     $passwordWasUpdated = true;
                 } else {
-                    $stmt = $pdo->prepare('UPDATE users SET name = ?, username = ?, email = ?, is_admin = ?, access_profile = ?, is_active = ?, must_change_password = ?, pin_code_hash = COALESCE(?, pin_code_hash), pin_code = COALESCE(?, pin_code), pin_only_login = ?, user_type = ?, user_number = ?, title = ?, short_name = ?, initials = ?, email_notifications_active = ?, sms_notifications_active = ?, profession = ?, category = ?, manager_name = ?, department = ?, department_id = ?, schedule_id = ?, hire_date = ?, birth_date = ?, termination_date = ?, timezone = ?, phone = ?, mobile = ?, notes = ?, send_access_email = ?, personal_email = ?, tax_number = ?, social_security_number = ?, address = ?, postal_code = ?, parish = ?, municipality = ?, district = ?, place_of_birth = ?, nationality = ?, citizen_card_number = ?, citizen_card_expiry_date = ?, marital_status = ?, dependents_count = ? WHERE id = ?');
-                    $stmt->execute([$name, $username, $email, $isTargetAdmin, $accessProfile, $isActive, $mustChangePassword, $pinCodeHash, $pinCodeHash, $pinOnlyLogin, $userType, $userNumber, $title, $shortName, $initials, $emailNotificationsActive, $smsNotificationsActive, $profession, $category, $managerName, $department, $departmentId > 0 ? $departmentId : null, $scheduleId > 0 ? $scheduleId : null, $hireDate, $birthDate, $terminationDate, $timezone, $phone, $mobile, $notes, $sendAccessEmail, $personalEmail, $taxNumber, $socialSecurityNumber, $address, $postalCode, $parish, $municipality, $district, $placeOfBirth, $nationality, $citizenCardNumber, $citizenCardExpiryDate !== '' ? $citizenCardExpiryDate : null, $maritalStatus, $dependentsCount, $targetUserId]);
+                    $stmt = $pdo->prepare('UPDATE users SET name = ?, username = ?, email = ?, is_admin = ?, access_profile = ?, is_active = ?, must_change_password = ?, pin_code_hash = COALESCE(?, pin_code_hash), pin_code = COALESCE(?, pin_code), pin_only_login = ?, user_type = ?, user_number = ?, title = ?, short_name = ?, initials = ?, email_notifications_active = ?, sms_notifications_active = ?, profession = ?, category = ?, manager_name = ?, department = ?, department_id = ?, schedule_id = ?, hire_date = ?, birth_date = ?, termination_date = ?, timezone = ?, phone = ?, mobile = ?, notes = ?, send_access_email = ?, personal_email = ?, tax_number = ?, social_security_number = ?, address = ?, postal_code = ?, parish = ?, municipality = ?, district = ?, place_of_birth = ?, nationality = ?, citizen_card_number = ?, citizen_card_expiry_date = ?, marital_status = ?, dependents_count = ?, crm_enabled = ? WHERE id = ?');
+                    $stmt->execute([$name, $username, $email, $isTargetAdmin, $accessProfile, $isActive, $mustChangePassword, $pinCodeHash, $pinCodeHash, $pinOnlyLogin, $userType, $userNumber, $title, $shortName, $initials, $emailNotificationsActive, $smsNotificationsActive, $profession, $category, $managerName, $department, $departmentId > 0 ? $departmentId : null, $scheduleId > 0 ? $scheduleId : null, $hireDate, $birthDate, $terminationDate, $timezone, $phone, $mobile, $notes, $sendAccessEmail, $personalEmail, $taxNumber, $socialSecurityNumber, $address, $postalCode, $parish, $municipality, $district, $placeOfBirth, $nationality, $citizenCardNumber, $citizenCardExpiryDate !== '' ? $citizenCardExpiryDate : null, $maritalStatus, $dependentsCount, $crmEnabled, $targetUserId]);
                 }
 
                 if ($passwordWasUpdated) {
@@ -1168,7 +1171,7 @@ if ($isAllPerPage) {
     $offset = ($page - 1) * $perPageLimit;
 }
 
-$usersBaseSql = 'SELECT id, name, username, email, is_admin, access_profile, is_active, must_change_password, pin_only_login, created_at, user_type, user_number, title, short_name, initials, email_notifications_active, sms_notifications_active, profession, category, manager_name, department, department_id, schedule_id, hire_date, birth_date, termination_date, timezone, phone, mobile, notes, send_access_email, personal_email, tax_number, social_security_number, address, postal_code, parish, municipality, district, place_of_birth, nationality, citizen_card_number, citizen_card_expiry_date, marital_status, dependents_count FROM users'
+$usersBaseSql = 'SELECT id, name, username, email, is_admin, access_profile, is_active, must_change_password, pin_only_login, crm_enabled, created_at, user_type, user_number, title, short_name, initials, email_notifications_active, sms_notifications_active, profession, category, manager_name, department, department_id, schedule_id, hire_date, birth_date, termination_date, timezone, phone, mobile, notes, send_access_email, personal_email, tax_number, social_security_number, address, postal_code, parish, municipality, district, place_of_birth, nationality, citizen_card_number, citizen_card_expiry_date, marital_status, dependents_count FROM users'
     . $filtersWhereSql
     . ' ORDER BY CASE WHEN user_number IS NULL OR TRIM(user_number) = "" THEN 1 ELSE 0 END ASC, CAST(user_number AS INTEGER) ASC, user_number COLLATE NOCASE ASC, name COLLATE NOCASE ASC';
 if ($isAllPerPage) {
@@ -1401,9 +1404,15 @@ require __DIR__ . '/partials/header.php';
     .user-document-list { max-height: 16rem; overflow: auto; border: 1px solid #e5e7eb; border-radius: .75rem; }
     .user-document-list .list-group-item { padding: .8rem 1rem !important; }
     .user-document-icon { display: grid; width: 2.25rem; height: 2.25rem; flex: 0 0 auto; place-items: center; border-radius: .6rem; background: #eff6ff; color: #2563eb; }
-    .user-access-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: .9rem 2rem; }
-    .user-access-grid .form-check { min-height: 1.5rem; margin: 0; padding-left: 2.5rem; }
-    .user-access-grid .form-check-input { margin-left: -2.5rem; }
+    .user-access-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: .65rem; }
+    .user-access-grid .form-check { position: relative; min-height: 4.25rem; margin: 0; padding: .8rem .9rem .8rem 3.5rem; border: 1px solid #dbe3ef; border-radius: .8rem; background: #f8fafc; transition: border-color .15s, background-color .15s, box-shadow .15s; }
+    .user-access-grid .form-check:hover { border-color: #b8c6d9; background: #fff; }
+    .user-access-grid .form-check:has(.form-check-input:checked) { border-color: #86b7fe; background: #f0f7ff; box-shadow: 0 0 0 1px rgba(13, 110, 253, .06); }
+    .user-access-grid .form-check:has(.form-check-input:disabled) { opacity: .58; background: #f1f5f9; }
+    .user-access-grid .form-check-input { position: absolute; top: 1.05rem; left: 1rem; margin: 0; width: 2rem; height: 1.05rem; cursor: pointer; }
+    .user-access-grid .form-check:not(.form-switch) .form-check-input { left: 1.2rem; width: 1.15rem; height: 1.15rem; }
+    .user-access-grid .form-check-label { display: block; color: #334155; font-weight: 700; cursor: pointer; }
+    .user-access-grid .form-check-label small { display: block; margin-top: .2rem; color: #64748b; font-size: .75rem; font-weight: 400; line-height: 1.25; }
     @media (max-width: 767.98px) {
         .user-form-compact.modal-content { max-height: 100vh; border-radius: 0; }
         .user-access-grid { grid-template-columns: 1fr; }
@@ -1554,6 +1563,7 @@ require __DIR__ . '/partials/header.php';
                     <div class="col-md-6 form-check"><input class="form-check-input" type="checkbox" name="send_access_email" value="1" id="sendAccessEmail"><label class="form-check-label" for="sendAccessEmail">Enviar dados de acesso</label></div>
                     <div class="col-md-6 form-check form-switch"><input class="form-check-input" type="checkbox" name="must_change_password" value="1" id="mustChangePassword"><label class="form-check-label" for="mustChangePassword">Obrigar alteração da senha no próximo login</label></div>
                     <div class="col-md-6 form-check form-switch"><input class="form-check-input" type="checkbox" name="pin_only_login" value="1" id="pinOnlyLogin"><label class="form-check-label" for="pinOnlyLogin">Login apenas com PIN (Shopfloor)</label></div>
+                    <div class="col-md-6 form-check form-switch"><input class="form-check-input js-crm-enabled" type="checkbox" name="crm_enabled" value="1" id="crmEnabled" checked><label class="form-check-label" for="crmEnabled">Módulo CRM<small>Apresenta o CRM e permite o respetivo acesso.</small></label></div>
                     </div>
                 </div>
             </div>
@@ -1708,6 +1718,7 @@ require __DIR__ . '/partials/header.php';
                     <div class="col-md-6 form-check"><input class="form-check-input" type="checkbox" name="send_access_email" value="1" id="sendAccessEmailEdit<?= (int) $user['id'] ?>" <?= (int) ($user['send_access_email'] ?? 0) === 1 ? 'checked' : '' ?>><label class="form-check-label" for="sendAccessEmailEdit<?= (int) $user['id'] ?>">Enviar dados de acesso</label></div>
                     <div class="col-md-6 form-check form-switch"><input class="form-check-input" type="checkbox" name="must_change_password" value="1" id="mustChangePasswordEdit<?= (int) $user['id'] ?>" <?= (int) ($user['must_change_password'] ?? 0) === 1 ? 'checked' : '' ?>><label class="form-check-label" for="mustChangePasswordEdit<?= (int) $user['id'] ?>">Obrigar alteração da senha no próximo login</label></div>
                     <div class="col-md-6 form-check form-switch"><input class="form-check-input" type="checkbox" name="pin_only_login" value="1" id="pinOnlyLoginEdit<?= (int) $user['id'] ?>" <?= (int) ($user['pin_only_login'] ?? 0) === 1 ? 'checked' : '' ?>><label class="form-check-label" for="pinOnlyLoginEdit<?= (int) $user['id'] ?>">Login apenas com PIN (Shopfloor)</label></div>
+                    <div class="col-md-6 form-check form-switch"><input class="form-check-input js-crm-enabled" type="checkbox" name="crm_enabled" value="1" id="crmEnabledEdit<?= (int) $user['id'] ?>" <?= (int) ($user['crm_enabled'] ?? 1) === 1 && (int) ($user['pin_only_login'] ?? 0) !== 1 ? 'checked' : '' ?>><label class="form-check-label" for="crmEnabledEdit<?= (int) $user['id'] ?>">Módulo CRM<small>Apresenta o CRM e permite o respetivo acesso.</small></label></div>
                     </div>
                 </div>
             </div>
@@ -1735,6 +1746,16 @@ require __DIR__ . '/partials/header.php';
     }
 
     document.querySelectorAll('.modal-content.user-form-compact').forEach((form) => {
+        const pinOnly = form.querySelector('input[name="pin_only_login"]');
+        const crmEnabled = form.querySelector('.js-crm-enabled');
+        const syncCrmAccess = () => {
+            if (!pinOnly || !crmEnabled) return;
+            if (pinOnly.checked) crmEnabled.checked = false;
+            crmEnabled.disabled = pinOnly.checked;
+        };
+        pinOnly?.addEventListener('change', syncCrmAccess);
+        syncCrmAccess();
+
         const source = form.querySelector('.js-initials-source');
         const target = form.querySelector('.js-initials-target');
         if (!source || !target) {

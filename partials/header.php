@@ -13,7 +13,7 @@ $user = current_user($pdo);
 $navbarLogo = app_setting($pdo, 'logo_navbar_light');
 $showHrMenu = $user && ((int) ($user['is_admin'] ?? 0) === 1 || (string) ($user['access_profile'] ?? '') === 'RH');
 $showBiMenu = $user && (int)($user['is_admin'] ?? 0) === 1;
-$showCrmMenu = $user && (int)($user['is_admin'] ?? 0) === 1;
+$showCrmMenu = $user && (int) ($user['crm_enabled'] ?? 1) === 1 && (int) ($user['pin_only_login'] ?? 0) !== 1 && (int)($user['is_admin'] ?? 0) === 1;
 if ($user && !$showBiMenu) {
     if (function_exists('erp_user_can')) {
         $showBiMenu = erp_user_can($pdo, $user, 'erp.bi.view');
@@ -26,7 +26,7 @@ if ($user && !$showBiMenu) {
         }
     }
 }
-if ($user && !$showCrmMenu) {
+if ($user && (int) ($user['crm_enabled'] ?? 1) === 1 && (int) ($user['pin_only_login'] ?? 0) !== 1 && !$showCrmMenu) {
     if (function_exists('erp_user_can')) {
         $showCrmMenu = erp_user_can($pdo, $user, 'crm.view');
     } else {

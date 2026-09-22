@@ -6,7 +6,7 @@ require_once __DIR__.'/app/Services/CrmService.php';
 require_login();
 erp_run_phase1_migrations($pdo); crm_run_migrations($pdo);
 $user=current_user($pdo)?:[];$crm=new CrmService($pdo,$user);
-if(!$crm->canView()){http_response_code(403);exit('Acesso reservado ao CRM.');}
+if((int)($user['crm_enabled']??1)!==1||(int)($user['pin_only_login']??0)===1||!$crm->canView()){http_response_code(403);exit('O módulo de CRM não está ativo para este utilizador.');}
 $view=(string)($_GET['view']??'dashboard');$notice='';$error='';
 if($_SERVER['REQUEST_METHOD']==='POST'&&validate_csrf_or_abort(false)){
  try{$action=(string)($_POST['action']??'');if($action==='save_lead'){$id=$crm->saveLead($_POST);header('Location: crm.php?view=leads&created='.$id);exit;}if($action==='save_activity'){$crm->saveActivity($_POST);$notice='Atividade criada.';}if($action==='complete_activity'){$pdo->prepare('UPDATE crm_activities SET status="COMPLETED",completed_at=CURRENT_TIMESTAMP,updated_at=CURRENT_TIMESTAMP WHERE id=? AND (assigned_to=? OR ?=1)')->execute([(int)$_POST['id'],(int)$user['id'],$crm->isAdmin()?1:0]);$notice='Atividade concluída.';}if($action==='move_opportunity'){$crm->moveOpportunity((int)$_POST['id'],(string)$_POST['stage']);if(($_SERVER['HTTP_ACCEPT']??'')==='application/json'){header('Content-Type: application/json');echo json_encode(['ok'=>true]);exit;}$notice='Pipeline atualizado.';}}
