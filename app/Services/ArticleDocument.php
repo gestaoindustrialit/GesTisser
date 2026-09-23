@@ -3,6 +3,26 @@ declare(strict_types=1);
 
 final class ArticleDocument
 {
+    /** Maximum size accepted for each document attached to an article (10 MiB). */
+    public const MAX_UPLOAD_BYTES = 10 * 1024 * 1024;
+
+    /**
+     * Validate the size-related upload metadata before the file is persisted.
+     *
+     * PHP may discard an oversized temporary file, so checking only the size in
+     * UploadService would turn that case into an ambiguous format error.
+     */
+    public static function validateUploadSize(array $file)
+    {
+        $error = (int) ($file['error'] ?? UPLOAD_ERR_NO_FILE);
+        $size = (int) ($file['size'] ?? 0);
+
+        if (in_array($error, [UPLOAD_ERR_INI_SIZE, UPLOAD_ERR_FORM_SIZE], true)
+            || $size > self::MAX_UPLOAD_BYTES) {
+            throw new RuntimeException('Cada documento do artigo deve ter no máximo 10 MB.');
+        }
+    }
+
     public static function url(int $documentId): string
     {
         return 'erp.php?page=article_document&id=' . $documentId;
