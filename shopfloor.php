@@ -123,6 +123,38 @@ if (!function_exists('shopfloor_resolve_absence_minutes')) {
     }
 }
 
+if (!function_exists('shopfloor_pause_active_operation')) {
+    /** Stop the employee's production clock without completing the operation. */
+    function shopfloor_pause_active_operation(PDO $pdo, int $userId, string $reason): bool
+    {
+        $entryStmt = $pdo->prepare('SELECT id FROM erp_operation_time_entries WHERE user_id = ? AND ended_at IS NULL AND status <> "paused" ORDER BY started_at DESC LIMIT 1');
+        $entryStmt->execute([$userId]);
+        $entryId = (int) ($entryStmt->fetchColumn() ?: 0);
+        if ($entryId <= 0) {
+            return false;
+        }
+
+        $pdo->prepare('UPDATE erp_operation_time_entries SET status = "paused", paused_at = CURRENT_TIMESTAMP WHERE id = ? AND ended_at IS NULL AND status <> "paused"')->execute([$entryId]);
+        $pdo->prepare('INSERT INTO erp_operation_stoppages(time_entry_id, reason, created_by) VALUES (?, ?, ?)')->execute([$entryId, $reason, $userId]);
+        return true;
+    }
+}
+
+if (!function_exists('shopfloor_resume_operation')) {
+    /** Resume an entry and close the matching automatically-created stoppage. */
+    function shopfloor_resume_operation(PDO $pdo, int $entryId, int $userId): bool
+    {
+        $stmt = $pdo->prepare('UPDATE erp_operation_time_entries SET status = "running", pause_seconds = pause_seconds + CASE WHEN paused_at IS NOT NULL THEN CAST((julianday(CURRENT_TIMESTAMP) - julianday(paused_at)) * 86400 AS INTEGER) ELSE 0 END, paused_at = NULL WHERE id = ? AND user_id = ? AND ended_at IS NULL AND status = "paused"');
+        $stmt->execute([$entryId, $userId]);
+        if ($stmt->rowCount() === 0) {
+            return false;
+        }
+
+        $pdo->prepare('UPDATE erp_operation_stoppages SET ended_at = CURRENT_TIMESTAMP WHERE id = (SELECT id FROM erp_operation_stoppages WHERE time_entry_id = ? AND ended_at IS NULL ORDER BY started_at DESC LIMIT 1)')->execute([$entryId]);
+        return true;
+    }
+}
+
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $action = trim((string) ($_POST['action'] ?? ''));
     $pendingAnnouncementForAck = fetch_pending_shopfloor_announcement_ack($pdo, $userId, $sessionLoginAt);
@@ -172,6 +204,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $pendingDocsStmt->execute([$poOperationId, $userId]);
         $openOpStmt = $pdo->prepare('SELECT id FROM erp_operation_time_entries WHERE user_id = ? AND ended_at IS NULL LIMIT 1');
         $openOpStmt->execute([$userId]);
+        $previousQuantityStmt = $pdo->prepare('SELECT previous.id, previous.sequence_no, COALESCE(SUM(te.quantity_good + te.quantity_rejected), 0) AS registered_quantity FROM erp_production_order_operations previous LEFT JOIN erp_operation_time_entries te ON te.production_order_operation_id = previous.id WHERE previous.production_order_id = ? AND previous.sequence_no < ? GROUP BY previous.id ORDER BY previous.sequence_no DESC, previous.id DESC LIMIT 1');
+        $previousQuantityStmt->execute([(int) ($operation['production_order_id'] ?? 0), (int) ($operation['sequence_no'] ?? 0)]);
+        $previousOperation = $previousQuantityStmt->fetch(PDO::FETCH_ASSOC) ?: null;
         $checklistRequired = $operation ? $operationChecklistService->isRequired($operation, $userId, 'start') : false;
         if ($checklistRequired) {
             try { $operationChecklistService->validateAndEncode((int) $operation['checklist_template_id'], (array) ($_POST['checklist'] ?? [])); }
@@ -188,6 +223,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $flashError = 'A máquina selecionada não está autorizada para esta operação.';
         } elseif ((int)$blockedStmt->fetchColumn()>0 && empty($operation['parallel_allowed'])) {
             $flashError = 'Conclua primeiro as operações precedentes obrigatórias.';
+        } elseif ($previousOperation && (float) ($previousOperation['registered_quantity'] ?? 0) <= 0) {
+            $flashError = 'Registe quantidades na operação anterior antes de iniciar esta operação.';
         } elseif ((int) $pendingDocsStmt->fetchColumn() > 0) {
             $flashError = 'Tem de visualizar e confirmar todos os documentos obrigatórios da OF antes de iniciar.';
         } elseif ((int) ($openOpStmt->fetchColumn() ?: 0) > 0) {
@@ -205,17 +242,22 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $entryId = (int) ($_POST['entry_id'] ?? 0);
         $good = (float) ($_POST['quantity_good'] ?? 0);
         $reject = (float) ($_POST['quantity_rejected'] ?? 0);
-        $stmt = $pdo->prepare('UPDATE erp_operation_time_entries SET ended_at = CURRENT_TIMESTAMP, quantity_good = ?, quantity_rejected = ?, notes = ? WHERE id = ? AND user_id = ? AND ended_at IS NULL');
+        $stmt = $pdo->prepare('UPDATE erp_operation_time_entries SET ended_at = CURRENT_TIMESTAMP, pause_seconds = pause_seconds + CASE WHEN status = "paused" AND paused_at IS NOT NULL THEN CAST((julianday(CURRENT_TIMESTAMP) - julianday(paused_at)) * 86400 AS INTEGER) ELSE 0 END, paused_at = NULL, status = "completed", quantity_good = ?, quantity_rejected = ?, notes = ? WHERE id = ? AND user_id = ? AND ended_at IS NULL');
         $qualityResult=trim((string)($_POST['quality_result']??''));$entryInfo=$pdo->prepare('SELECT opo.*,o.requires_quality FROM erp_operation_time_entries te JOIN erp_production_order_operations opo ON opo.id=te.production_order_operation_id JOIN erp_operations o ON o.id=opo.operation_id WHERE te.id=? AND te.user_id=? AND te.ended_at IS NULL');$entryInfo->execute([$entryId,$userId]);$entryInfo=$entryInfo->fetch(PDO::FETCH_ASSOC);$reason=trim((string)($_POST['waste_reason']??''));
         $endChecklistRequired=$entryInfo?$operationChecklistService->isRequired($entryInfo,$userId,'end'):false;
         if($endChecklistRequired){try{$operationChecklistService->validateAndEncode((int)$entryInfo['checklist_template_id'],(array)($_POST['checklist']??[]));}catch(InvalidArgumentException$exception){$flashError=$exception->getMessage();}}
-        if($flashError){}elseif($reject>0&&$reason===''){$flashError='Indique o motivo do desperdício/refugo.';}elseif($entryInfo&&((int)$entryInfo['requires_quality']||trim((string)$entryInfo['quality_points'])!=='')&&!in_array($qualityResult,['pass','fail','na'],true)){$flashError='Execute e registe o controlo de qualidade obrigatório.';}else{$stmt->execute([$good, $reject, trim((string)($_POST['notes'] ?? '')) ?: null, $entryId, $userId]);if($stmt->rowCount()>0){if($endChecklistRequired)$operationChecklistService->save($entryInfo,$userId,'end',(array)($_POST['checklist']??[]),$entryId);if($reject>0)$pdo->prepare('INSERT INTO erp_operation_waste(time_entry_id,quantity,reason,created_by) VALUES (?,?,?,?)')->execute([$entryId,$reject,$reason,$userId]);if($qualityResult!=='')$pdo->prepare('INSERT INTO erp_operation_quality_checks(production_order_operation_id,checkpoint,result,checked_by) VALUES (?,?,?,?)')->execute([(int)$entryInfo['id'],trim((string)$entryInfo['quality_points'])?:'Controlo obrigatório',$qualityResult,$userId]);$pdo->prepare('UPDATE erp_production_order_operations SET status="Concluída" WHERE id=(SELECT production_order_operation_id FROM erp_operation_time_entries WHERE id=?)')->execute([$entryId]);}$flashSuccess=$stmt->rowCount()>0?'Operação concluída e tempos registados na OF.':'Operação inválida.';}
+        if($flashError){}elseif($reject>0&&$reason===''){$flashError='Indique o motivo do desperdício/refugo.';}elseif($entryInfo&&((int)$entryInfo['requires_quality']||trim((string)$entryInfo['quality_points'])!=='')&&!in_array($qualityResult,['pass','fail','na'],true)){$flashError='Execute e registe o controlo de qualidade obrigatório.';}else{$stmt->execute([$good, $reject, trim((string)($_POST['notes'] ?? '')) ?: null, $entryId, $userId]);if($stmt->rowCount()>0){$pdo->prepare('UPDATE erp_operation_stoppages SET ended_at = CURRENT_TIMESTAMP WHERE time_entry_id = ? AND ended_at IS NULL')->execute([$entryId]);if($endChecklistRequired)$operationChecklistService->save($entryInfo,$userId,'end',(array)($_POST['checklist']??[]),$entryId);if($reject>0)$pdo->prepare('INSERT INTO erp_operation_waste(time_entry_id,quantity,reason,created_by) VALUES (?,?,?,?)')->execute([$entryId,$reject,$reason,$userId]);if($qualityResult!=='')$pdo->prepare('INSERT INTO erp_operation_quality_checks(production_order_operation_id,checkpoint,result,checked_by) VALUES (?,?,?,?)')->execute([(int)$entryInfo['id'],trim((string)$entryInfo['quality_points'])?:'Controlo obrigatório',$qualityResult,$userId]);$pdo->prepare('UPDATE erp_production_order_operations SET status="Concluída" WHERE id=(SELECT production_order_operation_id FROM erp_operation_time_entries WHERE id=?)')->execute([$entryId]);}$flashSuccess=$stmt->rowCount()>0?'Operação concluída e tempos registados na OF.':'Operação inválida.';}
     }
 
     if (in_array($action,['pause_operation','resume_operation'],true)) {
-        $entryId=(int)($_POST['entry_id']??0);$status=$action==='pause_operation'?'paused':'running';
-        $pdo->prepare('UPDATE erp_operation_time_entries SET status=?,paused_at=CASE WHEN ?="paused" THEN CURRENT_TIMESTAMP ELSE NULL END,pause_seconds=pause_seconds+CASE WHEN ?="running" AND paused_at IS NOT NULL THEN CAST((julianday(CURRENT_TIMESTAMP)-julianday(paused_at))*86400 AS INTEGER) ELSE 0 END WHERE id=? AND user_id=? AND ended_at IS NULL')->execute([$status,$status,$status,$entryId,$userId]);
-        $flashSuccess=$status==='paused'?'Operação pausada.':'Operação retomada.';
+        $entryId = (int) ($_POST['entry_id'] ?? 0);
+        if ($action === 'pause_operation') {
+            $paused = shopfloor_pause_active_operation($pdo, $userId, 'Paragem manual aprovada pelo colaborador');
+            $flashSuccess = $paused ? 'Operação pausada.' : 'Não existe uma operação em produção para pausar.';
+        } else {
+            $resumed = shopfloor_resume_operation($pdo, $entryId, $userId);
+            $flashSuccess = $resumed ? 'Operação retomada.' : 'Não foi possível retomar a operação.';
+        }
     }
 
     if ($action === 'clock_entry') {
@@ -228,6 +270,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $occurredAt = date('Y-m-d H:i:s');
             $stmt = $pdo->prepare('INSERT INTO shopfloor_time_entries(user_id, entry_type, note, occurred_at) VALUES (?, ?, ?, ?)');
             $stmt->execute([$userId, $entryType, $note !== '' ? $note : null, $occurredAt]);
+            if ($entryType === 'saida' && (int) ($_POST['stop_machine'] ?? 0) === 1) {
+                shopfloor_pause_active_operation($pdo, $userId, 'Ponto de saída aprovado pelo colaborador');
+            }
             log_app_event($pdo, $userId, 'shopfloor.clock.' . $entryType, 'Registo de ponto no Shopfloor.', ['entry_type' => $entryType]);
             $flashSuccess = $entryType === 'entrada' ? 'Ponto de entrada registado com sucesso.' : 'Ponto de saída registado com sucesso.';
         }
@@ -258,6 +303,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 (string) ($reason['break_type'] ?? 'Pausa'),
                 $comment !== '' ? $comment : null,
             ]);
+            if ((int) ($_POST['stop_machine'] ?? 0) === 1) {
+                shopfloor_pause_active_operation($pdo, $userId, 'Pausa/paragem aprovada pelo colaborador');
+            }
             $flashSuccess = ((string) ($reason['break_type'] ?? 'Pausa')) . ' iniciada: ' . (string) ($reason['code'] ?? '') . ' · ' . (string) ($reason['label'] ?? '');
         }
     }
@@ -902,8 +950,8 @@ if ($selectedOfId > 0) {
     $docsStmt = $pdo->prepare('SELECT d.*, EXISTS(SELECT 1 FROM erp_production_order_document_acknowledgements a WHERE a.document_id=d.id AND a.user_id=?) AS acknowledged FROM erp_production_order_documents d WHERE d.production_order_id=? ORDER BY d.id');
     $docsStmt->execute([$userId, $selectedOfId]);
     $ofDocuments = $docsStmt->fetchAll(PDO::FETCH_ASSOC);
-    $opsSql = 'SELECT opo.*, COALESCE(opo.operation_code,op.code) code,COALESCE(opo.operation_name,op.name) name, op.standard_minutes, (SELECT id FROM erp_operation_time_entries te WHERE te.production_order_operation_id=opo.id AND te.user_id=? AND te.ended_at IS NULL LIMIT 1) AS open_entry_id,(SELECT COALESCE(SUM((julianday(COALESCE(te.ended_at,CURRENT_TIMESTAMP))-julianday(te.started_at))*1440)-SUM(te.pause_seconds)/60,0) FROM erp_operation_time_entries te WHERE te.production_order_operation_id=opo.id) actual_minutes FROM erp_production_order_operations opo JOIN erp_operations op ON op.id=opo.operation_id WHERE opo.production_order_id=?';
-    $opsParams = [$userId, $selectedOfId];
+    $opsSql = 'SELECT opo.*, COALESCE(opo.operation_code,op.code) code,COALESCE(opo.operation_name,op.name) name, op.standard_minutes, (SELECT id FROM erp_operation_time_entries te WHERE te.production_order_operation_id=opo.id AND te.user_id=? AND te.ended_at IS NULL LIMIT 1) AS open_entry_id, (SELECT status FROM erp_operation_time_entries te WHERE te.production_order_operation_id=opo.id AND te.user_id=? AND te.ended_at IS NULL LIMIT 1) AS open_entry_status, (SELECT CAST(MAX(0, (julianday(CASE WHEN te.status="paused" THEN te.paused_at ELSE CURRENT_TIMESTAMP END)-julianday(te.started_at))*86400-te.pause_seconds) AS INTEGER) FROM erp_operation_time_entries te WHERE te.production_order_operation_id=opo.id AND te.user_id=? AND te.ended_at IS NULL LIMIT 1) AS open_elapsed_seconds, (SELECT COALESCE(SUM((julianday(CASE WHEN te.ended_at IS NOT NULL THEN te.ended_at WHEN te.status="paused" THEN te.paused_at ELSE CURRENT_TIMESTAMP END)-julianday(te.started_at))*1440)-SUM(te.pause_seconds)/60,0) FROM erp_operation_time_entries te WHERE te.production_order_operation_id=opo.id) actual_minutes FROM erp_production_order_operations opo JOIN erp_operations op ON op.id=opo.operation_id WHERE opo.production_order_id=?';
+    $opsParams = [$userId, $userId, $userId, $selectedOfId];
     if ($selectedWorkCenterId > 0) {
         $opsSql .= ' AND opo.work_center_id=?';
         $opsParams[] = $selectedWorkCenterId;
@@ -1043,11 +1091,12 @@ require __DIR__ . '/partials/header.php';
             <div class="table-responsive"><table class="table table-sm shopfloor-table"><thead><tr><th>Seq.</th><th>Operação</th><th>Estado</th><th>Previsto / real</th><th>Ação</th></tr></thead><tbody>
             <?php foreach ($ofOperations as $op):
                 $isOpen = (int) ($op['open_entry_id'] ?? 0) > 0;
+                $isPaused = $isOpen && (string) ($op['open_entry_status'] ?? '') === 'paused';
                 $checklistPhase = $isOpen ? 'end' : 'start';
                 $showChecklist = $operationChecklistService->isRequired($op, $userId, $checklistPhase);
                 $operationChecklistItems = $showChecklist ? $operationChecklistService->items((int) $op['checklist_template_id']) : [];
             ?>
-                <tr><td><?= (int)$op['sequence_no'] ?></td><td><?= h($op['code'].' - '.$op['name']) ?></td><td><?= h($op['status']) ?><div class="small text-secondary"><?= nl2br(h((string)($op['instructions']??''))) ?></div></td><td><?= h(number_format((float)($op['planned_minutes']??0),1,',','.')) ?> / <?= h(number_format((float)($op['actual_minutes']??0),1,',','.')) ?> min</td><td style="min-width:22rem">
+                <tr><td><?= (int)$op['sequence_no'] ?></td><td><?= h($op['code'].' - '.$op['name']) ?></td><td><?= h($op['status']) ?><?= $isPaused ? ' · Pausada' : '' ?><div class="small text-secondary"><?= nl2br(h((string)($op['instructions']??''))) ?></div></td><td><?= h(number_format((float)($op['planned_minutes']??0),1,',','.')) ?> / <?= h(number_format((float)($op['actual_minutes']??0),1,',','.')) ?> min<?php if ($isOpen): ?><div class="fw-bold mt-1 <?= $isPaused ? 'text-warning' : 'text-success' ?>" data-production-timer data-elapsed-seconds="<?= (int) ($op['open_elapsed_seconds'] ?? 0) ?>" data-running="<?= $isPaused ? '0' : '1' ?>">00:00:00</div><?php endif; ?></td><td style="min-width:22rem">
                 <form method="post" class="row g-2">
                     <input type="hidden" name="action" value="<?= $isOpen ? 'stop_of_operation' : 'start_of_operation' ?>">
                     <?php if ($isOpen): ?><input type="hidden" name="entry_id" value="<?= (int)$op['open_entry_id'] ?>"><?php else: ?><input type="hidden" name="po_operation_id" value="<?= (int)$op['id'] ?>"><?php endif; ?>
@@ -1062,6 +1111,7 @@ require __DIR__ . '/partials/header.php';
                     <?php if ($isOpen): ?><div class="col"><input class="form-control form-control-sm" type="number" step="0.001" name="quantity_good" placeholder="Qtd. OK"></div><div class="col"><input class="form-control form-control-sm" type="number" step="0.001" name="quantity_rejected" placeholder="Refugo"></div><div class="col"><input class="form-control form-control-sm" name="waste_reason" placeholder="Motivo refugo"></div><div class="col"><select class="form-select form-select-sm" name="quality_result"><option value="">Qualidade…</option><option value="pass">Conforme</option><option value="fail">Não conforme</option><option value="na">N/A</option></select></div><?php endif; ?>
                     <div class="col-12"><button class="btn <?= $isOpen ? 'btn-danger' : 'btn-success' ?> btn-sm w-100"><?= $isOpen ? 'Concluir operação' : 'Arrancar' ?></button></div>
                 </form></td></tr>
+                <?php if ($isOpen): ?><tr><td colspan="4"></td><td><form method="post"><input type="hidden" name="action" value="<?= $isPaused ? 'resume_operation' : 'pause_operation' ?>"><input type="hidden" name="entry_id" value="<?= (int) $op['open_entry_id'] ?>"><button class="btn btn-outline-<?= $isPaused ? 'success' : 'warning' ?> btn-sm w-100"><?= $isPaused ? 'Retomar produção' : 'Pausar produção' ?></button></form></td></tr><?php endif; ?>
             <?php endforeach; ?></tbody></table></div>
         <?php endif; ?>
     </div>
@@ -1643,6 +1693,23 @@ require __DIR__ . '/partials/header.php';
 </div>
 
 <script>
+(() => {
+    const formatDuration = (totalSeconds) => {
+        const seconds = Math.max(0, Math.floor(totalSeconds));
+        const hours = String(Math.floor(seconds / 3600)).padStart(2, '0');
+        const minutes = String(Math.floor((seconds % 3600) / 60)).padStart(2, '0');
+        return `${hours}:${minutes}:${String(seconds % 60).padStart(2, '0')}`;
+    };
+    document.querySelectorAll('[data-production-timer]').forEach((timer) => {
+        let elapsed = Number(timer.dataset.elapsedSeconds || 0);
+        const running = timer.dataset.running === '1';
+        timer.textContent = formatDuration(elapsed);
+        if (running) {
+            window.setInterval(() => { elapsed += 1; timer.textContent = formatDuration(elapsed); }, 1000);
+        }
+    });
+})();
+
 (() => {
     const typeSelect = document.getElementById('absenceRequestType');
     const form = document.getElementById('absenceRequestForm');

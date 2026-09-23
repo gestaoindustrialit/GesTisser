@@ -292,6 +292,7 @@ header('Content-Type: text/html; charset=UTF-8');
                     <form method="post" action="<?= h((string) ($navbarClockControl['form_action'] ?? 'shopfloor.php')) ?>" class="gt-clock-form">
                         <input type="hidden" name="action" value="clock_entry">
                         <input type="hidden" name="entry_type" value="<?= h((string) ($navbarClockControl['entry_type'] ?? 'entrada')) ?>">
+                        <?php if (($navbarClockControl['entry_type'] ?? 'entrada') === 'saida'): ?><input type="hidden" name="stop_machine" value="0" data-stop-machine-field><?php endif; ?>
                         <button type="submit" class="btn btn-sm fw-semibold <?= h((string) ($navbarClockControl['button_class'] ?? 'btn-primary')) ?>">
                             <i class="bi bi-clock-history"></i>
                             <span><?= h((string) ($navbarClockControl['button_label'] ?? 'Ponto de entrada')) ?></span>
@@ -371,6 +372,10 @@ header('Content-Type: text/html; charset=UTF-8');
                                 <label class="form-label">Comentário</label>
                                 <textarea class="form-control" name="break_comment" id="navbarBreakComment" rows="3" placeholder="Opcional no início (pode completar antes de terminar)"></textarea>
                             </div>
+                            <div class="form-check mt-3">
+                                <input class="form-check-input" type="checkbox" name="stop_machine" value="1" id="navbarStopMachine" checked>
+                                <label class="form-check-label" for="navbarStopMachine">Parar também o tempo de produção da máquina</label>
+                            </div>
                         <?php endif; ?>
                     </div>
                     <div class="modal-footer">
@@ -392,7 +397,17 @@ header('Content-Type: text/html; charset=UTF-8');
             const commentWrap = document.getElementById('navbarBreakCommentWrap');
             const commentField = document.getElementById('navbarBreakComment');
             const elapsedElement = document.getElementById('navbarBreakElapsed');
+            const clockExitForm = document.querySelector('.gt-clock-form [data-stop-machine-field]')?.form || null;
             let timerIntervalId = null;
+
+            if (clockExitForm) {
+                clockExitForm.addEventListener('submit', () => {
+                    const stopMachineField = clockExitForm.querySelector('[data-stop-machine-field]');
+                    if (stopMachineField) {
+                        stopMachineField.value = window.confirm('Pretende parar também o tempo de produção da máquina?') ? '1' : '0';
+                    }
+                });
+            }
 
             if (reasonSelect && commentWrap && commentField) {
                 const syncCommentVisibility = () => {
