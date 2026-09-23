@@ -107,6 +107,25 @@ if ($requestedPage === 'article_document') {
     exit;
 }
 
+
+if ($requestedPage === 'article_document_thumbnail') {
+    $documentId = filter_input(INPUT_GET, 'id', FILTER_VALIDATE_INT);
+    if (!$documentId || $documentId < 1) { http_response_code(404); exit('Documento não encontrado.'); }
+    $stmt = $pdo->prepare('SELECT * FROM erp_product_documents WHERE id=? AND entity_type="finished_product" AND status="Ativo" LIMIT 1');
+    $stmt->execute([$documentId]);
+    $document = $stmt->fetch(PDO::FETCH_ASSOC);
+    $absolutePath = $document ? ArticleDocument::absolutePath(__DIR__, (string) ($document['file_url'] ?? '')) : '';
+    if (!$document || $absolutePath === '') { http_response_code(404); exit('O ficheiro deste documento não existe no servidor.'); }
+    $thumbnail = ArticleDocument::thumbnail($absolutePath);
+    header('Content-Type: image/jpeg');
+    header('Content-Length: ' . strlen($thumbnail));
+    header('Content-Disposition: inline; filename="maqueta-artigo.jpg"');
+    header('X-Content-Type-Options: nosniff');
+    header('Cache-Control: private, max-age=3600');
+    echo $thumbnail;
+    exit;
+}
+
 function erp_count(PDO $pdo, string $sql): int { return (int) $pdo->query($sql)->fetchColumn(); }
 function erp_money(float $value): string { return number_format($value, 2, ',', '.') . ' €'; }
 function erp_page_url(string $page): string { return 'erp.php?page=' . urlencode($page); }

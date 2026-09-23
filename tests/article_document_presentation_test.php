@@ -19,6 +19,9 @@ foreach ($cases as $case) {
 if (ArticleDocument::url(42) !== 'erp.php?page=article_document&id=42') {
     throw new RuntimeException('URL autenticado do documento incorreto.');
 }
+if (ArticleDocument::thumbnailUrl(42) !== 'erp.php?page=article_document_thumbnail&id=42') {
+    throw new RuntimeException('URL autenticado do thumbnail incorreto.');
+}
 
 $root = sys_get_temp_dir() . '/article-document-' . bin2hex(random_bytes(4));
 mkdir($root . '/storage/uploads', 0777, true);
@@ -26,6 +29,10 @@ file_put_contents($root . '/storage/uploads/test.pdf', '%PDF-1.4');
 $resolved = ArticleDocument::absolutePath($root, 'storage/uploads/test.pdf');
 if ($resolved === '' || basename($resolved) !== 'test.pdf') {
     throw new RuntimeException('Não foi possível resolver um upload existente.');
+}
+$thumbnail = ArticleDocument::thumbnail($resolved);
+if (substr($thumbnail, 0, 2) !== "\xFF\xD8") {
+    throw new RuntimeException('O thumbnail de fallback não é uma imagem JPEG.');
 }
 if (ArticleDocument::absolutePath($root, 'storage/uploads/missing.pdf') !== '') {
     throw new RuntimeException('Um upload inexistente não pode ser resolvido.');
