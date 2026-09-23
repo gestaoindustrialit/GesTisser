@@ -17,5 +17,9 @@ operation_flow_check(strpos($shopfloor, 'shopfloor_pause_active_operation') !== 
 operation_flow_check(strpos($header, 'name="stop_machine"') !== false, 'Falta a aprovação de paragem da máquina.');
 operation_flow_check(strpos($shopfloor, 'data-production-timer') !== false, 'Falta a contagem visível do tempo de produção.');
 operation_flow_check(strpos($shopfloor, 'Retomar produção') !== false, 'Falta a ação para retomar uma operação pausada.');
+operation_flow_check(strpos($shopfloor, 'shopfloor-checklist-modal') !== false, 'A checklist de arranque não abre numa pop-up responsiva.');
+operation_flow_check(strpos($shopfloor, 'Confirmar e iniciar produção') !== false, 'A pop-up não confirma o arranque da produção.');
+operation_flow_check(strpos($shopfloor, 'data-productivity-quantity') !== false, 'A quantidade produzida não alimenta o indicador de produtividade.');
+operation_flow_check(strpos($shopfloor, 'data-productivity-value') !== false, 'Falta o indicador previsto/real de produtividade.');
 
 echo "Fluxo de operações do Shopfloor validado.\n";
