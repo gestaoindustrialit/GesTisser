@@ -1370,3 +1370,6 @@ body {
 @media (max-width: 1199.98px) {
     .production-planning-board { grid-template-columns: repeat(4, 260px); }
 }
+
+/* Production priority administration */
+.production-priority-list{display:grid;gap:.55rem;margin:0;padding:0;list-style:none}.production-priority-item{display:flex;align-items:center;gap:.75rem;padding:.7rem .85rem;background:#fff;border:1px solid #dfe5eb;border-radius:.65rem;transition:border-color .15s,box-shadow .15s,opacity .15s}.production-priority-item[draggable=true]{cursor:grab}.production-priority-item.is-dragging{opacity:.45}.production-priority-item.is-drag-target{border-color:#3b82f6;box-shadow:0 0 0 3px rgba(59,130,246,.12)}.production-priority-number{display:grid;flex:0 0 2rem;height:2rem;place-items:center;color:#fff;background:#334155;border-radius:50%;font-size:.78rem;font-weight:800}.production-priority-handle{color:#94a3b8;font-size:1.15rem}.production-priority-item strong,.production-priority-item .flex-grow-1 span{display:block}.production-priority-item .flex-grow-1 span{color:#64748b;font-size:.78rem}@media(max-width:767.98px){.production-priority-item{align-items:flex-start;flex-wrap:wrap}.production-priority-item .flex-grow-1{min-width:calc(100% - 6rem)}}

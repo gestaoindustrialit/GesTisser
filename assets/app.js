@@ -879,3 +879,30 @@ function initSortableTables() {
     });
 }
 initSortableTables();
+
+(function initProductionPriorities() {
+    const list = document.querySelector('[data-production-priority-list]');
+    const form = document.querySelector('[data-production-priority-form]');
+    if (!list || !form) return;
+    const idsInput = form.querySelector('[data-production-order-ids]');
+    const saveButton = form.querySelector('[data-save-priorities]');
+    let dragged = null;
+    function sync() {
+        const items = Array.from(list.querySelectorAll('[data-order-id]'));
+        idsInput.value = items.map(item => item.dataset.orderId).join(',');
+        items.forEach((item, index) => { item.querySelector('[data-priority-number]').textContent = String(index + 1); });
+        if (saveButton) saveButton.disabled = false;
+    }
+    list.addEventListener('click', event => {
+        const button = event.target.closest('[data-priority-move]');
+        if (!button) return;
+        const item = button.closest('[data-order-id]');
+        const sibling = button.dataset.priorityMove === 'up' ? item.previousElementSibling : item.nextElementSibling;
+        if (!sibling || !sibling.matches('[data-order-id]')) return;
+        if (button.dataset.priorityMove === 'up') list.insertBefore(item, sibling); else list.insertBefore(sibling, item);
+        sync(); item.focus({preventScroll:true});
+    });
+    list.addEventListener('dragstart', event => { dragged = event.target.closest('[data-order-id]'); if (dragged) { dragged.classList.add('is-dragging'); event.dataTransfer.effectAllowed = 'move'; } });
+    list.addEventListener('dragover', event => { const target=event.target.closest('[data-order-id]'); if (!dragged || !target || target===dragged) return; event.preventDefault(); list.querySelectorAll('.is-drag-target').forEach(el=>el.classList.remove('is-drag-target')); target.classList.add('is-drag-target'); const rect=target.getBoundingClientRect(); list.insertBefore(dragged,event.clientY<rect.top+rect.height/2?target:target.nextSibling); });
+    list.addEventListener('dragend', () => { if (dragged) { dragged.classList.remove('is-dragging'); sync(); } list.querySelectorAll('.is-drag-target').forEach(el=>el.classList.remove('is-drag-target')); dragged=null; });
+})();
