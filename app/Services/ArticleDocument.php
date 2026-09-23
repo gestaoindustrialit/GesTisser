@@ -13,6 +13,24 @@ final class ArticleDocument
         return 'erp.php?page=article_document_thumbnail&id=' . $documentId;
     }
 
+    /** Prefer an uploaded image; only rasterise the PDF when no image exists. */
+    public static function mainArtwork(array $documents)
+    {
+        $ranked = [];
+        foreach ($documents as $position => $document) {
+            if (!is_array($document)) continue;
+            $kind = self::presentation((string) ($document['file_url'] ?? ''))['kind'];
+            if (!in_array($kind, ['image', 'pdf'], true)) continue;
+            $main = (string) ($document['document_type'] ?? '') === 'production_main';
+            $rank = $kind === 'image' ? ($main ? 0 : 1) : ($main ? 2 : 3);
+            $ranked[] = [$rank, (int) $position, $document];
+        }
+        usort($ranked, function (array $left, array $right): int {
+            return $left[0] === $right[0] ? $left[1] <=> $right[1] : $left[0] <=> $right[0];
+        });
+        return $ranked ? $ranked[0][2] : null;
+    }
+
     /**
      * Create a printable first-page preview. Images are normalised with GD and
      * PDFs use Imagick when the server has the PDF delegate enabled.
@@ -37,8 +55,14 @@ final class ArticleDocument
                 $imagick->clear();
                 if (is_string($blob) && $blob !== '') return $blob;
             } catch (Throwable $exception) {
-                // Return the neutral preview below instead of breaking a dossier.
+                // Try the command-line PDF renderers below. Some Imagick builds
+                // deliberately disable PDF while Poppler remains available.
             }
+        }
+
+        if ($extension === 'pdf') {
+            $blob = self::rasterisePdf($absolutePath, $maxWidth, $maxHeight);
+            if ($blob !== '') return $blob;
         } elseif (function_exists('imagecreatefromstring')) {
             $source = @file_get_contents($absolutePath);
             $image = is_string($source) ? @imagecreatefromstring($source) : false;
@@ -55,6 +79,34 @@ final class ArticleDocument
         }
 
         return self::placeholderThumbnail($extension === 'pdf' ? 'PDF' : 'DOCUMENTO');
+    }
+
+    /** Rasterise page one with Poppler or Ghostscript (compatible with PHP 7). */
+    private static function rasterisePdf(string $absolutePath, int $maxWidth, int $maxHeight): string
+    {
+        if (!function_exists('proc_open')) return '';
+        $temporaryBase = tempnam(sys_get_temp_dir(), 'gt-artwork-');
+        if ($temporaryBase === false) return '';
+        @unlink($temporaryBase);
+        $commands = [
+            ['pdftoppm', '-f', '1', '-singlefile', '-jpeg', '-jpegopt', 'quality=90', '-scale-to-x', (string) $maxWidth, '-scale-to-y', (string) $maxHeight, $absolutePath, $temporaryBase],
+            ['gs', '-q', '-dSAFER', '-dBATCH', '-dNOPAUSE', '-dFirstPage=1', '-dLastPage=1', '-sDEVICE=jpeg', '-dJPEGQ=90', '-r144', '-dPDFFitPage', '-g' . $maxWidth . 'x' . $maxHeight, '-sOutputFile=' . $temporaryBase . '.jpg', $absolutePath],
+        ];
+        foreach ($commands as $command) {
+            $pipes = [];
+            $escapedCommand = implode(' ', array_map('escapeshellarg', $command));
+            $process = @proc_open($escapedCommand, [['pipe', 'r'], ['pipe', 'w'], ['pipe', 'w']], $pipes);
+            if (!is_resource($process)) continue;
+            fclose($pipes[0]); stream_get_contents($pipes[1]); fclose($pipes[1]); stream_get_contents($pipes[2]); fclose($pipes[2]);
+            $status = proc_close($process);
+            $output = $temporaryBase . '.jpg';
+            if ($status === 0 && is_file($output)) {
+                $blob = (string) @file_get_contents($output); @unlink($output);
+                if (substr($blob, 0, 2) === "\xFF\xD8") return $blob;
+            }
+            @unlink($output);
+        }
+        return '';
     }
 
     private static function placeholderThumbnail(string $label): string

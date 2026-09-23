@@ -22,6 +22,16 @@ if (ArticleDocument::url(42) !== 'erp.php?page=article_document&id=42') {
 if (ArticleDocument::thumbnailUrl(42) !== 'erp.php?page=article_document_thumbnail&id=42') {
     throw new RuntimeException('URL autenticado do thumbnail incorreto.');
 }
+$artwork = ArticleDocument::mainArtwork([
+    ['id' => 1, 'file_url' => 'storage/uploads/master.pdf', 'document_type' => 'production_main'],
+    ['id' => 2, 'file_url' => 'storage/uploads/photo.jpg', 'document_type' => 'Identificação do artigo'],
+]);
+if (($artwork['id'] ?? 0) !== 2) throw new RuntimeException('Uma imagem deve ter prioridade sobre a maquete PDF.');
+$artwork = ArticleDocument::mainArtwork([
+    ['id' => 1, 'file_url' => 'storage/uploads/other.pdf', 'document_type' => 'Identificação do artigo'],
+    ['id' => 2, 'file_url' => 'storage/uploads/master.pdf', 'document_type' => 'production_main'],
+]);
+if (($artwork['id'] ?? 0) !== 2) throw new RuntimeException('Sem imagem, deve ser usada a maquete PDF principal.');
 
 $root = sys_get_temp_dir() . '/article-document-' . bin2hex(random_bytes(4));
 mkdir($root . '/storage/uploads', 0777, true);
