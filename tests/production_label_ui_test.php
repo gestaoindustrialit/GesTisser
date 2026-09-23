@@ -8,6 +8,8 @@ production_label_check(strpos($dossier,'Etiqueta de rolo')!==false,'botão de et
 production_label_check(strpos($dossier,'Etiqueta de tinta')!==false,'botão de etiqueta de tinta em falta');
 production_label_check(strpos($label,'Atualizar e imprimir')!==false,'ação de atualização em falta');
 production_label_check(strpos($label,'Imprimir últimos valores validados')!==false,'reimpressão dos valores validados em falta');
+production_label_check(strpos($label,'production_label_value($value)')!==false,'impressão não normaliza valores inesperados da etiqueta');
+production_label_check(strpos($label,'production_label_datetime($saved[\'validated_at\']??\'\')')!==false,'impressão não protege datas de validação vazias');
 production_label_check(strpos($shopfloor,'aria-label="Etiquetas de acerto e reimpressão"')!==false,'ações de etiquetas no Shopfloor em falta');
 production_label_check(strpos($shopfloor,'production_label.php?id=<?= (int)$selectedOf[\'id\'] ?>&type=roll')!==false,'etiqueta de rolo no Shopfloor em falta');
 production_label_check(strpos($shopfloor,'production_label.php?id=<?= (int)$selectedOf[\'id\'] ?>&type=ink')!==false,'etiqueta de tinta no Shopfloor em falta');
