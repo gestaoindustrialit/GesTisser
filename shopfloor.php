@@ -918,7 +918,17 @@ require __DIR__ . '/partials/header.php';
         </div>
         <form method="get" class="row g-2 align-items-end mb-3"><div class="col-md-8"><label class="form-label">Ordem de fabrico</label><select name="of_id" class="form-select" onchange="this.form.submit()"><?php foreach ($productionOrders as $of): ?><option value="<?= (int)$of['id'] ?>" <?= (int)$of['id']===$selectedOfId?'selected':'' ?>><?= h($of['order_number'].' · '.$of['product_code'].' · '.$of['product_description']) ?></option><?php endforeach; ?></select></div><div class="col-md-4"><button class="btn btn-primary w-100">Abrir OF</button></div></form>
         <?php if ($selectedOf): ?>
-            <div class="alert alert-info small"><strong><?= h($selectedOf['order_number']) ?></strong> — Quantidade planeada: <?= h((string)$selectedOf['planned_quantity']) ?> · Estado: <?= h($selectedOf['status']) ?></div>
+            <div class="alert alert-info d-flex flex-wrap justify-content-between align-items-center gap-3">
+                <div class="small"><strong><?= h($selectedOf['order_number']) ?></strong> — Quantidade planeada: <?= h((string)$selectedOf['planned_quantity']) ?> · Estado: <?= h($selectedOf['status']) ?></div>
+                <div class="d-flex flex-wrap gap-2" aria-label="Etiquetas de acerto e reimpressão">
+                    <a class="btn btn-warning btn-sm fw-semibold" href="production_label.php?id=<?= (int)$selectedOf['id'] ?>&type=roll">
+                        <i class="bi bi-upc-scan me-1" aria-hidden="true"></i>Etiqueta de rolo
+                    </a>
+                    <a class="btn btn-info btn-sm fw-semibold" href="production_label.php?id=<?= (int)$selectedOf['id'] ?>&type=ink">
+                        <i class="bi bi-droplet-fill me-1" aria-hidden="true"></i>Etiqueta de tinta
+                    </a>
+                </div>
+            </div>
             <h3 class="h6">Documentos obrigatórios</h3>
             <div class="list-group mb-3"><?php if (!$ofDocuments): ?><div class="list-group-item text-secondary">Sem documentos anexados.</div><?php endif; foreach ($ofDocuments as $doc): ?><div class="list-group-item d-flex justify-content-between gap-2"><div><strong><?= h($doc['title']) ?></strong><?php if (!empty($doc['document_url'])): ?> · <a target="_blank" href="<?= h($doc['document_url']) ?>">visualizar</a><?php endif; ?><div class="small text-secondary"><?= nl2br(h((string)$doc['body'])) ?></div></div><form method="post"><input type="hidden" name="action" value="ack_of_document"><input type="hidden" name="document_id" value="<?= (int)$doc['id'] ?>"><button class="btn btn-sm <?= (int)$doc['acknowledged']===1?'btn-success':'btn-outline-success' ?>"><?= (int)$doc['acknowledged']===1?'Confirmado':'Tomei conhecimento' ?></button></form></div><?php endforeach; ?></div>
             <h3 class="h6">Operações</h3>

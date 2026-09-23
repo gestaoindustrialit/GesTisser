@@ -4,7 +4,10 @@ require_once __DIR__.'/erp_migrations.php';
 require_once __DIR__.'/production_dossier_service.php';
 require_once __DIR__.'/app/Services/ProductionLabelService.php';
 require_login();erp_run_phase1_migrations($pdo);
-$user=current_user($pdo)?:[];if(!erp_user_can($pdo,$user,'erp.view')){http_response_code(403);exit('Sem acesso às etiquetas de produção.');}
+$user=current_user($pdo)?:[];
+$profile=(string)($user['access_profile']??'Utilizador');
+$canUseProductionLabels=(int)($user['is_admin']??0)===1||in_array($profile,['Utilizador','Produção','Chefias','RH'],true);
+if(!$canUseProductionLabels){http_response_code(403);exit('Sem acesso às etiquetas de produção.');}
 $orderId=filter_input(INPUT_GET,'id',FILTER_VALIDATE_INT)?:0;$type=(string)($_GET['type']??'roll');if(!in_array($type,['roll','ink'],true)){http_response_code(400);exit('Tipo de etiqueta inválido.');}
 $dossierService=new ProductionDossierService($pdo);try{$d=$dossierService->dossier($orderId);}catch(Throwable $e){http_response_code(404);exit(h($e->getMessage()));}
 $labelService=new ProductionLabelService($pdo);$o=$d['order'];$snapshot=$d['snapshot'];$inks=(array)($snapshot['_colors']??[]);$flashError='';$existingLabels=$labelService->listForOrder($orderId,$type);
