@@ -28,6 +28,47 @@ if (!$isAdmin && !in_array($profile, ['Utilizador', 'Produção', 'Chefias', 'RH
 
 $flashSuccess = null;
 $flashError = null;
+$workCentersStmt = $pdo->query(
+    'SELECT wc.id, wc.code, wc.name, wc.center_type, wc.machine_id,
+            p.id AS printer_id, p.name AS printer_name, p.network_uri AS printer_uri
+     FROM erp_work_centers wc
+     LEFT JOIN erp_printers p ON p.id = wc.default_printer_id AND p.is_active = 1
+     WHERE wc.is_active = 1
+     ORDER BY wc.code COLLATE NOCASE, wc.name COLLATE NOCASE'
+);
+$workCenters = $workCentersStmt ? $workCentersStmt->fetchAll(PDO::FETCH_ASSOC) : [];
+$workCentersById = [];
+foreach ($workCenters as $workCenterRow) {
+    $workCentersById[(int) $workCenterRow['id']] = $workCenterRow;
+}
+
+/*
+ * The workstation belongs to the physical browser/device, rather than to the
+ * employee who happens to be signed in. JavaScript restores the device choice
+ * from localStorage after every login and this action validates it server-side.
+ */
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && trim((string) ($_POST['action'] ?? '')) === 'select_work_center') {
+    validate_csrf_or_abort(true);
+    $requestedWorkCenterId = (int) ($_POST['work_center_id'] ?? 0);
+    if (!isset($workCentersById[$requestedWorkCenterId])) {
+        $_SESSION['shopfloor_work_center_id'] = null;
+        redirect('shopfloor.php?work_center_error=1');
+    }
+
+    $_SESSION['shopfloor_work_center_id'] = $requestedWorkCenterId;
+    log_app_event($pdo, $userId, 'shopfloor.work_center.select', 'Centro de trabalho selecionado no dispositivo.', [
+        'work_center_id' => $requestedWorkCenterId,
+        'work_center_code' => (string) $workCentersById[$requestedWorkCenterId]['code'],
+    ]);
+    redirect('shopfloor.php?work_center_selected=1');
+}
+
+$selectedWorkCenterId = (int) ($_SESSION['shopfloor_work_center_id'] ?? 0);
+if (!isset($workCentersById[$selectedWorkCenterId])) {
+    $selectedWorkCenterId = 0;
+    unset($_SESSION['shopfloor_work_center_id']);
+}
+$selectedWorkCenter = $selectedWorkCenterId > 0 ? $workCentersById[$selectedWorkCenterId] : null;
 $sessionLoginAt = trim((string) ($_SESSION['login_at'] ?? ''));
 $todayLocalDate = date('Y-m-d');
 $latestClockEntryTodayStmt = $pdo->prepare('SELECT entry_type FROM shopfloor_time_entries WHERE user_id = ? AND date(occurred_at) = ? ORDER BY occurred_at DESC LIMIT 1');
@@ -36,6 +77,12 @@ $latestClockEntryToday = (string) ($latestClockEntryTodayStmt->fetchColumn() ?: 
 $hasOpenClockEntryToday = $latestClockEntryToday === 'entrada';
 if (isset($_GET['announcement_ack_required'])) {
     $flashError = 'Tem de validar o conhecimento do comunicado pendente para continuar.';
+}
+if (isset($_GET['work_center_error'])) {
+    $flashError = 'O centro de trabalho guardado neste dispositivo já não está disponível. Selecione outro posto.';
+}
+if (isset($_GET['work_center_selected'])) {
+    $flashSuccess = 'Centro de trabalho definido para este dispositivo.';
 }
 
 if (!function_exists('shopfloor_parse_absence_code')) {
@@ -134,6 +181,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         if ($flashError) {
         } elseif (!$operation) {
             $flashError = 'Etapa da OF inválida.';
+        } elseif ($selectedWorkCenterId <= 0) {
+            $flashError = 'Selecione primeiro o centro de trabalho deste dispositivo.';
+        } elseif ((int) ($operation['work_center_id'] ?? 0) !== $selectedWorkCenterId) {
+            $flashError = 'Esta operação não pertence ao centro de trabalho selecionado.';
         } elseif ($machineId && !in_array($machineId,array_map('intval',$allowed),true)) {
             $flashError = 'A máquina selecionada não está autorizada para esta operação.';
         } elseif ((int)$blockedStmt->fetchColumn()>0 && empty($operation['parallel_allowed'])) {
@@ -834,7 +885,15 @@ $displayedHourBankAbsMinutes = abs($displayedHourBankMinutes);
 $formattedHourBank = sprintf('%s%02dh%02dm', $displayedHourBankMinutes < 0 ? '-' : '', intdiv($displayedHourBankAbsMinutes, 60), $displayedHourBankAbsMinutes % 60);
 
 
-$ofStmt = $pdo->query('SELECT o.id, o.order_number, o.planned_quantity, o.status, p.code AS product_code, p.description AS product_description FROM erp_production_orders o JOIN erp_products p ON p.id = o.product_id WHERE o.status IN ("Planeada", "Em curso") ORDER BY o.due_date IS NULL, o.due_date, o.id DESC LIMIT 25');
+$ofSql = 'SELECT o.id, o.order_number, o.planned_quantity, o.status, p.code AS product_code, p.description AS product_description FROM erp_production_orders o JOIN erp_products p ON p.id = o.product_id WHERE o.status IN ("Planeada", "Em curso")';
+$ofParams = [];
+if ($selectedWorkCenterId > 0) {
+    $ofSql .= ' AND EXISTS (SELECT 1 FROM erp_production_order_operations center_op WHERE center_op.production_order_id = o.id AND center_op.work_center_id = ?)';
+    $ofParams[] = $selectedWorkCenterId;
+}
+$ofSql .= ' ORDER BY o.due_date IS NULL, o.due_date, o.id DESC LIMIT 25';
+$ofStmt = $pdo->prepare($ofSql);
+$ofStmt->execute($ofParams);
 $productionOrders = $ofStmt ? $ofStmt->fetchAll(PDO::FETCH_ASSOC) : [];
 $selectedOfId = (int) ($_GET['of_id'] ?? ($productionOrders[0]['id'] ?? 0));
 $selectedOf = null;
@@ -844,8 +903,15 @@ if ($selectedOfId > 0) {
     $docsStmt = $pdo->prepare('SELECT d.*, EXISTS(SELECT 1 FROM erp_production_order_document_acknowledgements a WHERE a.document_id=d.id AND a.user_id=?) AS acknowledged FROM erp_production_order_documents d WHERE d.production_order_id=? ORDER BY d.id');
     $docsStmt->execute([$userId, $selectedOfId]);
     $ofDocuments = $docsStmt->fetchAll(PDO::FETCH_ASSOC);
-    $opsStmt = $pdo->prepare('SELECT opo.*, COALESCE(opo.operation_code,op.code) code,COALESCE(opo.operation_name,op.name) name, op.standard_minutes, (SELECT id FROM erp_operation_time_entries te WHERE te.production_order_operation_id=opo.id AND te.user_id=? AND te.ended_at IS NULL LIMIT 1) AS open_entry_id,(SELECT COALESCE(SUM((julianday(COALESCE(te.ended_at,CURRENT_TIMESTAMP))-julianday(te.started_at))*1440)-SUM(te.pause_seconds)/60,0) FROM erp_operation_time_entries te WHERE te.production_order_operation_id=opo.id) actual_minutes FROM erp_production_order_operations opo JOIN erp_operations op ON op.id=opo.operation_id WHERE opo.production_order_id=? ORDER BY opo.sequence_no, opo.id');
-    $opsStmt->execute([$userId, $selectedOfId]);
+    $opsSql = 'SELECT opo.*, COALESCE(opo.operation_code,op.code) code,COALESCE(opo.operation_name,op.name) name, op.standard_minutes, (SELECT id FROM erp_operation_time_entries te WHERE te.production_order_operation_id=opo.id AND te.user_id=? AND te.ended_at IS NULL LIMIT 1) AS open_entry_id,(SELECT COALESCE(SUM((julianday(COALESCE(te.ended_at,CURRENT_TIMESTAMP))-julianday(te.started_at))*1440)-SUM(te.pause_seconds)/60,0) FROM erp_operation_time_entries te WHERE te.production_order_operation_id=opo.id) actual_minutes FROM erp_production_order_operations opo JOIN erp_operations op ON op.id=opo.operation_id WHERE opo.production_order_id=?';
+    $opsParams = [$userId, $selectedOfId];
+    if ($selectedWorkCenterId > 0) {
+        $opsSql .= ' AND opo.work_center_id=?';
+        $opsParams[] = $selectedWorkCenterId;
+    }
+    $opsSql .= ' ORDER BY opo.sequence_no, opo.id';
+    $opsStmt = $pdo->prepare($opsSql);
+    $opsStmt->execute($opsParams);
     $ofOperations = $opsStmt->fetchAll(PDO::FETCH_ASSOC);
 }
 
@@ -859,6 +925,13 @@ require __DIR__ . '/partials/header.php';
         <div class="shopfloor-topbar-title">
             <h1 class="h4 mb-1">Gestão pessoal</h1>
             <p class="text-secondary mb-0">Pedidos ligados ao módulo de RH e respetivas justificações.</p>
+            <button class="btn <?= $selectedWorkCenter ? 'btn-outline-primary' : 'btn-warning' ?> btn-sm mt-2" type="button" data-bs-toggle="modal" data-bs-target="#workCenterModal">
+                <i class="bi bi-geo-alt-fill me-1" aria-hidden="true"></i>
+                <?= $selectedWorkCenter ? h((string) $selectedWorkCenter['code'] . ' · ' . (string) $selectedWorkCenter['name']) : 'Escolher centro de trabalho' ?>
+            </button>
+            <?php if ($selectedWorkCenter && !empty($selectedWorkCenter['printer_name'])): ?>
+                <span class="badge text-bg-light border ms-1"><i class="bi bi-printer me-1"></i><?= h((string) $selectedWorkCenter['printer_name']) ?></span>
+            <?php endif; ?>
         </div>
         <div class="shopfloor-topbar-kpis" aria-label="Resumo rápido de horas e férias">
             <article class="shopfloor-kpi-card shopfloor-kpi-card-compact">
@@ -888,6 +961,36 @@ require __DIR__ . '/partials/header.php';
     <?php if ($flashError): ?>
         <div class="alert alert-danger mt-3 mb-3"><?= h($flashError) ?></div>
     <?php endif; ?>
+
+    <div class="modal fade" id="workCenterModal" tabindex="-1" aria-labelledby="workCenterModalLabel" aria-hidden="true" data-requires-selection="<?= $selectedWorkCenter ? '0' : '1' ?>">
+        <div class="modal-dialog modal-dialog-centered">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <div><h2 class="modal-title fs-5" id="workCenterModalLabel">Centro de trabalho deste dispositivo</h2><p class="small text-secondary mb-0">A escolha fica memorizada neste equipamento para os próximos logins.</p></div>
+                    <?php if ($selectedWorkCenter): ?><button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Fechar"></button><?php endif; ?>
+                </div>
+                <div class="modal-body">
+                    <?php if ($workCenters): ?>
+                        <div class="d-grid gap-2">
+                            <?php foreach ($workCenters as $center): ?>
+                                <form method="post" class="js-work-center-form">
+                                    <?= csrf_input() ?>
+                                    <input type="hidden" name="action" value="select_work_center">
+                                    <input type="hidden" name="work_center_id" value="<?= (int) $center['id'] ?>">
+                                    <button class="btn <?= (int) $center['id'] === $selectedWorkCenterId ? 'btn-primary' : 'btn-outline-primary' ?> text-start w-100" type="submit">
+                                        <strong><?= h((string) $center['code']) ?></strong> · <?= h((string) $center['name']) ?>
+                                        <?php if (!empty($center['printer_name'])): ?><span class="d-block small mt-1"><i class="bi bi-printer me-1"></i><?= h((string) $center['printer_name']) ?></span><?php endif; ?>
+                                    </button>
+                                </form>
+                            <?php endforeach; ?>
+                        </div>
+                    <?php else: ?>
+                        <div class="alert alert-warning mb-0">Ainda não existem centros de trabalho ativos. Solicite a configuração no ERP.</div>
+                    <?php endif; ?>
+                </div>
+            </div>
+        </div>
+    </div>
 
     <?php if ($pendingAnnouncementAck): ?>
         <div class="modal fade" id="shopfloorAnnouncementAcknowledgeModal" tabindex="-1" aria-labelledby="shopfloorAnnouncementAcknowledgeModalLabel" aria-hidden="true" data-bs-backdrop="static" data-bs-keyboard="false">
@@ -1687,6 +1790,47 @@ require __DIR__ . '/partials/header.php';
         modalElement.addEventListener('hidden.bs.modal', () => {
             imageElement.src = '';
         });
+    }, { once: true });
+})();
+
+(() => {
+    window.addEventListener('load', () => {
+        const storageKey = 'gestisser_shopfloor_work_center_id';
+        const modalElement = document.getElementById('workCenterModal');
+        const forms = Array.from(document.querySelectorAll('.js-work-center-form'));
+        const selectedServerId = <?= (int) $selectedWorkCenterId ?>;
+        const selectionInvalid = <?= isset($_GET['work_center_error']) ? 'true' : 'false' ?>;
+
+        const storage = {
+            get: () => { try { return window.localStorage.getItem(storageKey) || ''; } catch (error) { return ''; } },
+            set: (value) => { try { window.localStorage.setItem(storageKey, value); } catch (error) {} },
+            clear: () => { try { window.localStorage.removeItem(storageKey); } catch (error) {} }
+        };
+
+        if (selectionInvalid) {
+            storage.clear();
+        }
+
+        forms.forEach((form) => {
+            form.addEventListener('submit', () => {
+                storage.set(form.querySelector('[name="work_center_id"]')?.value || '');
+            });
+        });
+
+        if (!selectedServerId) {
+            const cachedId = storage.get();
+            const cachedForm = forms.find((form) => form.querySelector('[name="work_center_id"]')?.value === cachedId);
+            if (cachedForm && !selectionInvalid) {
+                cachedForm.submit();
+                return;
+            }
+
+            if (modalElement && typeof bootstrap !== 'undefined') {
+                bootstrap.Modal.getOrCreateInstance(modalElement, { backdrop: 'static', keyboard: false }).show();
+            }
+        } else if (storage.get() !== String(selectedServerId)) {
+            storage.set(String(selectedServerId));
+        }
     }, { once: true });
 })();
 
