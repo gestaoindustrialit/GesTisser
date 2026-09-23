@@ -1,6 +1,25 @@
 <?php
 require_once __DIR__ . '/../app/Services/ArticleDocument.php';
 
+if (ArticleDocument::MAX_UPLOAD_BYTES !== 10485760) {
+    throw new RuntimeException('O limite dos documentos do artigo deve ser exatamente 10 MiB.');
+}
+ArticleDocument::validateUploadSize(['error' => UPLOAD_ERR_OK, 'size' => ArticleDocument::MAX_UPLOAD_BYTES]);
+foreach ([
+    ['error' => UPLOAD_ERR_OK, 'size' => ArticleDocument::MAX_UPLOAD_BYTES + 1],
+    ['error' => UPLOAD_ERR_INI_SIZE, 'size' => 0],
+    ['error' => UPLOAD_ERR_FORM_SIZE, 'size' => 0],
+] as $oversizedUpload) {
+    try {
+        ArticleDocument::validateUploadSize($oversizedUpload);
+        throw new RuntimeException('Um documento acima de 10 MiB foi aceite.');
+    } catch (RuntimeException $exception) {
+        if ($exception->getMessage() !== 'Cada documento do artigo deve ter no máximo 10 MB.') {
+            throw $exception;
+        }
+    }
+}
+
 $cases = [
     ['storage/uploads/spec.PDF', 'pdf', 'PDF', 'bi-file-earmark-pdf'],
     ['storage/uploads/front.jpg?version=2', 'image', 'JPG', 'bi-file-earmark-image'],
