@@ -260,6 +260,10 @@ function erp_run_phase1_migrations(PDO $pdo)
             'CREATE TABLE IF NOT EXISTS erp_production_label_history (id INTEGER PRIMARY KEY AUTOINCREMENT, production_label_id INTEGER NOT NULL, values_json TEXT NOT NULL, validated_by INTEGER NOT NULL, validated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP, FOREIGN KEY(production_label_id) REFERENCES erp_production_labels(id) ON DELETE CASCADE, FOREIGN KEY(validated_by) REFERENCES users(id) ON DELETE RESTRICT)'
         ];
         foreach ($dossierSql as $statement) { $pdo->exec($statement); }
+        foreach (['validated_at'=>'DATETIME','updated_at'=>'DATETIME'] as $column=>$definition) {
+            if (!erp_column_exists($pdo,'erp_production_labels',$column)) $pdo->exec('ALTER TABLE erp_production_labels ADD COLUMN '.$column.' '.$definition);
+        }
+        if (!erp_column_exists($pdo,'erp_production_label_history','validated_at')) $pdo->exec('ALTER TABLE erp_production_label_history ADD COLUMN validated_at DATETIME');
         foreach (['technical_sheet_version_id'=>'INTEGER REFERENCES erp_article_technical_sheet_versions(id) ON DELETE RESTRICT','snapshot_id'=>'INTEGER REFERENCES erp_production_order_snapshots(id) ON DELETE RESTRICT','public_token'=>'TEXT','planned_production_date'=>'TEXT','customer_order_reference'=>'TEXT'] as $column=>$definition) {
             if (!erp_column_exists($pdo,'erp_production_orders',$column)) $pdo->exec('ALTER TABLE erp_production_orders ADD COLUMN '.$column.' '.$definition);
         }
