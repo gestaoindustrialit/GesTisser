@@ -4,7 +4,9 @@ declare(strict_types=1);
 final class ArticleDocument
 {
     /** Maximum size accepted for each document attached to an article (10 MiB). */
-    public const MAX_UPLOAD_BYTES = 10 * 1024 * 1024;
+    // Class-constant visibility is only supported from PHP 7.1 onwards. Keep
+    // this declaration compatible with the PHP 7.0 runtime used in production.
+    const MAX_UPLOAD_BYTES = 10 * 1024 * 1024;
 
     /**
      * Validate the size-related upload metadata before the file is persisted.

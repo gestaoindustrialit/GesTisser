@@ -1,6 +1,11 @@
 <?php
 require_once __DIR__ . '/../app/Services/ArticleDocument.php';
 
+$articleDocumentSource = (string) file_get_contents(__DIR__ . '/../app/Services/ArticleDocument.php');
+if (preg_match('/\b(?:public|protected|private)\s+const\s+MAX_UPLOAD_BYTES\b/', $articleDocumentSource)) {
+    throw new RuntimeException('A constante do limite deve manter compatibilidade com PHP 7.0.');
+}
+
 if (ArticleDocument::MAX_UPLOAD_BYTES !== 10485760) {
     throw new RuntimeException('O limite dos documentos do artigo deve ser exatamente 10 MiB.');
 }
