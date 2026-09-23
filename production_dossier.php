@@ -16,11 +16,11 @@ try{$d=$service->dossier($id);}catch(Throwable $e){http_response_code(404);exit(
 $o=$d['order'];$s=$d['snapshot'];$m=$d['metrics'];$issues=$service->closureIssues($d);
 function pd_num($v,$dec=0){return number_format((float)$v,$dec,',','.');}function pd_money($v){return number_format((float)$v,2,',','.').' €';}function pd_time($v){$v=max(0,(int)round($v));return intdiv($v,60).'h '.str_pad((string)($v%60),2,'0',STR_PAD_LEFT).'m';}
 $statusClass=['Planeada'=>'primary','Libertada'=>'info','Em produção'=>'warning','Suspensa'=>'secondary','Fechada'=>'success','Cancelada'=>'danger'][$o['status']]??'light';
-$mainDocument=null;foreach((array)($s['_documents']??[]) as $doc){if(!$mainDocument||($doc['document_type']??'')==='production_main')$mainDocument=$doc;if(($doc['document_type']??'')==='production_main')break;}
+$mainDocument=ArticleDocument::mainArtwork((array)($s['_documents']??[]));
 $mainDocumentThumbnail='';if($mainDocument){$path=ArticleDocument::absolutePath(__DIR__,(string)($mainDocument['file_url']??''));if($path!=='')$mainDocumentThumbnail='data:image/jpeg;base64,'.base64_encode(ArticleDocument::thumbnail($path));}
 if(($_GET['format']??'')==='pdf'){
     if(class_exists('Mpdf\\Mpdf')){ob_start();include __DIR__.'/production_dossier_print.php';$html=ob_get_clean();$pdf=new Mpdf\Mpdf(['format'=>'A4','margin_left'=>9,'margin_right'=>9,'margin_top'=>9,'margin_bottom'=>9]);$pdf->WriteHTML($html);$pdf->Output('OF-'.$o['order_number'].'.pdf','I');}
-    else{$pdf=ProductionDossierPdf::render($d);header('Content-Type: application/pdf');header('Content-Disposition: inline; filename="OF-'.preg_replace('/[^A-Za-z0-9._-]/','-',(string)$o['order_number']).'.pdf"');header('Content-Length: '.strlen($pdf));echo $pdf;}exit;
+    else{$pdf=ProductionDossierPdf::render($d,$mainDocumentThumbnail);header('Content-Type: application/pdf');header('Content-Disposition: inline; filename="OF-'.preg_replace('/[^A-Za-z0-9._-]/','-',(string)$o['order_number']).'.pdf"');header('Content-Length: '.strlen($pdf));echo $pdf;}exit;
 }
 $pageTitle='Dossier de Produção · OF '.$o['order_number'];require __DIR__.'/partials/header.php';
 ?>
