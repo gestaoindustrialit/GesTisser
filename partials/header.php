@@ -154,6 +154,9 @@ header('Content-Type: text/html; charset=UTF-8');
                 <a class="gt-nav-link<?= $isCurrentFile('shopfloor.php') ? ' is-active' : '' ?>" href="<?= h(route_url('shopfloor', 'shopfloor.php')) ?>">
                     <i class="bi bi-speedometer2"></i><span>Shopfloor</span>
                 </a>
+                <a class="gt-nav-link<?= $isCurrentFile('production_planning.php') ? ' is-active' : '' ?>" href="production_planning.php">
+                    <i class="bi bi-display"></i><span>Plano de produção</span>
+                </a>
             <?php else: ?>
                 <a class="gt-nav-link<?= $isCurrentFile('dashboard.php') ? ' is-active' : '' ?>" href="<?= h(route_url('home', 'dashboard.php')) ?>">
                     <i class="bi bi-grid-1x2"></i><span>Visão geral</span>
@@ -177,6 +180,9 @@ header('Content-Type: text/html; charset=UTF-8');
                 <?php endif; ?>
                 <a class="gt-nav-link<?= $isCurrentFile('shopfloor.php') ? ' is-active' : '' ?>" href="<?= h(route_url('shopfloor', 'shopfloor.php')) ?>">
                     <i class="bi bi-speedometer2"></i><span>Shopfloor</span>
+                </a>
+                <a class="gt-nav-link<?= $isCurrentFile('production_planning.php') ? ' is-active' : '' ?>" href="production_planning.php">
+                    <i class="bi bi-display"></i><span>Plano de produção</span>
                 </a>
 
                 <details class="gt-nav-group"<?= ($isCurrentFile('erp.php') || $isCurrentFile('erp_operations.php') || $isCurrentFile('erp_routing.php')) ? ' open' : '' ?>>
