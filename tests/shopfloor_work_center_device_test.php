@@ -12,6 +12,8 @@ function work_center_check(bool $condition, string $message)
 }
 
 work_center_check(strpos($shopfloor, 'select_work_center') !== false, 'Falta a ação de seleção do centro de trabalho.');
+work_center_check(strpos($shopfloor, 'WHERE wc.is_active = 1') === false, 'Centros recém-criados ou inativos não podem desaparecer do seletor do dispositivo.');
+work_center_check(strpos($shopfloor, 'wc.is_active DESC') !== false, 'Os centros ativos devem continuar a ser apresentados primeiro.');
 work_center_check(strpos($shopfloor, 'gestisser_shopfloor_work_center_id') !== false, 'A escolha do dispositivo não é persistida no armazenamento local.');
 work_center_check(strpos($shopfloor, "\$_SESSION['shopfloor_work_center_id']") !== false, 'O centro do dispositivo não é validado na sessão.');
 work_center_check(strpos($shopfloor, 'center_op.work_center_id = ?') !== false, 'As OF não são filtradas pelo centro selecionado.');

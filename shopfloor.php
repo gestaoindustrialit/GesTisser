@@ -29,12 +29,11 @@ if (!$isAdmin && !in_array($profile, ['Utilizador', 'Produção', 'Chefias', 'RH
 $flashSuccess = null;
 $flashError = null;
 $workCentersStmt = $pdo->query(
-    'SELECT wc.id, wc.code, wc.name, wc.center_type, wc.machine_id,
+    'SELECT wc.id, wc.code, wc.name, wc.center_type, wc.machine_id, wc.is_active,
             p.id AS printer_id, p.name AS printer_name, p.network_uri AS printer_uri
      FROM erp_work_centers wc
      LEFT JOIN erp_printers p ON p.id = wc.default_printer_id AND p.is_active = 1
-     WHERE wc.is_active = 1
-     ORDER BY wc.code COLLATE NOCASE, wc.name COLLATE NOCASE'
+     ORDER BY wc.is_active DESC, wc.code COLLATE NOCASE, wc.name COLLATE NOCASE'
 );
 $workCenters = $workCentersStmt ? $workCentersStmt->fetchAll(PDO::FETCH_ASSOC) : [];
 $workCentersById = [];
@@ -963,7 +962,7 @@ require __DIR__ . '/partials/header.php';
     <?php endif; ?>
 
     <div class="modal fade" id="workCenterModal" tabindex="-1" aria-labelledby="workCenterModalLabel" aria-hidden="true" data-requires-selection="<?= $selectedWorkCenter ? '0' : '1' ?>">
-        <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-dialog modal-dialog-centered modal-dialog-scrollable">
             <div class="modal-content">
                 <div class="modal-header">
                     <div><h2 class="modal-title fs-5" id="workCenterModalLabel">Centro de trabalho deste dispositivo</h2><p class="small text-secondary mb-0">A escolha fica memorizada neste equipamento para os próximos logins.</p></div>
@@ -979,6 +978,7 @@ require __DIR__ . '/partials/header.php';
                                     <input type="hidden" name="work_center_id" value="<?= (int) $center['id'] ?>">
                                     <button class="btn <?= (int) $center['id'] === $selectedWorkCenterId ? 'btn-primary' : 'btn-outline-primary' ?> text-start w-100" type="submit">
                                         <strong><?= h((string) $center['code']) ?></strong> · <?= h((string) $center['name']) ?>
+                                        <?php if ((int) ($center['is_active'] ?? 0) !== 1): ?><span class="badge text-bg-warning ms-1">Inativo</span><?php endif; ?>
                                         <?php if (!empty($center['printer_name'])): ?><span class="d-block small mt-1"><i class="bi bi-printer me-1"></i><?= h((string) $center['printer_name']) ?></span><?php endif; ?>
                                     </button>
                                 </form>
