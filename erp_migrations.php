@@ -267,6 +267,11 @@ function erp_run_phase1_migrations(PDO $pdo)
         foreach (['technical_sheet_version_id'=>'INTEGER REFERENCES erp_article_technical_sheet_versions(id) ON DELETE RESTRICT','snapshot_id'=>'INTEGER REFERENCES erp_production_order_snapshots(id) ON DELETE RESTRICT','public_token'=>'TEXT','planned_production_date'=>'TEXT','customer_order_reference'=>'TEXT'] as $column=>$definition) {
             if (!erp_column_exists($pdo,'erp_production_orders',$column)) $pdo->exec('ALTER TABLE erp_production_orders ADD COLUMN '.$column.' '.$definition);
         }
+        if (!erp_column_exists($pdo, 'erp_production_orders', 'planning_priority')) {
+            $pdo->exec('ALTER TABLE erp_production_orders ADD COLUMN planning_priority INTEGER');
+            $pdo->exec('UPDATE erp_production_orders SET planning_priority=id WHERE planning_priority IS NULL');
+        }
+        $pdo->exec('CREATE INDEX IF NOT EXISTS idx_erp_production_planning_priority ON erp_production_orders(planning_priority, due_date)');
         foreach (['raw_material_id'=>'INTEGER REFERENCES erp_raw_materials(id) ON DELETE RESTRICT','lot'=>'TEXT','planned_quantity'=>'REAL NOT NULL DEFAULT 0','source_movement_id'=>'INTEGER REFERENCES erp_stock_movements(id) ON DELETE SET NULL'] as $column=>$definition) {
             if (!erp_column_exists($pdo,'erp_production_consumptions',$column)) $pdo->exec('ALTER TABLE erp_production_consumptions ADD COLUMN '.$column.' '.$definition);
         }
