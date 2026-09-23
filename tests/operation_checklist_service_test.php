@@ -16,6 +16,10 @@ try { $service->validateAndEncode(10, [1=>1,2=>'abc',3=>'Conforme']); assert(fal
 $service->save($operation, 5, 'start', [1=>1,2=>'21.5',3=>'Conforme'], null);
 assert($service->isRequired($operation, 5, 'start') === false);
 assert($service->isRequired($operation, 6, 'start') === true);
+$startOperation = $operation;
+$startOperation['checklist_timing'] = 'start';
+assert($service->isRequired($startOperation, 5, 'start') === false);
+assert($service->isRequired($startOperation, 6, 'start') === true);
 $stored = json_decode((string) $pdo->query('SELECT response_json FROM erp_operation_checklist_responses')->fetchColumn(), true);
 assert($stored[1]['value'] === '21.5' && $stored[2]['value'] === 'Conforme');
 echo "Operation checklist service: OK\n";

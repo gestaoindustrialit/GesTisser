@@ -18,7 +18,9 @@ operation_flow_check(strpos($header, 'name="stop_machine"') !== false, 'Falta a 
 operation_flow_check(strpos($shopfloor, 'data-production-timer') !== false, 'Falta a contagem visível do tempo de produção.');
 operation_flow_check(strpos($shopfloor, 'Retomar produção') !== false, 'Falta a ação para retomar uma operação pausada.');
 operation_flow_check(strpos($shopfloor, 'shopfloor-checklist-modal') !== false, 'A checklist de arranque não abre numa pop-up responsiva.');
-operation_flow_check(strpos($shopfloor, 'Confirmar e iniciar produção') !== false, 'A pop-up não confirma o arranque da produção.');
+operation_flow_check(strpos($shopfloor, 'data-bs-target="#operationChecklistModal-') === false, 'O botão Arrancar ainda abre a checklist antes de iniciar a produção.');
+operation_flow_check(strpos($shopfloor, 'data-auto-show-checklist') !== false, 'A checklist não abre automaticamente depois do arranque.');
+operation_flow_check(strpos($shopfloor, 'Validar checklist e continuar') !== false, 'A pop-up não permite validar a checklist e continuar.');
 operation_flow_check(strpos($shopfloor, 'data-productivity-quantity') !== false, 'A quantidade produzida não alimenta o indicador de produtividade.');
 operation_flow_check(strpos($shopfloor, 'data-productivity-value') !== false, 'Falta o indicador previsto/real de produtividade.');
 

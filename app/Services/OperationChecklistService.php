@@ -21,9 +21,11 @@ final class OperationChecklistService
         $templateId = (int) ($operation['checklist_template_id'] ?? 0);
         $timing = (string) ($operation['checklist_timing'] ?? '');
         if (!$templateId) return false;
-        if ($timing === $phase) return true;
-        if ($timing !== 'first' || $phase !== 'start') return false;
-        $stmt = $this->pdo->prepare('SELECT 1 FROM erp_operation_checklist_responses r JOIN erp_production_order_operations opo ON opo.id=r.production_order_operation_id WHERE opo.production_order_id=? AND opo.operation_id=? AND r.user_id=? AND r.phase="first" LIMIT 1');
+        if ($phase !== 'start') return $timing === $phase;
+        if (!in_array($timing, ['start', 'first'], true)) return false;
+        // A checklist de arranque é validada uma vez por colaborador nesta
+        // operação da OF. Um segundo colaborador terá a sua própria resposta.
+        $stmt = $this->pdo->prepare('SELECT 1 FROM erp_operation_checklist_responses r JOIN erp_production_order_operations opo ON opo.id=r.production_order_operation_id WHERE opo.production_order_id=? AND opo.operation_id=? AND r.user_id=? AND r.phase IN ("start","first") LIMIT 1');
         $stmt->execute([(int) $operation['production_order_id'], (int) $operation['operation_id'], $userId]);
         return !$stmt->fetchColumn();
     }
