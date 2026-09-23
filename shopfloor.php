@@ -1100,7 +1100,7 @@ require __DIR__ . '/partials/header.php';
                 <form method="post" class="row g-2">
                     <input type="hidden" name="action" value="<?= $isOpen ? 'stop_of_operation' : 'start_of_operation' ?>">
                     <?php if ($isOpen): ?><input type="hidden" name="entry_id" value="<?= (int)$op['open_entry_id'] ?>"><?php else: ?><input type="hidden" name="po_operation_id" value="<?= (int)$op['id'] ?>"><?php endif; ?>
-                    <?php if ($showChecklist): ?><div class="col-12 border rounded bg-light p-2"><div class="fw-semibold mb-2"><?= ($op['checklist_timing'] ?? '') === 'first' ? 'Checklist · primeira execução nesta OF' : 'Checklist · '.($isOpen ? 'fim' : 'início') ?></div>
+                    <?php if ($showChecklist && $isOpen): ?><div class="col-12 border rounded bg-light p-2"><div class="fw-semibold mb-2"><?= ($op['checklist_timing'] ?? '') === 'first' ? 'Checklist · primeira execução nesta OF' : 'Checklist · fim' ?></div>
                         <?php foreach ($operationChecklistItems as $checkItem): $fieldId='checklist-'.$op['id'].'-'.$checkItem['id'];$fieldType=(string)($checkItem['field_type']?:'checkbox');$required=(int)$checkItem['is_required']===1; ?>
                             <div class="mb-2"><label class="form-label small mb-1" for="<?=h($fieldId)?>"><?=h($checkItem['content'])?><?=$required?' *':''?></label>
                             <?php if($fieldType==='checkbox'): ?><div><input class="form-check-input" id="<?=h($fieldId)?>" type="checkbox" name="checklist[<?=(int)$checkItem['id']?>]" value="1" <?=$required?'required':''?>></div>
@@ -1108,11 +1108,36 @@ require __DIR__ . '/partials/header.php';
                             <?php elseif($fieldType==='select'): ?><select class="form-select form-select-sm" id="<?=h($fieldId)?>" name="checklist[<?=(int)$checkItem['id']?>]" <?=$required?'required':''?>><option value="">Escolher…</option><?php foreach(json_decode((string)$checkItem['options_json'],true)?:[] as$option):?><option value="<?=h($option)?>"><?=h($option)?></option><?php endforeach;?></select>
                             <?php else: ?><input class="form-control form-control-sm" id="<?=h($fieldId)?>" type="<?=in_array($fieldType,['number','date'],true)?$fieldType:'text'?>" name="checklist[<?=(int)$checkItem['id']?>]" <?=$fieldType==='number'?'step="any"':''?> <?=$required?'required':''?>><?php endif; ?></div>
                         <?php endforeach; ?></div><?php endif; ?>
-                    <?php if ($isOpen): ?><div class="col"><input class="form-control form-control-sm" type="number" step="0.001" name="quantity_good" placeholder="Qtd. OK"></div><div class="col"><input class="form-control form-control-sm" type="number" step="0.001" name="quantity_rejected" placeholder="Refugo"></div><div class="col"><input class="form-control form-control-sm" name="waste_reason" placeholder="Motivo refugo"></div><div class="col"><select class="form-select form-select-sm" name="quality_result"><option value="">Qualidade…</option><option value="pass">Conforme</option><option value="fail">Não conforme</option><option value="na">N/A</option></select></div><?php endif; ?>
-                    <div class="col-12"><button class="btn <?= $isOpen ? 'btn-danger' : 'btn-success' ?> btn-sm w-100"><?= $isOpen ? 'Concluir operação' : 'Arrancar' ?></button></div>
+                    <?php if ($isOpen): ?>
+                        <div class="col-6 col-xl"><input class="form-control form-control-sm" type="number" min="0" step="0.001" name="quantity_good" placeholder="Qtd. OK" inputmode="decimal" data-productivity-quantity></div><div class="col-6 col-xl"><input class="form-control form-control-sm" type="number" min="0" step="0.001" name="quantity_rejected" placeholder="Refugo" inputmode="decimal"></div><div class="col-6 col-xl"><input class="form-control form-control-sm" name="waste_reason" placeholder="Motivo refugo"></div><div class="col-6 col-xl"><select class="form-select form-select-sm" name="quality_result"><option value="">Qualidade…</option><option value="pass">Conforme</option><option value="fail">Não conforme</option><option value="na">N/A</option></select></div>
+                        <div class="col-12"><div class="shopfloor-productivity" data-productivity data-planned-quantity="<?= h((string) ($selectedOf['planned_quantity'] ?? 0)) ?>" data-planned-minutes="<?= h((string) ($op['planned_minutes'] ?? 0)) ?>" data-elapsed-seconds="<?= (int) ($op['open_elapsed_seconds'] ?? 0) ?>" data-running="<?= $isPaused ? '0' : '1' ?>"><div class="d-flex justify-content-between gap-2"><strong>Produtividade</strong><strong data-productivity-value>—</strong></div><div class="progress" role="progressbar" aria-label="Produtividade prevista face à real" aria-valuemin="0" aria-valuemax="100"><div class="progress-bar" data-productivity-bar></div></div><small data-productivity-detail>Introduza a quantidade produzida para calcular.</small></div></div>
+                    <?php endif; ?>
+                    <div class="col-12"><button class="btn <?= $isOpen ? 'btn-danger' : 'btn-success' ?> btn-sm w-100" <?= !$isOpen && $showChecklist ? 'type="button" data-bs-toggle="modal" data-bs-target="#operationChecklistModal-'.(int)$op['id'].'"' : '' ?>><?= $isOpen ? 'Concluir operação' : 'Arrancar' ?></button></div>
                 </form></td></tr>
                 <?php if ($isOpen): ?><tr><td colspan="4"></td><td><form method="post"><input type="hidden" name="action" value="<?= $isPaused ? 'resume_operation' : 'pause_operation' ?>"><input type="hidden" name="entry_id" value="<?= (int) $op['open_entry_id'] ?>"><button class="btn btn-outline-<?= $isPaused ? 'success' : 'warning' ?> btn-sm w-100"><?= $isPaused ? 'Retomar produção' : 'Pausar produção' ?></button></form></td></tr><?php endif; ?>
             <?php endforeach; ?></tbody></table></div>
+            <?php foreach ($ofOperations as $op):
+                $isOpen = (int) ($op['open_entry_id'] ?? 0) > 0;
+                $showStartChecklist = !$isOpen && $operationChecklistService->isRequired($op, $userId, 'start');
+                if (!$showStartChecklist) continue;
+                $startChecklistItems = $operationChecklistService->items((int) $op['checklist_template_id']);
+            ?>
+                <div class="modal fade shopfloor-checklist-modal" id="operationChecklistModal-<?= (int)$op['id'] ?>" tabindex="-1" aria-labelledby="operationChecklistTitle-<?= (int)$op['id'] ?>" aria-hidden="true">
+                    <div class="modal-dialog modal-dialog-centered modal-dialog-scrollable"><div class="modal-content"><form method="post">
+                        <input type="hidden" name="action" value="start_of_operation"><input type="hidden" name="po_operation_id" value="<?= (int)$op['id'] ?>">
+                        <div class="modal-header"><div><span class="small text-success fw-bold text-uppercase">Antes de produzir</span><h2 class="modal-title fs-5" id="operationChecklistTitle-<?= (int)$op['id'] ?>">Checklist · <?= h($op['code'].' - '.$op['name']) ?></h2></div><button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Fechar"></button></div>
+                        <div class="modal-body"><p class="text-secondary">Confirme os pontos seguintes para arrancar a produção em segurança.</p>
+                            <?php foreach ($startChecklistItems as $checkItem): $fieldId='start-checklist-'.$op['id'].'-'.$checkItem['id'];$fieldType=(string)($checkItem['field_type']?:'checkbox');$required=(int)$checkItem['is_required']===1; ?>
+                                <div class="shopfloor-checklist-field"><label class="form-label" for="<?=h($fieldId)?>"><?=h($checkItem['content'])?><?=$required?' *':''?></label>
+                                <?php if($fieldType==='checkbox'): ?><input class="form-check-input" id="<?=h($fieldId)?>" type="checkbox" name="checklist[<?=(int)$checkItem['id']?>]" value="1" <?=$required?'required':''?>>
+                                <?php elseif($fieldType==='textarea'): ?><textarea class="form-control" id="<?=h($fieldId)?>" name="checklist[<?=(int)$checkItem['id']?>]" rows="3" <?=$required?'required':''?>></textarea>
+                                <?php elseif($fieldType==='select'): ?><select class="form-select" id="<?=h($fieldId)?>" name="checklist[<?=(int)$checkItem['id']?>]" <?=$required?'required':''?>><option value="">Escolher…</option><?php foreach(json_decode((string)$checkItem['options_json'],true)?:[] as$option):?><option value="<?=h($option)?>"><?=h($option)?></option><?php endforeach;?></select>
+                                <?php else: ?><input class="form-control" id="<?=h($fieldId)?>" type="<?=in_array($fieldType,['number','date'],true)?$fieldType:'text'?>" name="checklist[<?=(int)$checkItem['id']?>]" <?=$fieldType==='number'?'step="any" inputmode="decimal"':''?> <?=$required?'required':''?>><?php endif; ?></div>
+                            <?php endforeach; ?>
+                        </div><div class="modal-footer"><button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancelar</button><button type="submit" class="btn btn-success flex-grow-1">Confirmar e iniciar produção</button></div>
+                    </form></div></div>
+                </div>
+            <?php endforeach; ?>
         <?php endif; ?>
     </div>
     <div class="shopfloor-panel mb-4">
@@ -1706,6 +1731,42 @@ require __DIR__ . '/partials/header.php';
         timer.textContent = formatDuration(elapsed);
         if (running) {
             window.setInterval(() => { elapsed += 1; timer.textContent = formatDuration(elapsed); }, 1000);
+        }
+    });
+
+    document.querySelectorAll('[data-productivity]').forEach((indicator) => {
+        const form = indicator.closest('form');
+        const quantityInput = form ? form.querySelector('[data-productivity-quantity]') : null;
+        const value = indicator.querySelector('[data-productivity-value]');
+        const detail = indicator.querySelector('[data-productivity-detail]');
+        const bar = indicator.querySelector('[data-productivity-bar]');
+        const plannedQuantity = Number(indicator.dataset.plannedQuantity || 0);
+        const plannedMinutes = Number(indicator.dataset.plannedMinutes || 0);
+        let elapsedSeconds = Number(indicator.dataset.elapsedSeconds || 0);
+
+        const refreshProductivity = () => {
+            const quantity = Number(quantityInput?.value || 0);
+            if (!quantityInput?.value || plannedQuantity <= 0 || plannedMinutes <= 0 || elapsedSeconds <= 0) {
+                value.textContent = '—';
+                detail.textContent = plannedQuantity <= 0 || plannedMinutes <= 0
+                    ? 'Sem previsão suficiente para calcular a produtividade.'
+                    : 'Introduza a quantidade produzida para calcular.';
+                bar.style.width = '0%';
+                return;
+            }
+            const expectedQuantity = plannedQuantity * (elapsedSeconds / 60) / plannedMinutes;
+            const percentage = expectedQuantity > 0 ? (quantity / expectedQuantity) * 100 : 0;
+            value.textContent = `${percentage.toLocaleString('pt-PT', { maximumFractionDigits: 0 })}%`;
+            detail.textContent = `${quantity.toLocaleString('pt-PT')} realizadas / ${expectedQuantity.toLocaleString('pt-PT', { maximumFractionDigits: 2 })} previstas até agora`;
+            bar.style.width = `${Math.min(100, Math.max(0, percentage))}%`;
+            bar.classList.toggle('bg-warning', percentage < 80);
+            indicator.querySelector('.progress').setAttribute('aria-valuenow', String(Math.round(percentage)));
+        };
+
+        quantityInput?.addEventListener('input', refreshProductivity);
+        refreshProductivity();
+        if (indicator.dataset.running === '1') {
+            window.setInterval(() => { elapsedSeconds += 1; refreshProductivity(); }, 1000);
         }
     });
 })();
