@@ -214,8 +214,11 @@ function erp_run_phase1_migrations(PDO $pdo)
         $articleColumns = [
             'material' => 'TEXT', 'bag_color' => 'TEXT', 'width_tolerance' => 'TEXT',
             'length_tolerance' => 'TEXT', 'front_colors' => 'TEXT', 'back_colors' => 'TEXT',
+            'of_front_colors' => 'TEXT', 'of_back_colors' => 'TEXT',
+            'of_colors_match_technical' => 'INTEGER NOT NULL DEFAULT 0',
             'pallet_dimensions' => 'TEXT', 'pallet_lid' => 'TEXT', 'pallet_straps' => 'INTEGER',
-            'pallet_film' => 'TEXT', 'microperforation' => 'INTEGER NOT NULL DEFAULT 0',
+            'pallet_film' => 'TEXT', 'pallet_weight' => 'REAL', 'pallet_quantity' => 'REAL',
+            'microperforation' => 'INTEGER NOT NULL DEFAULT 0',
             'analysis_grammage' => 'TEXT', 'analysis_total_weight' => 'TEXT',
             'analysis_apparent_width' => 'TEXT', 'analysis_gusset_width' => 'TEXT',
             'analysis_bag_height' => 'TEXT', 'analysis_break_height' => 'TEXT',

@@ -8,13 +8,15 @@ erp_run_phase1_migrations($pdo);
 $pdo->beginTransaction();
 try {
     $code='TEST-ARTICLE-'.bin2hex(random_bytes(4));
-    $stmt=$pdo->prepare('INSERT INTO erp_finished_products(code,description,status,proof_status,material,analysis_grammage) VALUES (?,?,?,?,?,?)');
-    $stmt->execute([$code,'Artigo de validação','Ativo','Pendente','100% PP','60 g/m²']);
+    $stmt=$pdo->prepare('INSERT INTO erp_finished_products(code,description,status,proof_status,material,analysis_grammage,front_colors,back_colors,of_front_colors,of_back_colors,of_colors_match_technical,pallet_weight,pallet_quantity) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)');
+    $stmt->execute([$code,'Artigo de validação','Ativo','Pendente','100% PP','60 g/m²','Azul','Branco','Azul','Branco',1,525.5,12000]);
     $id=(int)$pdo->lastInsertId();
     $pdo->prepare('UPDATE erp_finished_products SET description=?,width=?,updated_at=CURRENT_TIMESTAMP WHERE id=?')->execute(['Artigo editado',50,$id]);
-    $check=$pdo->prepare('SELECT code,description,width,material,analysis_grammage FROM erp_finished_products WHERE id=?'); $check->execute([$id]); $article=$check->fetch(PDO::FETCH_ASSOC);
+    $check=$pdo->prepare('SELECT code,description,width,material,analysis_grammage,front_colors,of_front_colors,of_colors_match_technical,pallet_weight,pallet_quantity FROM erp_finished_products WHERE id=?'); $check->execute([$id]); $article=$check->fetch(PDO::FETCH_ASSOC);
     if (!$article || $article['code']!==$code || $article['description']!=='Artigo editado' || (float)$article['width']!==50.0) { throw new RuntimeException('Falhou a criação/edição do artigo.'); }
     if ($article['material']!=='100% PP' || $article['analysis_grammage']!=='60 g/m²') { throw new RuntimeException('Falhou a persistência dos dados técnicos.'); }
+    if ($article['front_colors']!=='Azul' || $article['of_front_colors']!=='Azul' || (int)$article['of_colors_match_technical']!==1) { throw new RuntimeException('Falhou a persistência dos blocos de cores.'); }
+    if ((float)$article['pallet_weight']!==525.5 || (float)$article['pallet_quantity']!==12000.0) { throw new RuntimeException('Falhou a persistência dos dados de palete.'); }
     $rawCode='TEST-MP-'.bin2hex(random_bytes(4));
     $pdo->prepare('INSERT INTO erp_raw_materials(code,description,min_stock,reorder_point,alert_email,alert_enabled,status) VALUES (?,?,?,?,?,?,?)')->execute([$rawCode,'Matéria-prima de validação',10,15,'compras@example.com',1,'Ativo']);
     $rawId=(int)$pdo->lastInsertId();
