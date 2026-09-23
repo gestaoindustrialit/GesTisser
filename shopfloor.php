@@ -2,7 +2,10 @@
 require_once __DIR__ . '/helpers.php';
 require_once __DIR__ . '/app/Services/ShopfloorAttachment.php';
 require_once __DIR__ . '/app/Services/OperationChecklistService.php';
-require_once __DIR__ . '/app/Services/ValidatedHourBankCalculator.php';
+$validatedHourBankCalculatorPath = __DIR__ . '/app/Services/ValidatedHourBankCalculator.php';
+if (is_file($validatedHourBankCalculatorPath)) {
+    require_once $validatedHourBankCalculatorPath;
+}
 require_once __DIR__ . '/hr_organization_lib.php';
 require_once __DIR__ . '/erp_migrations.php';
 require_login();
@@ -822,7 +825,9 @@ if ($rangeEnd >= $rangeStart) {
     }
 }
 
-$validatedHourBankMinutes = ValidatedHourBankCalculator::calculateMinutes($pdo, $userId);
+$validatedHourBankMinutes = class_exists('ValidatedHourBankCalculator')
+    ? ValidatedHourBankCalculator::calculateMinutes($pdo, $userId)
+    : null;
 $storedHourBankMinutes = (int) round(((float) ($hourBank['balance_hours'] ?? 0)) * 60);
 $displayedHourBankMinutes = ($validatedHourBankMinutes ?? $storedHourBankMinutes) + $bhAdjustmentMinutes;
 $displayedHourBankAbsMinutes = abs($displayedHourBankMinutes);
