@@ -19,8 +19,16 @@ final class ArticleDocument
         $error = (int) ($file['error'] ?? UPLOAD_ERR_NO_FILE);
         $size = (int) ($file['size'] ?? 0);
 
-        if (in_array($error, [UPLOAD_ERR_INI_SIZE, UPLOAD_ERR_FORM_SIZE], true)
-            || $size > self::MAX_UPLOAD_BYTES) {
+        if ($error === UPLOAD_ERR_INI_SIZE) {
+            $serverLimit = trim((string) ini_get('upload_max_filesize'));
+            throw new RuntimeException(
+                'O servidor rejeitou o documento por causa do limite de upload configurado'
+                . ($serverLimit !== '' ? ' (' . $serverLimit . ')' : '')
+                . '. O nome do ficheiro não causa este erro; contacte o administrador se o documento tiver menos de 20 MB.'
+            );
+        }
+
+        if ($error === UPLOAD_ERR_FORM_SIZE || $size > self::MAX_UPLOAD_BYTES) {
             throw new RuntimeException('Cada documento do artigo deve ter no máximo 20 MB.');
         }
     }
