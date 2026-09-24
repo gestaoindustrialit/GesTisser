@@ -196,7 +196,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
     if ($action === 'start_of_operation') {
         $poOperationId = (int) ($_POST['po_operation_id'] ?? 0);
-        if (!erp_user_can($pdo, $user ?: [], 'erp.shopfloor.execute')) { $flashError = 'Sem permissão para executar operações no Shopfloor.'; }
+        if (!gt_erp_user_can($pdo, $user ?: [], 'erp.shopfloor.execute')) { $flashError = 'Sem permissão para executar operações no Shopfloor.'; }
         $operationStmt=$pdo->prepare('SELECT opo.*,te.id open_entry FROM erp_production_order_operations opo LEFT JOIN erp_operation_time_entries te ON te.production_order_operation_id=opo.id AND te.ended_at IS NULL WHERE opo.id=?');$operationStmt->execute([$poOperationId]);$operation=$operationStmt->fetch(PDO::FETCH_ASSOC);
         $machineId=(int)($_POST['machine_id']??($operation['primary_machine_id']??0));$allowed=json_decode((string)($operation['allowed_machine_ids_json']??'[]'),true)?:[];
         $blockedStmt=$pdo->prepare('SELECT COUNT(*) FROM erp_routing_step_dependencies d JOIN erp_production_order_operations predecessor ON predecessor.routing_step_id=d.predecessor_step_id WHERE d.routing_step_id=? AND predecessor.production_order_id=? AND predecessor.status<>"Concluída"');$blockedStmt->execute([(int)($operation['routing_step_id']??0),(int)($operation['production_order_id']??0)]);

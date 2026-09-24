@@ -5,7 +5,7 @@ require_login();
 gt_erp_run_phase1_migrations($pdo);
 
 $user = current_user($pdo) ?: [];
-if (!erp_user_can($pdo, $user, 'erp.view')) {
+if (!gt_erp_user_can($pdo, $user, 'erp.view')) {
     http_response_code(403);
     exit('Acesso reservado ao ERP.');
 }

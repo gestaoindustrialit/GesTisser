@@ -10,7 +10,7 @@ $pdo->exec('CREATE TABLE erp_permissions(id INTEGER PRIMARY KEY AUTOINCREMENT,co
 $pdo->exec('CREATE TABLE erp_user_permissions(user_id INTEGER,permission_code TEXT,is_allowed INTEGER,PRIMARY KEY(user_id,permission_code))');
 $pdo->exec('CREATE TABLE erp_role_permissions(profile TEXT,permission_code TEXT,PRIMARY KEY(profile,permission_code))');
 $pdo->exec("INSERT INTO users(id,name,is_admin,is_active,access_profile) VALUES(1,'Ana',0,1,'Comercial'),(2,'Bruno',0,1,'Comercial'),(3,'Admin',1,1,'Admin')");
-function erp_user_can(PDO $pdo,array $user,string $permission): bool {if((int)$user['is_admin']===1)return true;$s=$pdo->prepare('SELECT is_allowed FROM erp_user_permissions WHERE user_id=? AND permission_code=?');$s->execute([$user['id'],$permission]);return (bool)$s->fetchColumn();}
+function gt_erp_user_can(PDO $pdo,array $user,string $permission): bool {if((int)$user['is_admin']===1)return true;$s=$pdo->prepare('SELECT is_allowed FROM erp_user_permissions WHERE user_id=? AND permission_code=?');$s->execute([$user['id'],$permission]);return (bool)$s->fetchColumn();}
 crm_run_migrations($pdo);require_once __DIR__.'/../app/Services/CrmService.php';
 $pdo->exec("INSERT INTO erp_user_permissions(user_id,permission_code,is_allowed) VALUES(1,'crm.view',1)");
 $ana=['id'=>1,'name'=>'Ana','is_admin'=>0,'access_profile'=>'Comercial'];$service=new CrmService($pdo,$ana);

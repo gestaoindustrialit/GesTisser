@@ -374,7 +374,7 @@ function gt_erp_default_permissions(): array
     ];
 }
 
-function erp_user_can(PDO $pdo, array $user, string $permission): bool
+function gt_erp_user_can(PDO $pdo, array $user, string $permission): bool
 {
     if ((int)($user['is_admin'] ?? 0) === 1) { return true; }
     $profile = (string)($user['access_profile'] ?? '');
