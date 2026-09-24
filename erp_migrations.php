@@ -95,7 +95,7 @@ function gt_erp_migrate_work_centers(PDO $pdo)
     $pdo->exec('CREATE INDEX IF NOT EXISTS idx_erp_work_centers_printer ON erp_work_centers(default_printer_id)');
 }
 
-function erp_migrate_document_catalog(PDO $pdo)
+function gt_erp_migrate_document_catalog(PDO $pdo)
 {
     $pdo->exec('CREATE TABLE IF NOT EXISTS erp_document_catalog (id INTEGER PRIMARY KEY AUTOINCREMENT, code TEXT NOT NULL UNIQUE, document_number TEXT NOT NULL UNIQUE, name TEXT NOT NULL, module TEXT NOT NULL, output_format TEXT NOT NULL, generation_route TEXT NOT NULL, is_active INTEGER NOT NULL DEFAULT 1, updated_by INTEGER, created_at DATETIME DEFAULT CURRENT_TIMESTAMP, updated_at DATETIME DEFAULT CURRENT_TIMESTAMP, FOREIGN KEY(updated_by) REFERENCES users(id) ON DELETE SET NULL)');
     $document = $pdo->prepare('INSERT OR IGNORE INTO erp_document_catalog(code,document_number,name,module,output_format,generation_route) VALUES (?,?,?,?,?,?)');
@@ -104,7 +104,7 @@ function erp_migrate_document_catalog(PDO $pdo)
     ] as $controlledDocument) { $document->execute($controlledDocument); }
 }
 
-function erp_backup_database_once(PDO $pdo)
+function gt_erp_backup_database_once(PDO $pdo)
 {
     static $backupPath = null;
     if ($backupPath !== null) {
@@ -133,7 +133,7 @@ function erp_run_phase1_migrations(PDO $pdo)
 
     $needsBackup = !gt_erp_migration_table_exists($pdo, 'erp_stock_movements') || !gt_erp_migration_table_exists($pdo, 'erp_raw_materials');
     if ($needsBackup) {
-        erp_backup_database_once($pdo);
+        gt_erp_backup_database_once($pdo);
     }
 
     $pdo->beginTransaction();
@@ -339,7 +339,7 @@ function erp_run_phase1_migrations(PDO $pdo)
         foreach(['erp.operations.manage','erp.routings.edit','erp.routings.activate','erp.work_order_routing.edit','erp.execution.correct'] as $permission)$rolePermission->execute(['Chefias',$permission]);
         $seq = $pdo->prepare('INSERT OR IGNORE INTO erp_number_sequences(code,prefix,next_number,padding) VALUES (?,?,?,?)');
         foreach ([['stock_movement','MOV-',1,6],['purchase_order','ENC-',1,5],['raw_material','MP-',1,5],['subsidiary','SUB-',1,5],['consumable','CON-',1,5],['finished_product','PA-',1,5],['customer','CLI-',1,4],['supplier','FOR-',1,4],['work_order','OF-',1,5]] as $s) { $seq->execute($s); }
-        erp_migrate_document_catalog($pdo);
+        gt_erp_migrate_document_catalog($pdo);
         $set = $pdo->prepare('INSERT OR IGNORE INTO erp_settings(key,value) VALUES (?,?)');
         $set->execute(['allow_negative_stock','0']);
         $set->execute(['raw_material_code_pattern','{tipo}{caracteristica}{largura}{gramagem}{seq}']);

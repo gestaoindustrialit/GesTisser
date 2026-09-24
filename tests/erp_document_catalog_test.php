@@ -9,7 +9,7 @@ function document_catalog_assert($condition, $message)
 $pdo = new PDO('sqlite::memory:');
 $pdo->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
 $pdo->exec('CREATE TABLE users(id INTEGER PRIMARY KEY)');
-erp_migrate_document_catalog($pdo);
+gt_erp_migrate_document_catalog($pdo);
 $documents = $pdo->query('SELECT code,document_number FROM erp_document_catalog')->fetchAll(PDO::FETCH_KEY_PAIR);
 
 document_catalog_assert(count($documents) >= 25, 'O catálogo deve abranger todos os documentos gerados conhecidos.');

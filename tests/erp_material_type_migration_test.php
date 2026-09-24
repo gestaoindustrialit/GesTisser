@@ -20,6 +20,14 @@ function erp_migrate_work_centers(PDO $pdo): void
 {
 }
 
+function erp_migrate_document_catalog(PDO $pdo): void
+{
+}
+
+function erp_backup_database_once(PDO $pdo): void
+{
+}
+
 require_once dirname(__DIR__) . '/erp_migrations.php';
 
 $pdo = new PDO('sqlite::memory:');
