@@ -16,6 +16,10 @@ function erp_migrate_material_type_columns(PDO $pdo): void
 {
 }
 
+function erp_migrate_work_centers(PDO $pdo): void
+{
+}
+
 require_once dirname(__DIR__) . '/erp_migrations.php';
 
 $pdo = new PDO('sqlite::memory:');

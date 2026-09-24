@@ -76,7 +76,7 @@ function gt_erp_migrate_material_type_columns(PDO $pdo)
     }
 }
 
-function erp_migrate_work_centers(PDO $pdo)
+function gt_erp_migrate_work_centers(PDO $pdo)
 {
     $pdo->exec('CREATE TABLE IF NOT EXISTS erp_printers (id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT NOT NULL UNIQUE, network_uri TEXT NOT NULL UNIQUE, location TEXT, driver_name TEXT, is_active INTEGER NOT NULL DEFAULT 1, created_at DATETIME DEFAULT CURRENT_TIMESTAMP, updated_at DATETIME DEFAULT CURRENT_TIMESTAMP)');
     $columns = [
@@ -170,7 +170,7 @@ function erp_run_phase1_migrations(PDO $pdo)
         /* The original material type table only contained code and name. Settings now
            allows administrators to deactivate types, including on legacy databases. */
         gt_erp_migrate_material_type_columns($pdo);
-        erp_migrate_work_centers($pdo);
+        gt_erp_migrate_work_centers($pdo);
         /* Supplier master data used by Purchasing. Keep the original compact table
            compatible while extending it with the fields from the current supplier sheet. */
         gt_erp_migrate_supplier_columns($pdo);
