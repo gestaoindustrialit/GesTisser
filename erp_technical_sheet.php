@@ -98,14 +98,14 @@ $materialFields = [
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Ficha Técnica <?= h(sheet_value($o, 'order_number')) ?></title>
+<title>Ficha Técnica do Produto</title>
 <style>
     *{box-sizing:border-box} html,body{margin:0;padding:0;background:#e5e7eb;color:#111;font-family:Arial,Helvetica,sans-serif;font-size:10px}
     .actions{width:210mm;margin:12px auto 8px;display:flex;justify-content:flex-end}.actions button{border:0;border-radius:5px;background:#1f2937;color:#fff;font-weight:700;padding:9px 16px;cursor:pointer}
     .page{width:210mm;height:297mm;margin:0 auto 20px;padding:9mm 10mm 8mm;background:#fff;box-shadow:0 2px 12px #0003;display:flex;flex-direction:column;gap:2.2mm;overflow:hidden}
     .report-header{height:27mm;display:grid;grid-template-columns:48mm 1fr 51mm;align-items:center;border-bottom:2px solid #111;padding-bottom:2.5mm}
     .brand{height:20mm;display:flex;align-items:center}.brand img{display:block;max-width:45mm;max-height:19mm}.brand-fallback{font-size:22px;font-weight:900;letter-spacing:1px}
-    .title{text-align:center}.title h1{font-size:19px;line-height:1.05;margin:0 0 2mm;text-transform:uppercase}.title strong{font-size:11px}
+    .title{text-align:center}.title h1{font-size:19px;line-height:1.05;margin:0;text-transform:uppercase}
     .company{text-align:right;font-size:8.5px;line-height:1.35}.company strong{display:block;font-size:10px}.company .date{margin-top:1.2mm;font-weight:700}
     .section{border:1.5px solid #111;break-inside:avoid;page-break-inside:avoid}.section-title{font-size:11px;text-align:center;text-transform:uppercase;background:#e6e7e8;border-bottom:1px solid #777;margin:0;padding:1.2mm 2mm;line-height:1.1}
     .grid{display:grid;grid-template-columns:repeat(4,1fr)}.cell{border-right:1px solid #999;border-bottom:1px solid #999;padding:1.3mm 1.8mm;min-height:10.5mm;line-height:1.18;overflow-wrap:anywhere}.cell:nth-child(4n){border-right:0}.cell b{display:block;font-size:7.5px;line-height:1;text-transform:uppercase;margin-bottom:.7mm}.wide{grid-column:span 2}.identification .cell{min-height:11.5mm}.grid .cell.no-bottom{border-bottom:0}
@@ -124,7 +124,7 @@ $materialFields = [
 <main class="page">
     <header class="report-header">
         <div class="brand"><?php if ($companyLogo !== ''): ?><img src="<?= h($companyLogo) ?>" alt="Logótipo <?= h($companyName) ?>"><?php else: ?><span class="brand-fallback"><?= h($companyName) ?></span><?php endif; ?></div>
-        <div class="title"><h1>Ficha Técnica do Produto</h1><strong>OF <?= h(sheet_value($o, 'order_number')) ?></strong></div>
+        <div class="title"><h1>Ficha Técnica do Produto</h1></div>
         <div class="company"><strong><?= h($companyName) ?></strong><?php if ($companyAddress !== ''): ?><div><?= nl2br(h($companyAddress)) ?></div><?php endif; ?><?php if ($contacts): ?><div><?= h(implode(' · ', $contacts)) ?></div><?php endif; ?><div class="date">Data: <?= h($documentDate) ?></div></div>
     </header>
 
@@ -132,8 +132,7 @@ $materialFields = [
         <h2 class="section-title">Identificação</h2>
         <div class="grid">
             <div class="cell wide"><b>Cliente</b><?= h(sheet_value($a, 'customer_name')) ?></div><div class="cell"><b>Artigo / N. Ref.</b><?= h(sheet_value($a, 'code')) ?></div><div class="cell"><b>Ref. cliente</b><?= h(sheet_value($a, 'customer_product_code')) ?></div>
-            <div class="cell wide"><b>Descrição</b><?= h(sheet_value($a, 'description')) ?></div><div class="cell"><b>Encomenda</b><?= h(sheet_value($o, 'customer_order')) ?></div><div class="cell"><b>Data prevista</b><?= h(technical_sheet_date(sheet_value($o, 'due_date'))) ?></div>
-            <div class="cell wide no-bottom"><b>Morada de entrega</b><?= h(sheet_value($o, 'delivery_address')) ?></div><div class="cell wide no-bottom"><b>Transportador</b><?= h(sheet_value($o, 'transporter')) ?></div>
+            <div class="cell wide no-bottom"><b>Descrição</b><?= h(sheet_value($a, 'description')) ?></div><div class="cell no-bottom"><b>Encomenda</b><?= h(sheet_value($o, 'customer_order')) ?></div><div class="cell no-bottom"><b>Data prevista</b><?= h(technical_sheet_date(sheet_value($o, 'due_date'))) ?></div>
         </div>
     </section>
 
