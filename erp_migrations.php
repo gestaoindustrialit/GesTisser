@@ -332,7 +332,7 @@ function gt_erp_run_phase1_migrations(PDO $pdo)
         $pdo->exec('CREATE INDEX IF NOT EXISTS idx_erp_customer_delivery_addresses_customer ON erp_customer_delivery_addresses(customer_id, id)');
 
         $perm = $pdo->prepare('INSERT OR IGNORE INTO erp_permissions(code,label,description) VALUES (?,?,?)');
-        foreach (erp_default_permissions() as $code => $label) { $perm->execute([$code, $label, $label]); }
+        foreach (gt_erp_default_permissions() as $code => $label) { $perm->execute([$code, $label, $label]); }
         $rolePermission=$pdo->prepare('INSERT OR IGNORE INTO erp_role_permissions(profile,permission_code) VALUES (?,?)');
         foreach(['Produção','Chefias'] as $role){foreach(['erp.operations.view','erp.routings.view','erp.shopfloor.execute'] as $permission)$rolePermission->execute([$role,$permission]);}
         $rolePermission->execute(['Chefias','erp.bi.view']);
@@ -364,7 +364,7 @@ function gt_erp_run_phase1_migrations(PDO $pdo)
     }
 }
 
-function erp_default_permissions(): array
+function gt_erp_default_permissions(): array
 {
     return [
         'erp.view'=>'Ver ERP','erp.master_data'=>'Gerir dados mestre','erp.customers'=>'Gerir clientes','erp.suppliers'=>'Gerir fornecedores','erp.purchases'=>'Gerir compras','erp.purchase_approve'=>'Aprovar compras','erp.receipts'=>'Registar receções','erp.sales'=>'Gerir vendas','erp.confirm_orders'=>'Confirmar encomendas','erp.work_orders_create'=>'Criar OF','erp.work_orders_release'=>'Libertar OF','erp.planning'=>'Planear produção','erp.production_register'=>'Registar produção','erp.consumptions'=>'Registar consumos','erp.stock_move'=>'Movimentar stock','erp.stock_adjust'=>'Ajustar stock','erp.inventory_approve'=>'Aprovar inventários','erp.shipments_prepare'=>'Preparar expedições','erp.shipments_confirm'=>'Confirmar expedições','erp.quality'=>'Gerir qualidade','erp.costs_view'=>'Consultar custos','erp.costs_edit'=>'Alterar custos','erp.period_close'=>'Fechar períodos','erp.reports_export'=>'Exportar relatórios','erp.documents_cancel'=>'Anular documentos',
