@@ -35,16 +35,22 @@ final class ArticleDocument
         return 'erp.php?page=article_document_thumbnail&id=' . $documentId;
     }
 
-    /** Prefer an uploaded image; only rasterise the PDF when no image exists. */
+    /** Use the explicitly selected artwork, with a legacy fallback for old data. */
     public static function mainArtwork(array $documents)
     {
+        foreach ($documents as $document) {
+            if (is_array($document) && (string) ($document['document_type'] ?? '') === 'production_main') {
+                $kind = self::presentation((string) ($document['file_url'] ?? ''))['kind'];
+                if (in_array($kind, ['image', 'pdf'], true)) return $document;
+            }
+        }
+
         $ranked = [];
         foreach ($documents as $position => $document) {
             if (!is_array($document)) continue;
             $kind = self::presentation((string) ($document['file_url'] ?? ''))['kind'];
             if (!in_array($kind, ['image', 'pdf'], true)) continue;
-            $main = (string) ($document['document_type'] ?? '') === 'production_main';
-            $rank = $kind === 'image' ? ($main ? 0 : 1) : ($main ? 2 : 3);
+            $rank = $kind === 'image' ? 0 : 1;
             $ranked[] = [$rank, (int) $position, $document];
         }
         usort($ranked, function (array $left, array $right): int {

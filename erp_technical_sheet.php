@@ -90,7 +90,8 @@ $materialFields = [
     'material' => 'Material', 'composition' => 'Composição', 'bag_color' => 'Cor', 'grammage' => 'Gramagem',
     'width' => 'Largura', 'length' => 'Comprimento', 'width_tolerance' => 'Tolerância largura',
     'length_tolerance' => 'Tolerância comprimento', 'theoretical_weight' => 'Peso teórico',
-    'proof_reference' => 'N.º prova', 'front_colors' => 'Impressão frente', 'back_colors' => 'Impressão verso',
+    'proof_reference' => 'N.º prova', 'front_colors' => 'Cores usadas na impressão — frente',
+    'back_colors' => 'Cores usadas na impressão — verso',
     'thread_color' => 'Cor do fio', 'perforation_type' => 'Perfuração', 'seam_type' => 'Costura', 'gusset_length' => 'Fole',
 ];
 ?><!doctype html>
@@ -110,7 +111,7 @@ $materialFields = [
     .section{border:1.5px solid #111;break-inside:avoid;page-break-inside:avoid}.section-title{font-size:11px;text-align:center;text-transform:uppercase;background:#e6e7e8;border-bottom:1px solid #777;margin:0;padding:1.2mm 2mm;line-height:1.1}
     .grid{display:grid;grid-template-columns:repeat(4,1fr)}.cell{border-right:1px solid #999;border-bottom:1px solid #999;padding:1.3mm 1.8mm;min-height:10.5mm;line-height:1.18;overflow-wrap:anywhere}.cell:nth-child(4n){border-right:0}.cell b{display:block;font-size:7.5px;line-height:1;text-transform:uppercase;margin-bottom:.7mm}.wide{grid-column:span 2}.identification .cell{min-height:11.5mm}.grid .cell.no-bottom{border-bottom:0}
     .material-grid .cell{min-height:9.5mm}.material-grid .cell:nth-last-child(-n+4){border-bottom:0}
-    .features{display:grid;grid-template-columns:repeat(5,1fr)}.features .cell{min-height:8.5mm}.features .cell:nth-child(5n){border-right:0}.features .cell:nth-last-child(-n+5){border-bottom:0}
+    .features{display:grid;grid-template-columns:repeat(5,1fr)}.features .cell{min-height:8.5mm}.features .cell:nth-child(5n){border-right:0}.features .cell:nth-last-child(-n+2){border-bottom:0}
     .analysis-grid{display:grid;grid-template-columns:repeat(2,1fr)}.analysis-item{display:flex;justify-content:space-between;gap:3mm;border-right:1px solid #999;border-bottom:1px solid #999;padding:1mm 1.7mm;min-height:6mm}.analysis-item:nth-child(2n){border-right:0}.analysis-item:nth-last-child(-n+2){border-bottom:0}.analysis-item b{font-size:7.5px;text-transform:uppercase}.analysis-item span{text-align:right}
     .artwork{flex:1;min-height:43mm;display:flex;flex-direction:column}.artwork-body{flex:1;min-height:0;padding:2mm;text-align:center;display:flex;flex-direction:column}.document-title{font-weight:700;font-size:9px;margin-bottom:1mm}.artwork img{display:block;flex:1;min-height:0;max-width:100%;width:100%;height:100%;object-fit:contain;margin:auto}
     .empty-artwork{flex:1;display:flex;align-items:center;justify-content:center;color:#777;font-style:italic}
@@ -143,7 +144,7 @@ $materialFields = [
 
     <section class="section">
         <h2 class="section-title">Especificações do saco e empaletização</h2>
-        <div class="features"><?php foreach (['microperforation' => 'Microperfuração', 'has_handle' => 'Asa', 'has_holes' => 'Furo', 'has_gusset' => 'Fole', 'centered_gusset' => 'Fole centrado'] as $key => $label): ?><div class="cell"><b><?= h($label) ?></b><?= !empty($a[$key]) ? '☑ Sim&nbsp;&nbsp;☐ Não' : '☐ Sim&nbsp;&nbsp;☑ Não' ?></div><?php endforeach; ?><?php foreach (['pallet_dimensions' => 'Medidas da palete', 'pallet_lid' => 'Tampa', 'pallet_straps' => 'Fitas', 'pallet_film' => 'Filme'] as $key => $label): ?><div class="cell"><b><?= h($label) ?></b><?= sheet_value($a, $key) !== '' ? h(sheet_value($a, $key)) : '—' ?></div><?php endforeach; ?><div class="cell"><b>Observação</b>—</div></div>
+        <div class="features"><?php foreach (['microperforation' => 'Microperfuração', 'has_handle' => 'Asa', 'has_holes' => 'Furo', 'has_gusset' => 'Fole', 'centered_gusset' => 'Fole centrado'] as $key => $label): ?><div class="cell"><b><?= h($label) ?></b><?= !empty($a[$key]) ? '☑ Sim&nbsp;&nbsp;☐ Não' : '☐ Sim&nbsp;&nbsp;☑ Não' ?></div><?php endforeach; ?><?php foreach (['pallet_dimensions' => 'Medidas da palete', 'pallet_lid' => 'Tampa', 'pallet_straps' => 'Fitas', 'pallet_film' => 'Filme', 'pallet_quantity' => 'Qtd. ~ Palete', 'pallet_weight' => 'Kg ~ Palete'] as $key => $label): ?><div class="cell"><b><?= h($label) ?></b><?= sheet_value($a, $key) !== '' ? h(sheet_value($a, $key)) : '—' ?></div><?php endforeach; ?><div class="cell"><b>Observação</b>—</div></div>
     </section>
 
     <?php if ($filledAnalysis): ?><section class="section"><h2 class="section-title">Boletim de análise</h2><div class="analysis-grid"><?php foreach ($filledAnalysis as $key => $label): ?><div class="analysis-item"><b><?= h($label) ?></b><span><?= h(sheet_value($a, $key)) ?></span></div><?php endforeach; ?></div></section><?php endif; ?>
