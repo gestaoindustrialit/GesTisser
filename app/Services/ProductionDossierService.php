@@ -49,7 +49,27 @@ final class ProductionDossierService
         $costs=$this->calculateCosts($order,$snapshot,$operations,$consumptions);
         $good=0.0;$rejected=0.0;$minutes=0.0;foreach($operations as $op){$good=max($good,(float)$op['quantity_good']);$rejected+=(float)$op['quantity_rejected'];$minutes+=(float)$op['actual_minutes'];}
         $planned=(float)$order['planned_quantity'];$metrics=['good'=>$good,'rejected'=>$rejected,'missing'=>max(0,$planned-$good),'excess'=>max(0,$good-$planned),'efficiency'=>$planned>0?100*$good/$planned:0,'waste_percent'=>($good+$rejected)>0?100*$rejected/($good+$rejected):0,'actual_minutes'=>$minutes,'planned_minutes'=>array_sum(array_map(function($x){return(float)$x['planned_minutes'];},$operations)),'planned_cost'=>$costs['planned_total'],'actual_cost'=>$costs['actual_total'],'unit_cost'=>$good>0?$costs['actual_total']/$good:0,'thousand_cost'=>$good>0?$costs['actual_total']/$good*1000:0];
-        return compact('order','snapshot','operations','consumptions','costs','metrics');
+        $closeReport=$this->closeReport($orderId,$metrics,$costs);
+        return compact('order','snapshot','operations','consumptions','costs','metrics','closeReport');
+    }
+
+    public function closeReport(int $orderId,array $metrics=[],array $costs=[]): array
+    {
+        $defaults=['produced_quantity'=>$metrics['good']??0,'waste_kg'=>$metrics['rejected']??0,'waste_percent'=>$metrics['waste_percent']??0,'sale_unit_price'=>0,'pallet_count'=>0,'pallet_details'=>'','notes'=>''];
+        foreach(['materia_prima','tintas','diluente','acelerador','retardador','outro','impressora','corte_e_cose','cliche','energia','embalagem','caixas','transporte'] as $key)$defaults['cost_'.$key]=0;
+        foreach((array)($costs['rows']??[]) as $row){$category=(string)($row['category']??'');if($category==='Matérias-primas')$defaults['cost_materia_prima']=(float)$row['actual'];elseif($category==='Máquina')$defaults['cost_impressora']=(float)$row['actual'];elseif($category==='Mão de obra')$defaults['cost_corte_e_cose']=(float)$row['actual'];}
+        $saved=$this->row('SELECT report_json FROM erp_production_order_close_reports WHERE production_order_id=?',[$orderId]);
+        return array_merge($defaults,$saved?(json_decode((string)$saved['report_json'],true)?:[]):[]);
+    }
+
+    public function saveCloseReport(int $orderId,int $userId,array $input,string $reason=''): array
+    {
+        $d=$this->dossier($orderId);$old=$d['closeReport'];$clean=[];$numeric=['produced_quantity','waste_kg','waste_percent','sale_unit_price','pallet_count'];
+        foreach($old as $key=>$value){if(strpos($key,'cost_')===0||in_array($key,$numeric,true))$clean[$key]=max(0,(float)str_replace(',','.',(string)($input[$key]??$value)));else$clean[$key]=trim((string)($input[$key]??$value));}
+        if($clean==$old)return $old;
+        $json=json_encode($clean,JSON_UNESCAPED_UNICODE);$this->pdo->beginTransaction();
+        try{$exists=$this->scalar('SELECT id FROM erp_production_order_close_reports WHERE production_order_id=?',[$orderId]);if($exists)$this->pdo->prepare('UPDATE erp_production_order_close_reports SET report_json=?,updated_by=?,updated_at=CURRENT_TIMESTAMP WHERE production_order_id=?')->execute([$json,$userId,$orderId]);else$this->pdo->prepare('INSERT INTO erp_production_order_close_reports(production_order_id,report_json,updated_by) VALUES (?,?,?)')->execute([$orderId,$json,$userId]);$this->pdo->prepare('INSERT INTO erp_production_order_audit(production_order_id,user_id,action,old_value_json,new_value_json,reason) VALUES (?,? ,"update_close_report",?,?,?)')->execute([$orderId,$userId,json_encode($old,JSON_UNESCAPED_UNICODE),$json,$reason?:null]);$this->pdo->commit();}catch(Throwable $e){if($this->pdo->inTransaction())$this->pdo->rollBack();throw $e;}
+        return $clean;
     }
 
     public function closureIssues(array $d): array
