@@ -3,7 +3,7 @@ declare(strict_types=1);
 
 require_once dirname(__DIR__).'/helpers.php';
 require_once dirname(__DIR__).'/erp_migrations.php';
-erp_run_phase1_migrations($pdo);
+gt_erp_run_phase1_migrations($pdo);
 
 $pdo->beginTransaction();
 try {

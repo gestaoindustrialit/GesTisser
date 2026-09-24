@@ -123,7 +123,7 @@ function gt_erp_backup_database_once(PDO $pdo)
     return $backupPath;
 }
 
-function erp_run_phase1_migrations(PDO $pdo)
+function gt_erp_run_phase1_migrations(PDO $pdo)
 {
     static $ran = false;
     if ($ran) {

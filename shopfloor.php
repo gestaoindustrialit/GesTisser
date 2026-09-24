@@ -10,7 +10,7 @@ require_once __DIR__ . '/hr_organization_lib.php';
 require_once __DIR__ . '/erp_migrations.php';
 require_login();
 gt_run_org_migrations($pdo);
-erp_run_phase1_migrations($pdo);
+gt_erp_run_phase1_migrations($pdo);
 
 $userId = (int) $_SESSION['user_id'];
 $operationChecklistService = new OperationChecklistService($pdo);

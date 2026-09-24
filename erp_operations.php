@@ -1,6 +1,6 @@
 <?php
 require_once __DIR__.'/helpers.php'; require_once __DIR__.'/hr_organization_lib.php'; require_once __DIR__.'/erp_migrations.php'; require_once __DIR__.'/app/Services/RoutingService.php'; require_once __DIR__.'/app/Services/WorkCenterCapacityService.php'; require_once __DIR__.'/app/Services/UploadService.php';
-require_login(); gt_run_org_migrations($pdo); erp_run_phase1_migrations($pdo); $user=current_user($pdo)?:[];$uid=(int)$user['id'];
+require_login(); gt_run_org_migrations($pdo); gt_erp_run_phase1_migrations($pdo); $user=current_user($pdo)?:[];$uid=(int)$user['id'];
 if(!erp_user_can($pdo,$user,'erp.operations.view')){http_response_code(403);exit('Sem permissão para consultar operações.');}
 $service=new RoutingService($pdo);$ok=$error=null;
 if($_SERVER['REQUEST_METHOD']==='POST'&&validate_csrf_or_abort(false)){try{

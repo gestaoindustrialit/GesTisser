@@ -2,7 +2,7 @@
 declare(strict_types=1);
 require_once __DIR__ . '/../helpers.php';
 require_once __DIR__ . '/../erp_migrations.php';
-erp_run_phase1_migrations($pdo);
+gt_erp_run_phase1_migrations($pdo);
 $required = ['erp_permissions','erp_audit_log','erp_number_sequences','erp_material_features','erp_locations','erp_raw_materials','erp_finished_products','erp_product_documents','erp_stock_movements','erp_stock_balances'];
 foreach ($required as $table) {
     $stmt = $pdo->prepare("SELECT 1 FROM sqlite_master WHERE type='table' AND name=? LIMIT 1");

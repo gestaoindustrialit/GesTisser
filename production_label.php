@@ -3,7 +3,7 @@ require_once __DIR__.'/helpers.php';
 require_once __DIR__.'/erp_migrations.php';
 require_once __DIR__.'/production_dossier_service.php';
 require_once __DIR__.'/app/Services/ProductionLabelService.php';
-require_login();erp_run_phase1_migrations($pdo);
+require_login();gt_erp_run_phase1_migrations($pdo);
 $user=current_user($pdo)?:[];
 $profile=(string)($user['access_profile']??'Utilizador');
 $canUseProductionLabels=(int)($user['is_admin']??0)===1||in_array($profile,['Utilizador','Produção','Chefias','RH'],true);

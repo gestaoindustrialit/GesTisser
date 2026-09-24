@@ -4,7 +4,7 @@ require_once dirname(__DIR__).'/helpers.php';
 require_once dirname(__DIR__).'/erp_migrations.php';
 require_once dirname(__DIR__).'/app/Services/SupplierSpreadsheet.php';
 
-erp_run_phase1_migrations($pdo);
+gt_erp_run_phase1_migrations($pdo);
 
 $tmp=tempnam(sys_get_temp_dir(),'supplier_csv_');
 file_put_contents($tmp,"codigo;nome;desconto;certificado_pefc;incluir_osaft\nFOR-CSV;Fornecedor CSV;2,5;Sim;Não\n");
@@ -17,7 +17,7 @@ file_put_contents($tmp,$xml);$rows=SupplierSpreadsheet::read($tmp,'xls');unlink(
 if(count($rows)!==1||$rows[0]['codigo']!=='FOR-XLS'||$rows[0]['nome']!=='Fornecedor XLS')throw new RuntimeException('Falhou a leitura do modelo .xls de fornecedores.');
 
 foreach (['address_2','postal_code','mobile','contact_name','salesperson','website','notes','discount_percent','credit_limit','pefc_certified','stock_order_control','include_osaf','created_at','updated_at'] as $column) {
-    if (!erp_column_exists($pdo, 'erp_suppliers', $column)) {
+    if (!gt_erp_migration_column_exists($pdo, 'erp_suppliers', $column)) {
         throw new RuntimeException('Coluna de fornecedor em falta: '.$column);
     }
 }

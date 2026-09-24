@@ -3,7 +3,7 @@ declare(strict_types=1);
 require_once dirname(__DIR__).'/helpers.php';
 require_once dirname(__DIR__).'/hr_organization_lib.php';
 require_once dirname(__DIR__).'/app/Services/RoutingService.php';
-gt_run_org_migrations($pdo);erp_run_phase1_migrations($pdo);
+gt_run_org_migrations($pdo);gt_erp_run_phase1_migrations($pdo);
 function check(bool $condition,string $message):void{if(!$condition)throw new RuntimeException($message);echo "OK - $message\n";}
 $pdo->beginTransaction();
 try{

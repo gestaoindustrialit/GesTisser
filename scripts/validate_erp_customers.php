@@ -3,7 +3,7 @@ declare(strict_types=1);
 require_once dirname(__DIR__).'/helpers.php';
 require_once dirname(__DIR__).'/erp_migrations.php';
 require_once dirname(__DIR__).'/app/Services/CustomerSpreadsheet.php';
-erp_run_phase1_migrations($pdo);
+gt_erp_run_phase1_migrations($pdo);
 $erpSource=file_get_contents(dirname(__DIR__).'/erp.php');
 if($erpSource===false||strpos($erpSource,'data-customer-editor')===false){throw new RuntimeException('O formulário de cliente não está disponível no quadro da página.');}
 foreach(['save_customer'=>'Clientes','save_supplier'=>'Fornecedores','save_article'=>'Artigos'] as $action=>$table){
@@ -20,9 +20,9 @@ try {
     $columns=CustomerSpreadsheet::columns();
     $formColumns=array_values(array_unique($columns));
     if(count($formColumns)!==count(array_unique($formColumns))){throw new RuntimeException('O formulário de clientes contém colunas duplicadas.');}
-    foreach(['country_prefix','mobile','address_2','city','postal_code','contact_name','salesperson','credit_limit'] as $column){if(!erp_column_exists($pdo,'erp_customers',$column)){throw new RuntimeException('Coluna de cliente em falta: '.$column);}}
-    if(!erp_table_exists($pdo,'erp_customer_delivery_addresses')){throw new RuntimeException('Tabela de moradas de entrega em falta.');}
-    foreach(['delivery_address_id','delivery_address_snapshot','transporter'] as $column){if(!erp_column_exists($pdo,'erp_production_orders',$column)){throw new RuntimeException('Coluna de entrega da OF em falta: '.$column);}}
+    foreach(['country_prefix','mobile','address_2','city','postal_code','contact_name','salesperson','credit_limit'] as $column){if(!gt_erp_migration_column_exists($pdo,'erp_customers',$column)){throw new RuntimeException('Coluna de cliente em falta: '.$column);}}
+    if(!gt_erp_migration_table_exists($pdo,'erp_customer_delivery_addresses')){throw new RuntimeException('Tabela de moradas de entrega em falta.');}
+    foreach(['delivery_address_id','delivery_address_snapshot','transporter'] as $column){if(!gt_erp_migration_column_exists($pdo,'erp_production_orders',$column)){throw new RuntimeException('Coluna de entrega da OF em falta: '.$column);}}
     $code='TEST-CUSTOMER-'.bin2hex(random_bytes(4));
     $pdo->prepare('INSERT INTO erp_customers(code,name,mobile,city,credit_limit,is_active) VALUES (?,?,?,?,?,1)')->execute([$code,'Cliente inicial','910000000','Porto',1000]);
     $values=[];foreach($formColumns as $column){$values[$column]='';}

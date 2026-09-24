@@ -4,7 +4,7 @@ require_once __DIR__.'/erp_migrations.php';
 require_once __DIR__.'/crm_migrations.php';
 require_once __DIR__.'/app/Services/CrmService.php';
 require_login();
-erp_run_phase1_migrations($pdo); crm_run_migrations($pdo);
+gt_erp_run_phase1_migrations($pdo); crm_run_migrations($pdo);
 $user=current_user($pdo)?:[];$crm=new CrmService($pdo,$user);
 if((int)($user['crm_enabled']??1)!==1||(int)($user['pin_only_login']??0)===1||!$crm->canView()){http_response_code(403);exit('O módulo de CRM não está ativo para este utilizador.');}
 $view=(string)($_GET['view']??'dashboard');$notice='';$error='';

@@ -9,7 +9,7 @@ if (PHP_SAPI !== 'cli') {
     exit('Execução permitida apenas por linha de comandos.');
 }
 
-erp_run_phase1_migrations($pdo);
+gt_erp_run_phase1_migrations($pdo);
 $sql = 'SELECT rm.id,rm.code,rm.description,rm.alert_email,rm.min_stock,rm.reorder_point,
         COALESCE(SUM(sb.physical_qty-sb.reserved_qty-sb.blocked_qty),0) available_qty
         FROM erp_raw_materials rm
