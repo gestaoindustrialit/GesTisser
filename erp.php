@@ -1,5 +1,15 @@
 <?php
 require_once __DIR__ . '/helpers.php';
+
+// This screen owns its dependencies and migrations. Dispatch it before the
+// general ERP bootstrap so a failure in an unrelated service cannot leave the
+// machines URL with an empty response.
+$requestedPage = (string) ($_GET['page'] ?? 'overview');
+if ($requestedPage === 'machines') {
+    require __DIR__ . '/erp_machines.php';
+    return;
+}
+
 require_once __DIR__ . '/erp_migrations.php';
 require_once __DIR__ . '/app/Services/MachineAttachment.php';
 require_once __DIR__ . '/app/Services/ArticleDocument.php';
@@ -16,7 +26,6 @@ require_once __DIR__ . '/app/Services/GenericPdfOrderParser.php';
 require_once __DIR__ . '/app/Services/OrderSupplierDetector.php';
 require_once __DIR__ . '/app/Services/OrderImportMatcher.php';
 require_once __DIR__ . '/app/Services/PurchaseOrderImportService.php';
-$requestedPage = (string) ($_GET['page'] ?? 'overview');
 // The machines area does not use the spreadsheet/routing services. Loading
 // those unrelated files here made machine documents fail on older production
 // PHP runtimes before the attachment route could send the PDF.
@@ -384,7 +393,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     }
 }
 
-if ((string)($_GET['page'] ?? '') === 'machines') { require __DIR__ . '/erp_machines.php'; return; }
 $page = (string)($_GET['page'] ?? 'overview');
 if ($page === 'settings') { redirect('erp_settings.php'); }
 if ($page === 'master') { redirect('erp.php'); }
