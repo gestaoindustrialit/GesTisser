@@ -12,7 +12,6 @@ if (ArticleDocument::MAX_UPLOAD_BYTES !== 20971520) {
 ArticleDocument::validateUploadSize(['error' => UPLOAD_ERR_OK, 'size' => ArticleDocument::MAX_UPLOAD_BYTES]);
 foreach ([
     ['error' => UPLOAD_ERR_OK, 'size' => ArticleDocument::MAX_UPLOAD_BYTES + 1],
-    ['error' => UPLOAD_ERR_INI_SIZE, 'size' => 0],
     ['error' => UPLOAD_ERR_FORM_SIZE, 'size' => 0],
 ] as $oversizedUpload) {
     try {
@@ -23,6 +22,21 @@ foreach ([
             throw $exception;
         }
     }
+}
+
+try {
+    ArticleDocument::validateUploadSize(['error' => UPLOAD_ERR_INI_SIZE, 'size' => 0]);
+    throw new RuntimeException('Um documento rejeitado pelo limite do servidor foi aceite.');
+} catch (RuntimeException $exception) {
+    if (strpos($exception->getMessage(), 'O servidor rejeitou o documento') !== 0
+        || strpos($exception->getMessage(), 'O nome do ficheiro não causa este erro') === false) {
+        throw $exception;
+    }
+}
+
+$apacheConfig = (string) file_get_contents(__DIR__ . '/../.htaccess');
+if (preg_match('/upload_max_filesize\s+(?!20M\b)\S+/i', $apacheConfig)) {
+    throw new RuntimeException('O limite Apache dos documentos deve ser 20 MB.');
 }
 
 $cases = [
