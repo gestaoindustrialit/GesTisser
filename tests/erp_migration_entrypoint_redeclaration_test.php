@@ -8,6 +8,11 @@ function erp_run_phase1_migrations(PDO $pdo)
     return 'legacy-page';
 }
 
+function erp_default_permissions(): array
+{
+    return ['legacy.permission' => 'Legacy permission'];
+}
+
 require_once dirname(__DIR__) . '/erp_migrations.php';
 
 if (!function_exists('gt_erp_run_phase1_migrations')) {
@@ -15,9 +20,20 @@ if (!function_exists('gt_erp_run_phase1_migrations')) {
     exit(1);
 }
 
+if (!function_exists('gt_erp_default_permissions')) {
+    fwrite(STDERR, "The namespaced ERP permissions helper was not loaded.\n");
+    exit(1);
+}
+
 $reflection = new ReflectionFunction('erp_run_phase1_migrations');
 if ($reflection->getFileName() !== __FILE__) {
     fwrite(STDERR, "The legacy page migration function was unexpectedly replaced.\n");
+    exit(1);
+}
+
+$permissionsReflection = new ReflectionFunction('erp_default_permissions');
+if ($permissionsReflection->getFileName() !== __FILE__) {
+    fwrite(STDERR, "The legacy permissions helper was unexpectedly replaced.\n");
     exit(1);
 }
 
