@@ -45,7 +45,7 @@ function erp_migrate_ink_types(PDO $pdo)
     }
 }
 
-function erp_migrate_supplier_columns(PDO $pdo)
+function gt_erp_migrate_supplier_columns(PDO $pdo)
 {
     $supplierColumns = [
         'address_2'=>'TEXT', 'postal_code'=>'TEXT', 'mobile'=>'TEXT', 'contact_name'=>'TEXT',
@@ -173,7 +173,7 @@ function erp_run_phase1_migrations(PDO $pdo)
         erp_migrate_work_centers($pdo);
         /* Supplier master data used by Purchasing. Keep the original compact table
            compatible while extending it with the fields from the current supplier sheet. */
-        erp_migrate_supplier_columns($pdo);
+        gt_erp_migrate_supplier_columns($pdo);
         if (!gt_erp_migration_column_exists($pdo, 'erp_stock_movements', 'order_reference')) {
             $pdo->exec('ALTER TABLE erp_stock_movements ADD COLUMN order_reference TEXT');
         }
