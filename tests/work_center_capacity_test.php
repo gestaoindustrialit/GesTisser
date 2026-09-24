@@ -4,7 +4,7 @@ declare(strict_types=1);
 require_once __DIR__ . '/../app/Services/WorkCenterCapacityService.php';
 require_once __DIR__ . '/../erp_migrations.php';
 
-if ((new ReflectionFunction('erp_migrate_work_centers'))->hasReturnType()) {
+if ((new ReflectionFunction('gt_erp_migrate_work_centers'))->hasReturnType()) {
     throw new RuntimeException('A migração deve manter compatibilidade com PHP 7.0 e não declarar retorno void.');
 }
 
@@ -22,7 +22,7 @@ assertSameValue('2026-09-22', WorkCenterCapacityService::forecastDate(361, 360, 
 $pdo = new PDO('sqlite::memory:');
 $pdo->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
 $pdo->exec('CREATE TABLE erp_machines (id INTEGER PRIMARY KEY); CREATE TABLE erp_work_centers (id INTEGER PRIMARY KEY, code TEXT, name TEXT)');
-erp_migrate_work_centers($pdo);
+gt_erp_migrate_work_centers($pdo);
 $columns = array_column($pdo->query('PRAGMA table_info(erp_work_centers)')->fetchAll(PDO::FETCH_ASSOC), 'name');
 foreach (['center_type','machine_id','default_printer_id','daily_capacity_minutes','efficiency_percent'] as $column) {
     if (!in_array($column, $columns, true)) throw new RuntimeException('A migração não criou ' . $column);
