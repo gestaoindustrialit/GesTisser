@@ -9,6 +9,7 @@ if (!is_admin($pdo, $userId)) {
 }
 
 erp_run_phase1_migrations($pdo);
+erp_migrate_ink_types($pdo);
 $flashSuccess = null;
 $flashError = null;
 
@@ -24,6 +25,17 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 if($id){$exists=$pdo->prepare('SELECT 1 FROM erp_material_types WHERE id=?');$exists->execute([$id]);if(!$exists->fetchColumn())throw new InvalidArgumentException('Tipo de material inexistente.');$pdo->prepare('UPDATE erp_material_types SET code=?,name=?,is_active=? WHERE id=?')->execute([$code,$name,!empty($_POST['is_active'])?1:0,$id]);}
                 else{$pdo->prepare('INSERT INTO erp_material_types(code,name,is_active) VALUES (?,?,?)')->execute([$code,$name,!empty($_POST['is_active'])?1:0]);$id=(int)$pdo->lastInsertId();}
                 erp_audit($pdo,$userId,(int)($_POST['id']??0)?'update':'create','erp_material_types',$id,[],['code'=>$code,'name'=>$name]);$flashSuccess='Tipo de material guardado com sucesso.';
+            } elseif ($action === 'save_ink_type') {
+                $id=(int)($_POST['id']??0);$code=strtoupper(trim((string)($_POST['code']??'')));$name=trim((string)($_POST['name']??''));$icon=trim((string)($_POST['icon']??''));
+                $allowedIcons=['bi-droplet-fill','bi-bucket-fill','bi-paint-bucket','bi-palette-fill','bi-circle-fill','bi-water'];
+                if($code===''||$name===''||!in_array($icon,$allowedIcons,true))throw new InvalidArgumentException('Indique o código, o nome e um ícone válido para o tipo de tinta.');
+                $values=[$code,$name,$icon,!empty($_POST['is_active'])?1:0];
+                if($id){$exists=$pdo->prepare('SELECT 1 FROM erp_ink_types WHERE id=?');$exists->execute([$id]);if(!$exists->fetchColumn())throw new InvalidArgumentException('Tipo de tinta inexistente.');$pdo->prepare('UPDATE erp_ink_types SET code=?,name=?,icon=?,is_active=?,updated_at=CURRENT_TIMESTAMP WHERE id=?')->execute(array_merge($values,[$id]));}
+                else{$pdo->prepare('INSERT INTO erp_ink_types(code,name,icon,is_active) VALUES (?,?,?,?)')->execute($values);$id=(int)$pdo->lastInsertId();}
+                erp_audit($pdo,$userId,(int)($_POST['id']??0)?'update':'create','erp_ink_types',$id,[],['code'=>$code,'name'=>$name,'icon'=>$icon]);$flashSuccess='Tipo de tinta guardado com sucesso.';
+            } elseif ($action === 'delete_ink_type') {
+                $id=(int)($_POST['id']??0);$used=$pdo->prepare('SELECT COUNT(*) FROM erp_raw_materials WHERE ink_type_id=?');$used->execute([$id]);if((int)$used->fetchColumn())throw new DomainException('Não é possível remover um tipo de tinta que está a ser utilizado.');
+                $pdo->prepare('DELETE FROM erp_ink_types WHERE id=?')->execute([$id]);erp_audit($pdo,$userId,'delete','erp_ink_types',$id,[],[]);$flashSuccess='Tipo de tinta removido com sucesso.';
             } elseif ($action === 'save_document_control') {
                 $id = (int) ($_POST['id'] ?? 0);
                 $documentNumber = strtoupper(trim((string) ($_POST['document_number'] ?? '')));
@@ -128,6 +140,7 @@ $operationSectors = $pdo->query('SELECT wc.*,m.code machine_code,p.name printer_
 $machines = $pdo->query('SELECT id,code,name FROM erp_machines WHERE is_active=1 AND deleted_at IS NULL ORDER BY code')->fetchAll(PDO::FETCH_ASSOC);
 $printers = $pdo->query('SELECT * FROM erp_printers ORDER BY is_active DESC,name COLLATE NOCASE')->fetchAll(PDO::FETCH_ASSOC);
 $materialTypes = $pdo->query('SELECT id,code,name,is_active FROM erp_material_types ORDER BY is_active DESC,name COLLATE NOCASE')->fetchAll(PDO::FETCH_ASSOC);
+$inkTypes = $pdo->query('SELECT id,code,name,icon,is_active FROM erp_ink_types ORDER BY is_active DESC,name COLLATE NOCASE')->fetchAll(PDO::FETCH_ASSOC);
 $controlledDocuments = $pdo->query('SELECT id,code,document_number,name,module,output_format,generation_route,is_active,updated_at FROM erp_document_catalog ORDER BY module COLLATE NOCASE,document_number COLLATE NOCASE')->fetchAll(PDO::FETCH_ASSOC);
 $sequenceLabels = [
     'customer' => 'Clientes',
@@ -180,6 +193,13 @@ require __DIR__ . '/partials/header.php';
             <h2 class="h5" id="material-types-title">Tipos de material</h2><p class="text-muted">Crie e edite os tipos usados nos artigos. Só é possível eliminar tipos sem artigos ou características associados.</p>
             <?php foreach($materialTypes as$type):?><form method="post" class="row g-2 align-items-center mb-2"><?=csrf_input()?><input type="hidden" name="action" value="save_material_type"><input type="hidden" name="id" value="<?=(int)$type['id']?>"><div class="col-md-3"><input class="form-control" name="code" required value="<?=h($type['code'])?>" aria-label="Código do tipo de material"></div><div class="col"><input class="form-control" name="name" required value="<?=h($type['name'])?>" aria-label="Nome do tipo de material"></div><div class="col-auto"><input type="hidden" name="is_active" value="0"><label class="form-check form-check-inline"><input class="form-check-input" type="checkbox" name="is_active" value="1" <?=$type['is_active']?'checked':''?>> Ativo</label><button class="btn btn-outline-primary" aria-label="Guardar tipo de material"><i class="bi bi-check-lg"></i></button> <button class="btn btn-outline-danger" name="action" value="delete_material_type" formnovalidate aria-label="Remover tipo de material" onclick="return confirm('Remover este tipo de material?')"><i class="bi bi-trash"></i></button></div></form><?php endforeach;?>
             <form method="post" class="row g-2 align-items-center mt-3 pt-3 border-top"><?=csrf_input()?><input type="hidden" name="action" value="save_material_type"><input type="hidden" name="is_active" value="1"><div class="col-md-3"><input class="form-control" name="code" required placeholder="Código"></div><div class="col"><input class="form-control" name="name" required placeholder="Novo tipo de material"></div><div class="col-auto"><button class="btn btn-primary"><i class="bi bi-plus-lg me-1"></i>Adicionar</button></div></form>
+        </div></section>
+    </div>
+    <div class="col-12">
+        <section class="card shadow-sm soft-card" aria-labelledby="ink-types-title"><div class="card-body p-4">
+            <h2 class="h5" id="ink-types-title">Tipos de tinta</h2><p class="text-muted">Configure os tipos disponíveis e o ícone apresentado antes do nome da cor.</p>
+            <?php $inkIconOptions=['bi-droplet-fill'=>'Gota','bi-bucket-fill'=>'Balde','bi-paint-bucket'=>'Balde de tinta','bi-palette-fill'=>'Paleta','bi-circle-fill'=>'Círculo','bi-water'=>'Água'];foreach($inkTypes as$type):?><form method="post" class="row g-2 align-items-center mb-2"><?=csrf_input()?><input type="hidden" name="action" value="save_ink_type"><input type="hidden" name="id" value="<?=(int)$type['id']?>"><div class="col-md-2"><input class="form-control" name="code" required value="<?=h($type['code'])?>" aria-label="Código do tipo de tinta"></div><div class="col-md-3"><input class="form-control" name="name" required value="<?=h($type['name'])?>" aria-label="Nome do tipo de tinta"></div><div class="col-md-3"><select class="form-select" name="icon" aria-label="Ícone do tipo de tinta"><?php foreach($inkIconOptions as$icon=>$label):?><option value="<?=h($icon)?>" <?=$type['icon']===$icon?'selected':''?>><?=h($label)?></option><?php endforeach;?></select></div><div class="col-auto"><i class="bi <?=h($type['icon'])?> fs-5 me-2" title="<?=h($type['name'])?>"></i><input type="hidden" name="is_active" value="0"><label class="form-check form-check-inline"><input class="form-check-input" type="checkbox" name="is_active" value="1" <?=$type['is_active']?'checked':''?>> Ativo</label><button class="btn btn-outline-primary" aria-label="Guardar tipo de tinta"><i class="bi bi-check-lg"></i></button> <button class="btn btn-outline-danger" name="action" value="delete_ink_type" formnovalidate aria-label="Remover tipo de tinta" onclick="return confirm('Remover este tipo de tinta?')"><i class="bi bi-trash"></i></button></div></form><?php endforeach;?>
+            <form method="post" class="row g-2 align-items-center mt-3 pt-3 border-top"><?=csrf_input()?><input type="hidden" name="action" value="save_ink_type"><input type="hidden" name="is_active" value="1"><div class="col-md-2"><input class="form-control" name="code" required placeholder="Código"></div><div class="col-md-3"><input class="form-control" name="name" required placeholder="Novo tipo de tinta"></div><div class="col-md-3"><select class="form-select" name="icon"><?php foreach($inkIconOptions as$icon=>$label):?><option value="<?=h($icon)?>"><?=h($label)?></option><?php endforeach;?></select></div><div class="col-auto"><button class="btn btn-primary"><i class="bi bi-plus-lg me-1"></i>Adicionar</button></div></form>
         </div></section>
     </div>
     <div class="col-xl-6">
