@@ -4,7 +4,7 @@ require_once __DIR__ . '/erp_migrations.php';
 require_login();
 gt_erp_run_phase1_migrations($pdo);
 $user = current_user($pdo) ?: [];
-if (!is_admin($pdo, (int) ($_SESSION['user_id'] ?? 0)) && !erp_user_can($pdo, $user, 'erp.view') && !erp_user_can($pdo, $user, 'erp.shopfloor.execute')) {
+if (!is_admin($pdo, (int) ($_SESSION['user_id'] ?? 0)) && !gt_erp_user_can($pdo, $user, 'erp.view') && !gt_erp_user_can($pdo, $user, 'erp.shopfloor.execute')) {
     http_response_code(403);
     exit('Sem permissão para consultar o planeamento da produção.');
 }

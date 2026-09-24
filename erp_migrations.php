@@ -374,7 +374,7 @@ function gt_erp_default_permissions(): array
     ];
 }
 
-function erp_user_can(PDO $pdo, array $user, string $permission): bool
+function gt_erp_user_can(PDO $pdo, array $user, string $permission): bool
 {
     if ((int)($user['is_admin'] ?? 0) === 1) { return true; }
     $profile = (string)($user['access_profile'] ?? '');
@@ -388,7 +388,7 @@ function erp_user_can(PDO $pdo, array $user, string $permission): bool
     return (bool)$stmt->fetchColumn();
 }
 
-function erp_audit(PDO $pdo, $userId, string $action, string $entity, $entityId, array $oldValues = [], array $newValues = [], $reason = null)
+function gt_erp_audit(PDO $pdo, $userId, string $action, string $entity, $entityId, array $oldValues = [], array $newValues = [], $reason = null)
 {
     $stmt = $pdo->prepare('INSERT INTO erp_audit_log(user_id, action, entity, entity_id, old_values_json, new_values_json, ip_address, reason) VALUES (?,?,?,?,?,?,?,?)');
     $stmt->execute([$userId, $action, $entity, $entityId, json_encode($oldValues, JSON_UNESCAPED_UNICODE), json_encode($newValues, JSON_UNESCAPED_UNICODE), (string)($_SERVER['REMOTE_ADDR'] ?? ''), $reason]);

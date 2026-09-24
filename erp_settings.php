@@ -24,7 +24,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 if($code===''||$name==='')throw new InvalidArgumentException('O código e o nome do tipo de material são obrigatórios.');
                 if($id){$exists=$pdo->prepare('SELECT 1 FROM erp_material_types WHERE id=?');$exists->execute([$id]);if(!$exists->fetchColumn())throw new InvalidArgumentException('Tipo de material inexistente.');$pdo->prepare('UPDATE erp_material_types SET code=?,name=?,is_active=? WHERE id=?')->execute([$code,$name,!empty($_POST['is_active'])?1:0,$id]);}
                 else{$pdo->prepare('INSERT INTO erp_material_types(code,name,is_active) VALUES (?,?,?)')->execute([$code,$name,!empty($_POST['is_active'])?1:0]);$id=(int)$pdo->lastInsertId();}
-                erp_audit($pdo,$userId,(int)($_POST['id']??0)?'update':'create','erp_material_types',$id,[],['code'=>$code,'name'=>$name]);$flashSuccess='Tipo de material guardado com sucesso.';
+                gt_erp_audit($pdo,$userId,(int)($_POST['id']??0)?'update':'create','erp_material_types',$id,[],['code'=>$code,'name'=>$name]);$flashSuccess='Tipo de material guardado com sucesso.';
             } elseif ($action === 'save_ink_type') {
                 $id=(int)($_POST['id']??0);$code=strtoupper(trim((string)($_POST['code']??'')));$name=trim((string)($_POST['name']??''));$icon=trim((string)($_POST['icon']??''));
                 $allowedIcons=['bi-droplet-fill','bi-bucket-fill','bi-paint-bucket','bi-palette-fill','bi-circle-fill','bi-water'];
@@ -32,10 +32,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $values=[$code,$name,$icon,!empty($_POST['is_active'])?1:0];
                 if($id){$exists=$pdo->prepare('SELECT 1 FROM erp_ink_types WHERE id=?');$exists->execute([$id]);if(!$exists->fetchColumn())throw new InvalidArgumentException('Tipo de tinta inexistente.');$pdo->prepare('UPDATE erp_ink_types SET code=?,name=?,icon=?,is_active=?,updated_at=CURRENT_TIMESTAMP WHERE id=?')->execute(array_merge($values,[$id]));}
                 else{$pdo->prepare('INSERT INTO erp_ink_types(code,name,icon,is_active) VALUES (?,?,?,?)')->execute($values);$id=(int)$pdo->lastInsertId();}
-                erp_audit($pdo,$userId,(int)($_POST['id']??0)?'update':'create','erp_ink_types',$id,[],['code'=>$code,'name'=>$name,'icon'=>$icon]);$flashSuccess='Tipo de tinta guardado com sucesso.';
+                gt_erp_audit($pdo,$userId,(int)($_POST['id']??0)?'update':'create','erp_ink_types',$id,[],['code'=>$code,'name'=>$name,'icon'=>$icon]);$flashSuccess='Tipo de tinta guardado com sucesso.';
             } elseif ($action === 'delete_ink_type') {
                 $id=(int)($_POST['id']??0);$used=$pdo->prepare('SELECT COUNT(*) FROM erp_raw_materials WHERE ink_type_id=?');$used->execute([$id]);if((int)$used->fetchColumn())throw new DomainException('Não é possível remover um tipo de tinta que está a ser utilizado.');
-                $pdo->prepare('DELETE FROM erp_ink_types WHERE id=?')->execute([$id]);erp_audit($pdo,$userId,'delete','erp_ink_types',$id,[],[]);$flashSuccess='Tipo de tinta removido com sucesso.';
+                $pdo->prepare('DELETE FROM erp_ink_types WHERE id=?')->execute([$id]);gt_erp_audit($pdo,$userId,'delete','erp_ink_types',$id,[],[]);$flashSuccess='Tipo de tinta removido com sucesso.';
             } elseif ($action === 'save_document_control') {
                 $id = (int) ($_POST['id'] ?? 0);
                 $documentNumber = strtoupper(trim((string) ($_POST['document_number'] ?? '')));
@@ -49,11 +49,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 if ($duplicate->fetchColumn()) throw new InvalidArgumentException('Este número de documento já está atribuído a outro registo.');
                 $active = !empty($_POST['is_active']) ? 1 : 0;
                 $pdo->prepare('UPDATE erp_document_catalog SET document_number=?,is_active=?,updated_by=?,updated_at=CURRENT_TIMESTAMP WHERE id=?')->execute([$documentNumber,$active,$userId,$id]);
-                erp_audit($pdo,$userId,'update','erp_document_catalog',$id,$oldDocument,['document_number'=>$documentNumber,'is_active'=>$active]);
+                gt_erp_audit($pdo,$userId,'update','erp_document_catalog',$id,$oldDocument,['document_number'=>$documentNumber,'is_active'=>$active]);
                 $flashSuccess = 'Controlo documental atualizado com sucesso.';
             } elseif ($action === 'delete_material_type') {
                 $id=(int)($_POST['id']??0);$used=0;foreach([['erp_raw_materials','material_type_id'],['erp_finished_products','material_type_id'],['erp_material_features','material_type_id']]as$reference){$stmt=$pdo->prepare('SELECT COUNT(*) FROM '.$reference[0].' WHERE '.$reference[1].'=?');$stmt->execute([$id]);$used+=(int)$stmt->fetchColumn();}if($used)throw new DomainException('Não é possível remover um tipo de material que está a ser utilizado.');
-                $pdo->prepare('DELETE FROM erp_material_types WHERE id=?')->execute([$id]);erp_audit($pdo,$userId,'delete','erp_material_types',$id,[],[]);$flashSuccess='Tipo de material removido com sucesso.';
+                $pdo->prepare('DELETE FROM erp_material_types WHERE id=?')->execute([$id]);gt_erp_audit($pdo,$userId,'delete','erp_material_types',$id,[],[]);$flashSuccess='Tipo de material removido com sucesso.';
             } elseif ($action === 'save_operation_type') {
                 $id = (int) ($_POST['id'] ?? 0);
                 $code = strtolower(trim((string) ($_POST['code'] ?? '')));
@@ -68,7 +68,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 } else {
                     $pdo->prepare('INSERT INTO erp_operation_types(code,name) VALUES (?,?)')->execute([$code,$name]);
                 }
-                erp_audit($pdo,$userId,$id?'update':'create','erp_operation_types',$id?:((int)$pdo->lastInsertId()),[],['code'=>$code,'name'=>$name]);
+                gt_erp_audit($pdo,$userId,$id?'update':'create','erp_operation_types',$id?:((int)$pdo->lastInsertId()),[],['code'=>$code,'name'=>$name]);
                 $pdo->commit(); $flashSuccess = 'Tipo de operação guardado com sucesso.';
             } elseif ($action === 'delete_operation_type') {
                 $id = (int) ($_POST['id'] ?? 0); $stmt=$pdo->prepare('SELECT code FROM erp_operation_types WHERE id=?');$stmt->execute([$id]);$code=$stmt->fetchColumn();
@@ -76,17 +76,17 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $used=$pdo->prepare('SELECT COUNT(*) FROM erp_operations WHERE operation_type=?');$used->execute([$code]);
                 if ((int)$used->fetchColumn()>0) throw new DomainException('Não é possível remover um tipo associado a operações.');
                 $pdo->prepare('DELETE FROM erp_operation_types WHERE id=?')->execute([$id]);
-                erp_audit($pdo,$userId,'delete','erp_operation_types',$id,['code'=>$code],[]); $flashSuccess='Tipo de operação removido com sucesso.';
+                gt_erp_audit($pdo,$userId,'delete','erp_operation_types',$id,['code'=>$code],[]); $flashSuccess='Tipo de operação removido com sucesso.';
             } elseif ($action === 'save_printer') {
                 $id=(int)($_POST['id']??0);$name=trim((string)($_POST['name']??''));$uri=trim((string)($_POST['network_uri']??''));
                 if($name===''||!preg_match('#^(ipp|ipps|lpd|socket|smb)://[^\s]+$#i',$uri))throw new InvalidArgumentException('Indique um nome e um endereço de rede válido (IPP, IPPS, LPD, socket ou SMB).');
                 $values=[$name,$uri,trim((string)($_POST['location']??'')),trim((string)($_POST['driver_name']??'')),!empty($_POST['is_active'])?1:0];
                 if($id){$pdo->prepare('UPDATE erp_printers SET name=?,network_uri=?,location=?,driver_name=?,is_active=?,updated_at=CURRENT_TIMESTAMP WHERE id=?')->execute(array_merge($values,[$id]));}
                 else{$pdo->prepare('INSERT INTO erp_printers(name,network_uri,location,driver_name,is_active) VALUES (?,?,?,?,?)')->execute($values);$id=(int)$pdo->lastInsertId();}
-                erp_audit($pdo,$userId,(int)($_POST['id']??0)?'update':'create','erp_printers',$id,[],['name'=>$name,'network_uri'=>$uri]);$flashSuccess='Impressora de rede guardada com sucesso.';
+                gt_erp_audit($pdo,$userId,(int)($_POST['id']??0)?'update':'create','erp_printers',$id,[],['name'=>$name,'network_uri'=>$uri]);$flashSuccess='Impressora de rede guardada com sucesso.';
             } elseif ($action === 'delete_printer') {
                 $id=(int)($_POST['id']??0);$used=$pdo->prepare('SELECT COUNT(*) FROM erp_work_centers WHERE default_printer_id=?');$used->execute([$id]);if((int)$used->fetchColumn())throw new DomainException('Não é possível remover uma impressora associada a um centro de trabalho.');
-                $pdo->prepare('DELETE FROM erp_printers WHERE id=?')->execute([$id]);erp_audit($pdo,$userId,'delete','erp_printers',$id,[],[]);$flashSuccess='Impressora removida com sucesso.';
+                $pdo->prepare('DELETE FROM erp_printers WHERE id=?')->execute([$id]);gt_erp_audit($pdo,$userId,'delete','erp_printers',$id,[],[]);$flashSuccess='Impressora removida com sucesso.';
             } elseif ($action === 'save_operation_sector') {
                 $id=(int)($_POST['id']??0);$code=strtoupper(trim((string)($_POST['code']??'')));$name=trim((string)($_POST['name']??''));
                 $centerType=(string)($_POST['center_type']??'administrative');$machineId=(int)($_POST['machine_id']??0);$printerId=(int)($_POST['default_printer_id']??0);$capacity=(int)($_POST['daily_capacity_minutes']??480);$efficiency=(float)str_replace(',','.',(string)($_POST['efficiency_percent']??100));
@@ -97,18 +97,18 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $values=[$code,$name,max(0,(float)str_replace(',','.',(string)($_POST['hourly_rate']??0))),$centerType,$machineId?:null,$printerId?:null,$capacity,$efficiency,!empty($_POST['is_active'])?1:0];
                 if($id){$pdo->prepare('UPDATE erp_work_centers SET code=?,name=?,hourly_rate=?,center_type=?,machine_id=?,default_printer_id=?,daily_capacity_minutes=?,efficiency_percent=?,is_active=? WHERE id=?')->execute(array_merge($values,[$id]));}
                 else{$pdo->prepare('INSERT INTO erp_work_centers(code,name,hourly_rate,center_type,machine_id,default_printer_id,daily_capacity_minutes,efficiency_percent,is_active) VALUES (?,?,?,?,?,?,?,?,?)')->execute($values);$id=(int)$pdo->lastInsertId();}
-                erp_audit($pdo,$userId,(int)($_POST['id']??0)?'update':'create','erp_work_centers',$id,[],['code'=>$code,'name'=>$name]);$flashSuccess='Setor de operações guardado com sucesso.';
+                gt_erp_audit($pdo,$userId,(int)($_POST['id']??0)?'update':'create','erp_work_centers',$id,[],['code'=>$code,'name'=>$name]);$flashSuccess='Setor de operações guardado com sucesso.';
             } elseif ($action === 'delete_operation_sector') {
                 $id=(int)($_POST['id']??0);$references=['erp_operations'=>'default_work_center_id','erp_machines'=>'work_center_id','erp_article_routing_steps'=>'work_center_id','erp_shift_assignments'=>'work_center_id'];
                 foreach($references as $table=>$column){$stmt=$pdo->prepare("SELECT COUNT(*) FROM $table WHERE $column=?");$stmt->execute([$id]);if((int)$stmt->fetchColumn()>0)throw new DomainException('Não é possível remover um setor que está a ser utilizado.');}
-                $pdo->prepare('DELETE FROM erp_work_centers WHERE id=?')->execute([$id]);erp_audit($pdo,$userId,'delete','erp_work_centers',$id,[],[]);$flashSuccess='Setor de operações removido com sucesso.';
+                $pdo->prepare('DELETE FROM erp_work_centers WHERE id=?')->execute([$id]);gt_erp_audit($pdo,$userId,'delete','erp_work_centers',$id,[],[]);$flashSuccess='Setor de operações removido com sucesso.';
             } elseif ($action === 'reset_work_order_sequence') {
                 $nextNumber = filter_var($_POST['work_order_next_number'] ?? null, FILTER_VALIDATE_INT, ['options'=>['min_range'=>1]]);
                 if ($nextNumber === false) throw new InvalidArgumentException('Indique um número válido para a próxima OF.');
                 $sequence = $pdo->query("SELECT id,prefix,next_number,padding,suffix FROM erp_number_sequences WHERE code='work_order'")->fetch(PDO::FETCH_ASSOC);
                 if (!$sequence) throw new RuntimeException('A sequência das ordens de fabrico não está configurada.');
                 $pdo->prepare('UPDATE erp_number_sequences SET next_number=?,updated_at=CURRENT_TIMESTAMP WHERE id=?')->execute([$nextNumber,(int)$sequence['id']]);
-                erp_audit($pdo,$userId,'reset_sequence','erp_number_sequences',(int)$sequence['id'],['next_number'=>(int)$sequence['next_number']],['next_number'=>$nextNumber]);
+                gt_erp_audit($pdo,$userId,'reset_sequence','erp_number_sequences',(int)$sequence['id'],['next_number'=>(int)$sequence['next_number']],['next_number'=>$nextNumber]);
                 $flashSuccess='A próxima Ordem de Fabrico será a n.º '.(string)$sequence['prefix'].str_pad((string)$nextNumber,(int)$sequence['padding'],'0',STR_PAD_LEFT).(string)($sequence['suffix']??'').'.';
             } else {
                 $allowNegativeStock = isset($_POST['allow_negative_stock']) && $_POST['allow_negative_stock'] === '1';
@@ -123,7 +123,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $pdo->beginTransaction();$saveSetting=$pdo->prepare('INSERT INTO erp_settings(key,value,updated_by,updated_at) VALUES (?,?,?,CURRENT_TIMESTAMP) ON CONFLICT(key) DO UPDATE SET value=excluded.value,updated_by=excluded.updated_by,updated_at=CURRENT_TIMESTAMP');
                 $saveSetting->execute(['allow_negative_stock',$allowNegativeStock?'1':'0',$userId]);$saveSetting->execute(['raw_material_code_pattern',$codePattern,$userId]);$saveSetting->execute(['labor_hourly_rate',number_format($laborHourlyRate,2,'.',''),$userId]);foreach($biSettings as $key=>$value)$saveSetting->execute([$key,(string)$value,$userId]);
                 $saveSequence=$pdo->prepare('UPDATE erp_number_sequences SET prefix=?,next_number=?,padding=?,suffix=?,updated_at=CURRENT_TIMESTAMP WHERE id=?');foreach((array)($_POST['sequence_id']??[]) as $index=>$rawId)$saveSequence->execute([trim((string)($_POST['sequence_prefix'][$index]??'')),max(1,(int)($_POST['sequence_next_number'][$index]??1)),min(12,max(1,(int)($_POST['sequence_padding'][$index]??5))),trim((string)($_POST['sequence_suffix'][$index]??'')),(int)$rawId]);
-                erp_audit($pdo,$userId,'update','erp_settings',null,[],['allow_negative_stock'=>$allowNegativeStock,'raw_material_code_pattern'=>$codePattern,'labor_hourly_rate'=>$laborHourlyRate,'business_intelligence'=>$biSettings]);$pdo->commit();$flashSuccess='Configuração do ERP atualizada com sucesso.';
+                gt_erp_audit($pdo,$userId,'update','erp_settings',null,[],['allow_negative_stock'=>$allowNegativeStock,'raw_material_code_pattern'=>$codePattern,'labor_hourly_rate'=>$laborHourlyRate,'business_intelligence'=>$biSettings]);$pdo->commit();$flashSuccess='Configuração do ERP atualizada com sucesso.';
             }
         } catch (Throwable $exception) {
             if ($pdo->inTransaction()) $pdo->rollBack();
