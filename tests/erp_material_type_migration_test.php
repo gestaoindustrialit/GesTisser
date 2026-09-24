@@ -1,6 +1,17 @@
 <?php
 declare(strict_types=1);
 
+// Legacy machine pages defined these generic helpers themselves. Loading the
+// central migrations during a rolling deployment must not redeclare them.
+function erp_table_exists(PDO $pdo, string $table): bool
+{
+    return false;
+}
+
+function erp_migrate_supplier_columns(PDO $pdo): void
+{
+}
+
 require_once dirname(__DIR__) . '/erp_migrations.php';
 
 $pdo = new PDO('sqlite::memory:');
