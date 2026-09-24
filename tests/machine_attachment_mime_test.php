@@ -92,6 +92,11 @@ if (strpos($erpSource, "=== 'machine_attachment'") === false) {
 if (strpos($erpSource, "\$requestedPage !== 'machines' && \$requestedPage !== 'machine_attachment'") === false) {
     throw new RuntimeException('As máquinas ainda carregam serviços ERP incompatíveis e desnecessários.');
 }
+$machineDispatch = strpos($erpSource, "if (\$requestedPage === 'machines')");
+$erpMigrationsLoad = strpos($erpSource, "require_once __DIR__ . '/erp_migrations.php';");
+if ($machineDispatch === false || $erpMigrationsLoad === false || $machineDispatch > $erpMigrationsLoad) {
+    throw new RuntimeException('A página de máquinas deve ser encaminhada antes do bootstrap geral do ERP.');
+}
 $machinesSource = file_get_contents(dirname(__DIR__) . '/erp_machines.php');
 if (preg_match('/function\s+gt_machine_relocate_attachments\s*\([^)]*\)\s*:\s*void/', file_get_contents(dirname(__DIR__) . '/app/Services/MachineAttachment.php')) === 1
     || preg_match('/function\s+gt_save_machine_upload\s*\([^)]*\)\s*:\s*void/', $machinesSource) === 1) {
