@@ -9,6 +9,7 @@ if (!is_admin($pdo, $userId)) {
 }
 
 erp_run_phase1_migrations($pdo);
+erp_migrate_ink_types($pdo);
 $flashSuccess = null;
 $flashError = null;
 

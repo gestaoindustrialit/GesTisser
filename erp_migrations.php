@@ -21,6 +21,30 @@ function erp_column_exists(PDO $pdo, string $table, string $column): bool
     return false;
 }
 
+/**
+ * Installs the ink classification independently from the large phase-one migration.
+ *
+ * config.php may already have marked the phase-one migration as executed before an
+ * ERP route is loaded. Keeping this small migration idempotent prevents a rolling
+ * deployment from querying a table that has not reached the database yet.
+ */
+function erp_migrate_ink_types(PDO $pdo)
+{
+    $pdo->exec('CREATE TABLE IF NOT EXISTS erp_ink_types (id INTEGER PRIMARY KEY AUTOINCREMENT, code TEXT NOT NULL UNIQUE, name TEXT NOT NULL, icon TEXT NOT NULL DEFAULT "bi-droplet-fill", is_active INTEGER NOT NULL DEFAULT 1, created_at DATETIME DEFAULT CURRENT_TIMESTAMP, updated_at DATETIME DEFAULT CURRENT_TIMESTAMP)');
+    if (erp_table_exists($pdo, 'erp_raw_materials')) {
+        foreach (['is_water_based_ink'=>'INTEGER NOT NULL DEFAULT 0','is_solvent_based_ink'=>'INTEGER NOT NULL DEFAULT 0','ink_type_id'=>'INTEGER REFERENCES erp_ink_types(id) ON DELETE SET NULL'] as $column=>$definition) {
+            if (!erp_column_exists($pdo, 'erp_raw_materials', $column)) $pdo->exec('ALTER TABLE erp_raw_materials ADD COLUMN '.$column.' '.$definition);
+        }
+    }
+    $save=$pdo->prepare('INSERT OR IGNORE INTO erp_ink_types(code,name,icon,is_active) VALUES (?,?,?,1)');
+    $save->execute(['AGUA','Tinta de água','bi-droplet-fill']);
+    $save->execute(['SOLVENTE','Tinta de solvente','bi-bucket-fill']);
+    if (erp_table_exists($pdo, 'erp_raw_materials')) {
+        $pdo->exec('UPDATE erp_raw_materials SET ink_type_id=(SELECT id FROM erp_ink_types WHERE code="AGUA") WHERE ink_type_id IS NULL AND is_water_based_ink=1');
+        $pdo->exec('UPDATE erp_raw_materials SET ink_type_id=(SELECT id FROM erp_ink_types WHERE code="SOLVENTE") WHERE ink_type_id IS NULL AND is_solvent_based_ink=1');
+    }
+}
+
 function erp_migrate_supplier_columns(PDO $pdo)
 {
     $supplierColumns = [
@@ -254,11 +278,7 @@ function erp_run_phase1_migrations(PDO $pdo)
                 $pdo->exec('ALTER TABLE erp_raw_materials ADD COLUMN ' . $column . ' ' . $definition);
             }
         }
-        $saveInkType=$pdo->prepare('INSERT OR IGNORE INTO erp_ink_types(code,name,icon,is_active) VALUES (?,?,?,1)');
-        $saveInkType->execute(['AGUA','Tinta de água','bi-droplet-fill']);
-        $saveInkType->execute(['SOLVENTE','Tinta de solvente','bi-bucket-fill']);
-        $pdo->exec('UPDATE erp_raw_materials SET ink_type_id=(SELECT id FROM erp_ink_types WHERE code="AGUA") WHERE ink_type_id IS NULL AND is_water_based_ink=1');
-        $pdo->exec('UPDATE erp_raw_materials SET ink_type_id=(SELECT id FROM erp_ink_types WHERE code="SOLVENTE") WHERE ink_type_id IS NULL AND is_solvent_based_ink=1');
+        erp_migrate_ink_types($pdo);
         if (!erp_column_exists($pdo, 'erp_production_orders', 'finished_product_id')) {
             $pdo->exec('ALTER TABLE erp_production_orders ADD COLUMN finished_product_id INTEGER REFERENCES erp_finished_products(id)');
         }

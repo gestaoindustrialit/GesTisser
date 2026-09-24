@@ -31,6 +31,7 @@ if ($requestedPage !== 'machines' && $requestedPage !== 'machine_attachment') {
 }
 require_login();
 erp_run_phase1_migrations($pdo);
+erp_migrate_ink_types($pdo);
 $userId = (int) $_SESSION['user_id'];
 $user = current_user($pdo) ?: [];
 $isAdmin = is_admin($pdo, $userId);
