@@ -69,7 +69,7 @@ function gt_erp_migrate_supplier_columns(PDO $pdo)
         END');
 }
 
-function erp_migrate_material_type_columns(PDO $pdo)
+function gt_erp_migrate_material_type_columns(PDO $pdo)
 {
     if (!gt_erp_migration_column_exists($pdo, 'erp_material_types', 'is_active')) {
         $pdo->exec('ALTER TABLE erp_material_types ADD COLUMN is_active INTEGER NOT NULL DEFAULT 1');
@@ -169,7 +169,7 @@ function erp_run_phase1_migrations(PDO $pdo)
         foreach ($sql as $statement) { $pdo->exec($statement); }
         /* The original material type table only contained code and name. Settings now
            allows administrators to deactivate types, including on legacy databases. */
-        erp_migrate_material_type_columns($pdo);
+        gt_erp_migrate_material_type_columns($pdo);
         erp_migrate_work_centers($pdo);
         /* Supplier master data used by Purchasing. Keep the original compact table
            compatible while extending it with the fields from the current supplier sheet. */

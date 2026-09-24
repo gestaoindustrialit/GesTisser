@@ -12,6 +12,10 @@ function erp_migrate_supplier_columns(PDO $pdo): void
 {
 }
 
+function erp_migrate_material_type_columns(PDO $pdo): void
+{
+}
+
 require_once dirname(__DIR__) . '/erp_migrations.php';
 
 $pdo = new PDO('sqlite::memory:');
@@ -23,7 +27,7 @@ $pdo->exec('CREATE TABLE erp_material_types (
 )');
 $pdo->exec("INSERT INTO erp_material_types(code,name) VALUES ('RF','Ráfia')");
 
-erp_migrate_material_type_columns($pdo);
+gt_erp_migrate_material_type_columns($pdo);
 
 $legacy = $pdo->query("SELECT code,name,is_active FROM erp_material_types WHERE code='RF'")->fetch(PDO::FETCH_ASSOC);
 if (!$legacy || (int) $legacy['is_active'] !== 1) {
@@ -36,6 +40,6 @@ if ((int) $new !== 1) {
     throw new RuntimeException('O valor predefinido de um novo tipo de material não é ativo.');
 }
 
-erp_migrate_material_type_columns($pdo);
+gt_erp_migrate_material_type_columns($pdo);
 
 echo "Migração de tipos de material legados validada.\n";
