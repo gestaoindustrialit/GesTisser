@@ -1,5 +1,5 @@
 -- Migration documental de referência. A aplicação executa as mesmas alterações
--- idempotentes através de erp_run_phase1_migrations(). Não elimina nem renomeia dados.
+-- idempotentes através de gt_erp_run_phase1_migrations(). Não elimina nem renomeia dados.
 PRAGMA foreign_keys = ON;
 CREATE TABLE IF NOT EXISTS erp_article_technical_sheet_versions (id INTEGER PRIMARY KEY AUTOINCREMENT, finished_product_id INTEGER NOT NULL, version_no INTEGER NOT NULL, status TEXT NOT NULL DEFAULT 'draft' CHECK(status IN ('draft','approved','obsolete')), effective_from TEXT, snapshot_json TEXT NOT NULL, notes TEXT, created_by INTEGER, approved_by INTEGER, created_at DATETIME DEFAULT CURRENT_TIMESTAMP, approved_at DATETIME, UNIQUE(finished_product_id,version_no), FOREIGN KEY(finished_product_id) REFERENCES erp_finished_products(id) ON DELETE CASCADE);
 CREATE TABLE IF NOT EXISTS erp_production_order_snapshots (id INTEGER PRIMARY KEY AUTOINCREMENT, production_order_id INTEGER NOT NULL UNIQUE, technical_sheet_version_id INTEGER, snapshot_json TEXT NOT NULL, created_by INTEGER, created_at DATETIME DEFAULT CURRENT_TIMESTAMP, FOREIGN KEY(production_order_id) REFERENCES erp_production_orders(id) ON DELETE CASCADE, FOREIGN KEY(technical_sheet_version_id) REFERENCES erp_article_technical_sheet_versions(id) ON DELETE RESTRICT);

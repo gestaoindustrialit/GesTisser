@@ -4,7 +4,7 @@ require_once __DIR__ . '/erp_migrations.php';
 require_once __DIR__ . '/app/Services/ArticleDocument.php';
 
 require_login();
-erp_run_phase1_migrations($pdo);
+gt_erp_run_phase1_migrations($pdo);
 
 $stmt = $pdo->prepare('SELECT * FROM erp_technical_sheets WHERE id = ?');
 $stmt->execute([(int) ($_GET['id'] ?? 0)]);

@@ -18,7 +18,7 @@ $pdo->exec('CREATE TABLE erp_suppliers (
 )');
 $pdo->exec("INSERT INTO erp_suppliers(code,name) VALUES ('LEGACY','Fornecedor legado')");
 
-erp_migrate_supplier_columns($pdo);
+gt_erp_migrate_supplier_columns($pdo);
 
 $legacy = $pdo->query("SELECT * FROM erp_suppliers WHERE code='LEGACY'")->fetch(PDO::FETCH_ASSOC);
 if (!$legacy || !array_key_exists('address_2', $legacy) || empty($legacy['created_at']) || empty($legacy['updated_at'])) {

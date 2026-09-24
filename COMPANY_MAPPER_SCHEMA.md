@@ -25,7 +25,7 @@ A referência sanitizada em `docs/mapper-reference/` descreve entidades `people`
 
 O ficheiro `company_mapper_migrations.php` define `company_mapper_run_migrations(PDO $pdo)`, ativa `PRAGMA foreign_keys = ON`, verifica `sqlite_master`, `PRAGMA table_info` e `PRAGMA index_list`, controla a versão em `app_settings.company_mapper_schema_version` e cria backup antes da primeira alteração real em `backups/company_mapper_YYYYmmdd_HHMMSS.sqlite`.
 
-A integração ocorre em `config.php` depois das tabelas base ERP/RH e depois de `erp_run_phase1_migrations($pdo)`.
+A integração ocorre em `config.php` depois das tabelas base ERP/RH e depois de `gt_erp_run_phase1_migrations($pdo)`.
 
 ## Enriquecimentos de tabelas existentes
 

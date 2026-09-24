@@ -5,7 +5,7 @@ require_once __DIR__.'/../helpers.php';
 require_once __DIR__.'/../erp_migrations.php';
 require_once __DIR__.'/../app/Services/RoutingService.php';
 
-erp_run_phase1_migrations($pdo);
+gt_erp_run_phase1_migrations($pdo);
 $tag='META'.bin2hex(random_bytes(3));
 $pdo->beginTransaction();
 try {

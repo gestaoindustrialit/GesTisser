@@ -3,7 +3,7 @@ require_once __DIR__.'/helpers.php';
 require_once __DIR__.'/erp_migrations.php';
 require_once __DIR__.'/app/Services/BusinessIntelligence.php';
 require_login();
-erp_run_phase1_migrations($pdo);
+gt_erp_run_phase1_migrations($pdo);
 $user=current_user($pdo)?:[];
 if(!erp_user_can($pdo,$user,'erp.bi.view')){http_response_code(403);exit('Acesso reservado ao Business Intelligence.');}
 $financial=erp_user_can($pdo,$user,'erp.bi.financial');

@@ -8,7 +8,7 @@ if (!is_admin($pdo, $userId)) {
     redirect('dashboard.php');
 }
 
-erp_run_phase1_migrations($pdo);
+gt_erp_run_phase1_migrations($pdo);
 erp_migrate_ink_types($pdo);
 $flashSuccess = null;
 $flashError = null;

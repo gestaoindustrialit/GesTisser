@@ -2,7 +2,7 @@
 require_once __DIR__ . '/helpers.php';
 require_once __DIR__ . '/erp_migrations.php';
 require_login();
-erp_run_phase1_migrations($pdo);
+gt_erp_run_phase1_migrations($pdo);
 $user = current_user($pdo) ?: [];
 if (!is_admin($pdo, (int) ($_SESSION['user_id'] ?? 0)) && !erp_user_can($pdo, $user, 'erp.view') && !erp_user_can($pdo, $user, 'erp.shopfloor.execute')) {
     http_response_code(403);
