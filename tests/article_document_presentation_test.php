@@ -6,8 +6,8 @@ if (preg_match('/\b(?:public|protected|private)\s+const\s+MAX_UPLOAD_BYTES\b/', 
     throw new RuntimeException('A constante do limite deve manter compatibilidade com PHP 7.0.');
 }
 
-if (ArticleDocument::MAX_UPLOAD_BYTES !== 10485760) {
-    throw new RuntimeException('O limite dos documentos do artigo deve ser exatamente 10 MiB.');
+if (ArticleDocument::MAX_UPLOAD_BYTES !== 20971520) {
+    throw new RuntimeException('O limite dos documentos do artigo deve ser exatamente 20 MiB.');
 }
 ArticleDocument::validateUploadSize(['error' => UPLOAD_ERR_OK, 'size' => ArticleDocument::MAX_UPLOAD_BYTES]);
 foreach ([
@@ -17,9 +17,9 @@ foreach ([
 ] as $oversizedUpload) {
     try {
         ArticleDocument::validateUploadSize($oversizedUpload);
-        throw new RuntimeException('Um documento acima de 10 MiB foi aceite.');
+        throw new RuntimeException('Um documento acima de 20 MiB foi aceite.');
     } catch (RuntimeException $exception) {
-        if ($exception->getMessage() !== 'Cada documento do artigo deve ter no máximo 10 MB.') {
+        if ($exception->getMessage() !== 'Cada documento do artigo deve ter no máximo 20 MB.') {
             throw $exception;
         }
     }

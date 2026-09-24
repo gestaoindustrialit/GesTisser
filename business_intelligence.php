@@ -5,8 +5,8 @@ require_once __DIR__.'/app/Services/BusinessIntelligence.php';
 require_login();
 gt_erp_run_phase1_migrations($pdo);
 $user=current_user($pdo)?:[];
-if(!erp_user_can($pdo,$user,'erp.bi.view')){http_response_code(403);exit('Acesso reservado ao Business Intelligence.');}
-$financial=erp_user_can($pdo,$user,'erp.bi.financial');
+if(!gt_erp_user_can($pdo,$user,'erp.bi.view')){http_response_code(403);exit('Acesso reservado ao Business Intelligence.');}
+$financial=gt_erp_user_can($pdo,$user,'erp.bi.financial');
 $bi=new BusinessIntelligence($pdo,$_GET,$financial);
 
 if(($_GET['format']??'')==='json'){
@@ -15,7 +15,7 @@ if(($_GET['format']??'')==='json'){
     echo json_encode($bi->payload(),JSON_UNESCAPED_UNICODE|JSON_UNESCAPED_SLASHES);exit;
 }
 if(($_GET['format']??'')==='csv'){
-    if(!erp_user_can($pdo,$user,'erp.reports_export')){http_response_code(403);exit('Sem permissão para exportar.');}
+    if(!gt_erp_user_can($pdo,$user,'erp.reports_export')){http_response_code(403);exit('Sem permissão para exportar.');}
     $payload=$bi->payload();header('Content-Type: text/csv; charset=UTF-8');header('Content-Disposition: attachment; filename="bi_ordens_'.date('Ymd_His').'.csv"');
     $out=fopen('php://output','wb');fwrite($out,"\xEF\xBB\xBF");fputcsv($out,['OF','Cliente','Artigo','Estado','Planeado','Produzido','Prazo'],';');
     foreach($payload['details'] as $r)fputcsv($out,[$r['order_number'],$r['customer'],$r['article'],$r['status'],$r['planned_quantity'],$r['produced_quantity'],$r['due_date']],';');fclose($out);exit;

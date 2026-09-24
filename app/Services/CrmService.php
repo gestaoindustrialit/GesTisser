@@ -6,8 +6,8 @@ class CrmService
     private $pdo;
     private $user;
     public function __construct(PDO $pdo, array $user) { $this->pdo=$pdo; $this->user=$user; }
-    public function canView(): bool { return (int)($this->user['is_admin']??0)===1 || erp_user_can($this->pdo,$this->user,'crm.view'); }
-    public function isAdmin(): bool { return (int)($this->user['is_admin']??0)===1 || erp_user_can($this->pdo,$this->user,'crm.admin'); }
+    public function canView(): bool { return (int)($this->user['is_admin']??0)===1 || gt_erp_user_can($this->pdo,$this->user,'crm.view'); }
+    public function isAdmin(): bool { return (int)($this->user['is_admin']??0)===1 || gt_erp_user_can($this->pdo,$this->user,'crm.admin'); }
     public function visibilitySql(string $alias='l'): array {
         if ($this->isAdmin()) return ['1=1',[]];
         return ['('.$alias.'.visibility="shared" OR '.$alias.'.created_by=? OR '.$alias.'.assigned_to=?)',[(int)$this->user['id'],(int)$this->user['id']]];

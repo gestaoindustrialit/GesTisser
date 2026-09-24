@@ -13,6 +13,11 @@ function erp_default_permissions(): array
     return ['legacy.permission' => 'Legacy permission'];
 }
 
+function erp_user_can(PDO $pdo, array $user, string $permission): bool
+{
+    return false;
+}
+
 require_once dirname(__DIR__) . '/erp_migrations.php';
 
 if (!function_exists('gt_erp_run_phase1_migrations')) {
@@ -25,6 +30,11 @@ if (!function_exists('gt_erp_default_permissions')) {
     exit(1);
 }
 
+if (!function_exists('gt_erp_user_can')) {
+    fwrite(STDERR, "The namespaced ERP permission checker was not loaded.\n");
+    exit(1);
+}
+
 $reflection = new ReflectionFunction('erp_run_phase1_migrations');
 if ($reflection->getFileName() !== __FILE__) {
     fwrite(STDERR, "The legacy page migration function was unexpectedly replaced.\n");
@@ -34,6 +44,12 @@ if ($reflection->getFileName() !== __FILE__) {
 $permissionsReflection = new ReflectionFunction('erp_default_permissions');
 if ($permissionsReflection->getFileName() !== __FILE__) {
     fwrite(STDERR, "The legacy permissions helper was unexpectedly replaced.\n");
+    exit(1);
+}
+
+$userCanReflection = new ReflectionFunction('erp_user_can');
+if ($userCanReflection->getFileName() !== __FILE__) {
+    fwrite(STDERR, "The legacy permission checker was unexpectedly replaced.\n");
     exit(1);
 }
 
