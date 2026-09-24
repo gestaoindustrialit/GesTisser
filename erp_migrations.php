@@ -6,14 +6,14 @@ if (defined('GESTISSER_ERP_MIGRATIONS_LOADED')) {
 }
 define('GESTISSER_ERP_MIGRATIONS_LOADED', true);
 
-function erp_table_exists(PDO $pdo, string $table): bool
+function gt_erp_migration_table_exists(PDO $pdo, string $table): bool
 {
     $stmt = $pdo->prepare("SELECT 1 FROM sqlite_master WHERE type='table' AND name=? LIMIT 1");
     $stmt->execute([$table]);
     return (bool) $stmt->fetchColumn();
 }
 
-function erp_column_exists(PDO $pdo, string $table, string $column): bool
+function gt_erp_migration_column_exists(PDO $pdo, string $table, string $column): bool
 {
     foreach ($pdo->query('PRAGMA table_info(' . $table . ')')->fetchAll(PDO::FETCH_ASSOC) as $info) {
         if ((string) $info['name'] === $column) { return true; }
@@ -31,21 +31,21 @@ function erp_column_exists(PDO $pdo, string $table, string $column): bool
 function erp_migrate_ink_types(PDO $pdo)
 {
     $pdo->exec('CREATE TABLE IF NOT EXISTS erp_ink_types (id INTEGER PRIMARY KEY AUTOINCREMENT, code TEXT NOT NULL UNIQUE, name TEXT NOT NULL, icon TEXT NOT NULL DEFAULT "bi-droplet-fill", is_active INTEGER NOT NULL DEFAULT 1, created_at DATETIME DEFAULT CURRENT_TIMESTAMP, updated_at DATETIME DEFAULT CURRENT_TIMESTAMP)');
-    if (erp_table_exists($pdo, 'erp_raw_materials')) {
+    if (gt_erp_migration_table_exists($pdo, 'erp_raw_materials')) {
         foreach (['is_water_based_ink'=>'INTEGER NOT NULL DEFAULT 0','is_solvent_based_ink'=>'INTEGER NOT NULL DEFAULT 0','ink_type_id'=>'INTEGER REFERENCES erp_ink_types(id) ON DELETE SET NULL'] as $column=>$definition) {
-            if (!erp_column_exists($pdo, 'erp_raw_materials', $column)) $pdo->exec('ALTER TABLE erp_raw_materials ADD COLUMN '.$column.' '.$definition);
+            if (!gt_erp_migration_column_exists($pdo, 'erp_raw_materials', $column)) $pdo->exec('ALTER TABLE erp_raw_materials ADD COLUMN '.$column.' '.$definition);
         }
     }
     $save=$pdo->prepare('INSERT OR IGNORE INTO erp_ink_types(code,name,icon,is_active) VALUES (?,?,?,1)');
     $save->execute(['AGUA','Tinta de água','bi-droplet-fill']);
     $save->execute(['SOLVENTE','Tinta de solvente','bi-bucket-fill']);
-    if (erp_table_exists($pdo, 'erp_raw_materials')) {
+    if (gt_erp_migration_table_exists($pdo, 'erp_raw_materials')) {
         $pdo->exec('UPDATE erp_raw_materials SET ink_type_id=(SELECT id FROM erp_ink_types WHERE code="AGUA") WHERE ink_type_id IS NULL AND is_water_based_ink=1');
         $pdo->exec('UPDATE erp_raw_materials SET ink_type_id=(SELECT id FROM erp_ink_types WHERE code="SOLVENTE") WHERE ink_type_id IS NULL AND is_solvent_based_ink=1');
     }
 }
 
-function erp_migrate_supplier_columns(PDO $pdo)
+function gt_erp_migrate_supplier_columns(PDO $pdo)
 {
     $supplierColumns = [
         'address_2'=>'TEXT', 'postal_code'=>'TEXT', 'mobile'=>'TEXT', 'contact_name'=>'TEXT',
@@ -56,7 +56,7 @@ function erp_migrate_supplier_columns(PDO $pdo)
         'created_at'=>'DATETIME', 'updated_at'=>'DATETIME'
     ];
     foreach ($supplierColumns as $column=>$definition) {
-        if (!erp_column_exists($pdo, 'erp_suppliers', $column)) {
+        if (!gt_erp_migration_column_exists($pdo, 'erp_suppliers', $column)) {
             $pdo->exec('ALTER TABLE erp_suppliers ADD COLUMN '.$column.' '.$definition);
         }
     }
@@ -69,14 +69,14 @@ function erp_migrate_supplier_columns(PDO $pdo)
         END');
 }
 
-function erp_migrate_material_type_columns(PDO $pdo)
+function gt_erp_migrate_material_type_columns(PDO $pdo)
 {
-    if (!erp_column_exists($pdo, 'erp_material_types', 'is_active')) {
+    if (!gt_erp_migration_column_exists($pdo, 'erp_material_types', 'is_active')) {
         $pdo->exec('ALTER TABLE erp_material_types ADD COLUMN is_active INTEGER NOT NULL DEFAULT 1');
     }
 }
 
-function erp_migrate_work_centers(PDO $pdo)
+function gt_erp_migrate_work_centers(PDO $pdo)
 {
     $pdo->exec('CREATE TABLE IF NOT EXISTS erp_printers (id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT NOT NULL UNIQUE, network_uri TEXT NOT NULL UNIQUE, location TEXT, driver_name TEXT, is_active INTEGER NOT NULL DEFAULT 1, created_at DATETIME DEFAULT CURRENT_TIMESTAMP, updated_at DATETIME DEFAULT CURRENT_TIMESTAMP)');
     $columns = [
@@ -87,7 +87,7 @@ function erp_migrate_work_centers(PDO $pdo)
         'efficiency_percent' => 'REAL NOT NULL DEFAULT 100',
     ];
     foreach ($columns as $column => $definition) {
-        if (!erp_column_exists($pdo, 'erp_work_centers', $column)) {
+        if (!gt_erp_migration_column_exists($pdo, 'erp_work_centers', $column)) {
             $pdo->exec('ALTER TABLE erp_work_centers ADD COLUMN ' . $column . ' ' . $definition);
         }
     }
@@ -95,7 +95,7 @@ function erp_migrate_work_centers(PDO $pdo)
     $pdo->exec('CREATE INDEX IF NOT EXISTS idx_erp_work_centers_printer ON erp_work_centers(default_printer_id)');
 }
 
-function erp_migrate_document_catalog(PDO $pdo)
+function gt_erp_migrate_document_catalog(PDO $pdo)
 {
     $pdo->exec('CREATE TABLE IF NOT EXISTS erp_document_catalog (id INTEGER PRIMARY KEY AUTOINCREMENT, code TEXT NOT NULL UNIQUE, document_number TEXT NOT NULL UNIQUE, name TEXT NOT NULL, module TEXT NOT NULL, output_format TEXT NOT NULL, generation_route TEXT NOT NULL, is_active INTEGER NOT NULL DEFAULT 1, updated_by INTEGER, created_at DATETIME DEFAULT CURRENT_TIMESTAMP, updated_at DATETIME DEFAULT CURRENT_TIMESTAMP, FOREIGN KEY(updated_by) REFERENCES users(id) ON DELETE SET NULL)');
     $document = $pdo->prepare('INSERT OR IGNORE INTO erp_document_catalog(code,document_number,name,module,output_format,generation_route) VALUES (?,?,?,?,?,?)');
@@ -104,7 +104,7 @@ function erp_migrate_document_catalog(PDO $pdo)
     ] as $controlledDocument) { $document->execute($controlledDocument); }
 }
 
-function erp_backup_database_once(PDO $pdo)
+function gt_erp_backup_database_once(PDO $pdo)
 {
     static $backupPath = null;
     if ($backupPath !== null) {
@@ -131,9 +131,9 @@ function erp_run_phase1_migrations(PDO $pdo)
     }
     $ran = true;
 
-    $needsBackup = !erp_table_exists($pdo, 'erp_stock_movements') || !erp_table_exists($pdo, 'erp_raw_materials');
+    $needsBackup = !gt_erp_migration_table_exists($pdo, 'erp_stock_movements') || !gt_erp_migration_table_exists($pdo, 'erp_raw_materials');
     if ($needsBackup) {
-        erp_backup_database_once($pdo);
+        gt_erp_backup_database_once($pdo);
     }
 
     $pdo->beginTransaction();
@@ -169,18 +169,18 @@ function erp_run_phase1_migrations(PDO $pdo)
         foreach ($sql as $statement) { $pdo->exec($statement); }
         /* The original material type table only contained code and name. Settings now
            allows administrators to deactivate types, including on legacy databases. */
-        erp_migrate_material_type_columns($pdo);
-        erp_migrate_work_centers($pdo);
+        gt_erp_migrate_material_type_columns($pdo);
+        gt_erp_migrate_work_centers($pdo);
         /* Supplier master data used by Purchasing. Keep the original compact table
            compatible while extending it with the fields from the current supplier sheet. */
-        erp_migrate_supplier_columns($pdo);
-        if (!erp_column_exists($pdo, 'erp_stock_movements', 'order_reference')) {
+        gt_erp_migrate_supplier_columns($pdo);
+        if (!gt_erp_migration_column_exists($pdo, 'erp_stock_movements', 'order_reference')) {
             $pdo->exec('ALTER TABLE erp_stock_movements ADD COLUMN order_reference TEXT');
         }
-        if (!erp_column_exists($pdo, 'erp_stock_movements', 'purchase_order_line_id')) {
+        if (!gt_erp_migration_column_exists($pdo, 'erp_stock_movements', 'purchase_order_line_id')) {
             $pdo->exec('ALTER TABLE erp_stock_movements ADD COLUMN purchase_order_line_id INTEGER REFERENCES erp_purchase_order_lines(id)');
         }
-        if (!erp_column_exists($pdo, 'erp_stock_movements', 'labels_to_print')) {
+        if (!gt_erp_migration_column_exists($pdo, 'erp_stock_movements', 'labels_to_print')) {
             $pdo->exec('ALTER TABLE erp_stock_movements ADD COLUMN labels_to_print INTEGER NOT NULL DEFAULT 0');
         }
         $supplierSeed = [
@@ -228,11 +228,11 @@ function erp_run_phase1_migrations(PDO $pdo)
         $insertOperationType=$pdo->prepare('INSERT OR IGNORE INTO erp_operation_types(code,name) VALUES (?,?)');
         foreach([['production','Produção'],['control','Controlo'],['transport','Transporte'],['wait','Espera'],['subcontract','Subcontratação'],['other','Outro']] as $operationType)$insertOperationType->execute($operationType);
         $operationColumns=['description'=>'TEXT','operation_type'=>'TEXT NOT NULL DEFAULT "production"','default_instructions'=>'TEXT','default_confirmation_required'=>'INTEGER NOT NULL DEFAULT 1','setup_minutes'=>'REAL NOT NULL DEFAULT 0','time_per_unit'=>'REAL NOT NULL DEFAULT 0','time_unit'=>'TEXT NOT NULL DEFAULT "seconds"','production_unit'=>'TEXT NOT NULL DEFAULT "unit"','min_operators'=>'INTEGER NOT NULL DEFAULT 1','requires_good_quantity'=>'INTEGER NOT NULL DEFAULT 1','requires_waste'=>'INTEGER NOT NULL DEFAULT 1','requires_waste_reason'=>'INTEGER NOT NULL DEFAULT 1','requires_quality'=>'INTEGER NOT NULL DEFAULT 0','checklist_template_id'=>'INTEGER REFERENCES checklist_templates(id) ON DELETE SET NULL','checklist_timing'=>'TEXT','notes'=>'TEXT','created_by'=>'INTEGER REFERENCES users(id) ON DELETE SET NULL','updated_by'=>'INTEGER REFERENCES users(id) ON DELETE SET NULL','created_at'=>'DATETIME DEFAULT CURRENT_TIMESTAMP','updated_at'=>'DATETIME DEFAULT CURRENT_TIMESTAMP'];
-        foreach($operationColumns as $column=>$definition){if(!erp_column_exists($pdo,'erp_operations',$column))$pdo->exec('ALTER TABLE erp_operations ADD COLUMN '.$column.' '.$definition);}
+        foreach($operationColumns as $column=>$definition){if(!gt_erp_migration_column_exists($pdo,'erp_operations',$column))$pdo->exec('ALTER TABLE erp_operations ADD COLUMN '.$column.' '.$definition);}
         foreach($pdo->query('SELECT DISTINCT operation_type FROM erp_operations WHERE operation_type IS NOT NULL AND trim(operation_type)<>""')->fetchAll(PDO::FETCH_COLUMN) as $operationTypeCode)$insertOperationType->execute([(string)$operationTypeCode,ucfirst((string)$operationTypeCode)]);
         $poOperationColumns=['routing_step_id'=>'INTEGER REFERENCES erp_article_routing_steps(id) ON DELETE SET NULL','operation_code'=>'TEXT','operation_name'=>'TEXT','work_center_id'=>'INTEGER REFERENCES erp_work_centers(id) ON DELETE SET NULL','primary_machine_id'=>'INTEGER REFERENCES erp_machines(id) ON DELETE SET NULL','selected_machine_id'=>'INTEGER REFERENCES erp_machines(id) ON DELETE SET NULL','allowed_machine_ids_json'=>'TEXT','operators_count'=>'INTEGER NOT NULL DEFAULT 1','setup_minutes'=>'REAL NOT NULL DEFAULT 0','run_value'=>'REAL NOT NULL DEFAULT 0','calculation_unit'=>'TEXT','base_quantity'=>'REAL NOT NULL DEFAULT 1','waste_percent'=>'REAL NOT NULL DEFAULT 0','wait_minutes'=>'REAL NOT NULL DEFAULT 0','transfer_minutes'=>'REAL NOT NULL DEFAULT 0','parallel_allowed'=>'INTEGER NOT NULL DEFAULT 0','instructions'=>'TEXT','quality_points'=>'TEXT','confirmation_required'=>'INTEGER NOT NULL DEFAULT 1','checklist_template_id'=>'INTEGER REFERENCES checklist_templates(id) ON DELETE SET NULL','checklist_timing'=>'TEXT','snapshot_json'=>'TEXT'];
-        foreach($poOperationColumns as $column=>$definition){if(!erp_column_exists($pdo,'erp_production_order_operations',$column))$pdo->exec('ALTER TABLE erp_production_order_operations ADD COLUMN '.$column.' '.$definition);}
-        foreach(['selected_machine_id'=>'INTEGER REFERENCES erp_machines(id) ON DELETE SET NULL','status'=>'TEXT NOT NULL DEFAULT "running"','paused_at'=>'DATETIME','pause_seconds'=>'INTEGER NOT NULL DEFAULT 0','corrected_by'=>'INTEGER REFERENCES users(id) ON DELETE SET NULL','corrected_at'=>'DATETIME'] as $column=>$definition){if(!erp_column_exists($pdo,'erp_operation_time_entries',$column))$pdo->exec('ALTER TABLE erp_operation_time_entries ADD COLUMN '.$column.' '.$definition);}
+        foreach($poOperationColumns as $column=>$definition){if(!gt_erp_migration_column_exists($pdo,'erp_production_order_operations',$column))$pdo->exec('ALTER TABLE erp_production_order_operations ADD COLUMN '.$column.' '.$definition);}
+        foreach(['selected_machine_id'=>'INTEGER REFERENCES erp_machines(id) ON DELETE SET NULL','status'=>'TEXT NOT NULL DEFAULT "running"','paused_at'=>'DATETIME','pause_seconds'=>'INTEGER NOT NULL DEFAULT 0','corrected_by'=>'INTEGER REFERENCES users(id) ON DELETE SET NULL','corrected_at'=>'DATETIME'] as $column=>$definition){if(!gt_erp_migration_column_exists($pdo,'erp_operation_time_entries',$column))$pdo->exec('ALTER TABLE erp_operation_time_entries ADD COLUMN '.$column.' '.$definition);}
         foreach(['idx_routing_article ON erp_article_routings(finished_product_id)','idx_routing_version_status ON erp_article_routing_versions(routing_id,status,effective_from)','idx_routing_steps_version ON erp_article_routing_steps(routing_version_id,sort_order)','idx_po_operations_order ON erp_production_order_operations(production_order_id,sequence_no)','idx_execution_open ON erp_operation_time_entries(production_order_operation_id,ended_at)'] as $index){$pdo->exec('CREATE INDEX IF NOT EXISTS '.$index);}
         $customerColumns = [
             'country_prefix'=>'TEXT', 'mobile'=>'TEXT', 'address_2'=>'TEXT', 'city'=>'TEXT',
@@ -241,7 +241,7 @@ function erp_run_phase1_migrations(PDO $pdo)
             'updated_at'=>'DATETIME DEFAULT CURRENT_TIMESTAMP'
         ];
         foreach ($customerColumns as $column=>$definition) {
-            if (!erp_column_exists($pdo,'erp_customers',$column)) { $pdo->exec('ALTER TABLE erp_customers ADD COLUMN '.$column.' '.$definition); }
+            if (!gt_erp_migration_column_exists($pdo,'erp_customers',$column)) { $pdo->exec('ALTER TABLE erp_customers ADD COLUMN '.$column.' '.$definition); }
         }
         /* Article master data owns every stable value used by a technical sheet. Order-only
            values stay on the OF and the generated snapshot, preserving historical documents. */
@@ -261,7 +261,7 @@ function erp_run_phase1_migrations(PDO $pdo)
             'analysis_air_permeability' => 'TEXT'
         ];
         foreach ($articleColumns as $column => $definition) {
-            if (!erp_column_exists($pdo, 'erp_finished_products', $column)) {
+            if (!gt_erp_migration_column_exists($pdo, 'erp_finished_products', $column)) {
                 $pdo->exec('ALTER TABLE erp_finished_products ADD COLUMN ' . $column . ' ' . $definition);
             }
         }
@@ -274,16 +274,16 @@ function erp_run_phase1_migrations(PDO $pdo)
             'ink_type_id' => 'INTEGER REFERENCES erp_ink_types(id) ON DELETE SET NULL'
         ];
         foreach ($rawMaterialColumns as $column => $definition) {
-            if (!erp_column_exists($pdo, 'erp_raw_materials', $column)) {
+            if (!gt_erp_migration_column_exists($pdo, 'erp_raw_materials', $column)) {
                 $pdo->exec('ALTER TABLE erp_raw_materials ADD COLUMN ' . $column . ' ' . $definition);
             }
         }
         erp_migrate_ink_types($pdo);
-        if (!erp_column_exists($pdo, 'erp_production_orders', 'finished_product_id')) {
+        if (!gt_erp_migration_column_exists($pdo, 'erp_production_orders', 'finished_product_id')) {
             $pdo->exec('ALTER TABLE erp_production_orders ADD COLUMN finished_product_id INTEGER REFERENCES erp_finished_products(id)');
         }
         foreach (['delivery_address_id'=>'INTEGER REFERENCES erp_customer_delivery_addresses(id) ON DELETE SET NULL', 'delivery_address_snapshot'=>'TEXT', 'transporter'=>'TEXT'] as $column => $definition) {
-            if (!erp_column_exists($pdo, 'erp_production_orders', $column)) {
+            if (!gt_erp_migration_column_exists($pdo, 'erp_production_orders', $column)) {
                 $pdo->exec('ALTER TABLE erp_production_orders ADD COLUMN ' . $column . ' ' . $definition);
             }
         }
@@ -302,19 +302,19 @@ function erp_run_phase1_migrations(PDO $pdo)
         ];
         foreach ($dossierSql as $statement) { $pdo->exec($statement); }
         foreach (['validated_at'=>'DATETIME','updated_at'=>'DATETIME'] as $column=>$definition) {
-            if (!erp_column_exists($pdo,'erp_production_labels',$column)) $pdo->exec('ALTER TABLE erp_production_labels ADD COLUMN '.$column.' '.$definition);
+            if (!gt_erp_migration_column_exists($pdo,'erp_production_labels',$column)) $pdo->exec('ALTER TABLE erp_production_labels ADD COLUMN '.$column.' '.$definition);
         }
-        if (!erp_column_exists($pdo,'erp_production_label_history','validated_at')) $pdo->exec('ALTER TABLE erp_production_label_history ADD COLUMN validated_at DATETIME');
+        if (!gt_erp_migration_column_exists($pdo,'erp_production_label_history','validated_at')) $pdo->exec('ALTER TABLE erp_production_label_history ADD COLUMN validated_at DATETIME');
         foreach (['technical_sheet_version_id'=>'INTEGER REFERENCES erp_article_technical_sheet_versions(id) ON DELETE RESTRICT','snapshot_id'=>'INTEGER REFERENCES erp_production_order_snapshots(id) ON DELETE RESTRICT','public_token'=>'TEXT','planned_production_date'=>'TEXT','customer_order_reference'=>'TEXT'] as $column=>$definition) {
-            if (!erp_column_exists($pdo,'erp_production_orders',$column)) $pdo->exec('ALTER TABLE erp_production_orders ADD COLUMN '.$column.' '.$definition);
+            if (!gt_erp_migration_column_exists($pdo,'erp_production_orders',$column)) $pdo->exec('ALTER TABLE erp_production_orders ADD COLUMN '.$column.' '.$definition);
         }
-        if (!erp_column_exists($pdo, 'erp_production_orders', 'planning_priority')) {
+        if (!gt_erp_migration_column_exists($pdo, 'erp_production_orders', 'planning_priority')) {
             $pdo->exec('ALTER TABLE erp_production_orders ADD COLUMN planning_priority INTEGER');
             $pdo->exec('UPDATE erp_production_orders SET planning_priority=id WHERE planning_priority IS NULL');
         }
         $pdo->exec('CREATE INDEX IF NOT EXISTS idx_erp_production_planning_priority ON erp_production_orders(planning_priority, due_date)');
         foreach (['raw_material_id'=>'INTEGER REFERENCES erp_raw_materials(id) ON DELETE RESTRICT','lot'=>'TEXT','planned_quantity'=>'REAL NOT NULL DEFAULT 0','source_movement_id'=>'INTEGER REFERENCES erp_stock_movements(id) ON DELETE SET NULL'] as $column=>$definition) {
-            if (!erp_column_exists($pdo,'erp_production_consumptions',$column)) $pdo->exec('ALTER TABLE erp_production_consumptions ADD COLUMN '.$column.' '.$definition);
+            if (!gt_erp_migration_column_exists($pdo,'erp_production_consumptions',$column)) $pdo->exec('ALTER TABLE erp_production_consumptions ADD COLUMN '.$column.' '.$definition);
         }
         $pdo->exec('CREATE INDEX IF NOT EXISTS idx_erp_sheet_versions_article ON erp_article_technical_sheet_versions(finished_product_id,status,effective_from)');
         $pdo->exec('CREATE UNIQUE INDEX IF NOT EXISTS idx_erp_orders_public_token ON erp_production_orders(public_token) WHERE public_token IS NOT NULL');
@@ -339,7 +339,7 @@ function erp_run_phase1_migrations(PDO $pdo)
         foreach(['erp.operations.manage','erp.routings.edit','erp.routings.activate','erp.work_order_routing.edit','erp.execution.correct'] as $permission)$rolePermission->execute(['Chefias',$permission]);
         $seq = $pdo->prepare('INSERT OR IGNORE INTO erp_number_sequences(code,prefix,next_number,padding) VALUES (?,?,?,?)');
         foreach ([['stock_movement','MOV-',1,6],['purchase_order','ENC-',1,5],['raw_material','MP-',1,5],['subsidiary','SUB-',1,5],['consumable','CON-',1,5],['finished_product','PA-',1,5],['customer','CLI-',1,4],['supplier','FOR-',1,4],['work_order','OF-',1,5]] as $s) { $seq->execute($s); }
-        erp_migrate_document_catalog($pdo);
+        gt_erp_migrate_document_catalog($pdo);
         $set = $pdo->prepare('INSERT OR IGNORE INTO erp_settings(key,value) VALUES (?,?)');
         $set->execute(['allow_negative_stock','0']);
         $set->execute(['raw_material_code_pattern','{tipo}{caracteristica}{largura}{gramagem}{seq}']);
