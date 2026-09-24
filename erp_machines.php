@@ -218,7 +218,11 @@ function gt_machine_supplier_ids(PDO $pdo, $submitted): array
 }
 
 /** Replace all suppliers for a machine and keep the legacy searchable label in sync. */
-function gt_save_machine_suppliers(PDO $pdo, int $machineId, array $supplierIds): void
+// Do not declare a void return type here: the production host still runs a
+// PHP version that parses scalar return types but does not recognise `void`.
+// A parse error happens before any HTML is emitted and therefore appears as a
+// completely blank page in the browser.
+function gt_save_machine_suppliers(PDO $pdo, int $machineId, array $supplierIds)
 {
     $pdo->prepare('DELETE FROM erp_machine_suppliers WHERE machine_id=?')->execute([$machineId]);
     $insert = $pdo->prepare('INSERT INTO erp_machine_suppliers(machine_id,supplier_id) VALUES (?,?)');

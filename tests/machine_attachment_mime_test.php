@@ -98,8 +98,8 @@ if ($machineDispatch === false || $erpMigrationsLoad === false || $machineDispat
     throw new RuntimeException('A página de máquinas deve ser encaminhada antes do bootstrap geral do ERP.');
 }
 $machinesSource = file_get_contents(dirname(__DIR__) . '/erp_machines.php');
-if (preg_match('/function\s+gt_machine_relocate_attachments\s*\([^)]*\)\s*:\s*void/', file_get_contents(dirname(__DIR__) . '/app/Services/MachineAttachment.php')) === 1
-    || preg_match('/function\s+gt_save_machine_upload\s*\([^)]*\)\s*:\s*void/', $machinesSource) === 1) {
+if (preg_match('/function\s+\w+\s*\([^)]*\)\s*:\s*void\b/', file_get_contents(dirname(__DIR__) . '/app/Services/MachineAttachment.php')) === 1
+    || preg_match('/function\s+\w+\s*\([^)]*\)\s*:\s*void\b/', $machinesSource) === 1) {
     throw new RuntimeException('As funções de documentos usam o tipo void, incompatível com os servidores PHP legados.');
 }
 if (strpos($machinesSource, "'erp_machine_attachment.php?id='") !== false) {
