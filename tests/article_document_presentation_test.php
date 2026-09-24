@@ -50,7 +50,7 @@ $artwork = ArticleDocument::mainArtwork([
     ['id' => 1, 'file_url' => 'storage/uploads/master.pdf', 'document_type' => 'production_main'],
     ['id' => 2, 'file_url' => 'storage/uploads/photo.jpg', 'document_type' => 'Identificação do artigo'],
 ]);
-if (($artwork['id'] ?? 0) !== 2) throw new RuntimeException('Uma imagem deve ter prioridade sobre a maquete PDF.');
+if (($artwork['id'] ?? 0) !== 1) throw new RuntimeException('A maquete PDF selecionada deve ter prioridade sobre outros anexos.');
 $artwork = ArticleDocument::mainArtwork([
     ['id' => 1, 'file_url' => 'storage/uploads/other.pdf', 'document_type' => 'Identificação do artigo'],
     ['id' => 2, 'file_url' => 'storage/uploads/master.pdf', 'document_type' => 'production_main'],
