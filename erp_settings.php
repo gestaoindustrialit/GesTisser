@@ -24,6 +24,21 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 if($id){$exists=$pdo->prepare('SELECT 1 FROM erp_material_types WHERE id=?');$exists->execute([$id]);if(!$exists->fetchColumn())throw new InvalidArgumentException('Tipo de material inexistente.');$pdo->prepare('UPDATE erp_material_types SET code=?,name=?,is_active=? WHERE id=?')->execute([$code,$name,!empty($_POST['is_active'])?1:0,$id]);}
                 else{$pdo->prepare('INSERT INTO erp_material_types(code,name,is_active) VALUES (?,?,?)')->execute([$code,$name,!empty($_POST['is_active'])?1:0]);$id=(int)$pdo->lastInsertId();}
                 erp_audit($pdo,$userId,(int)($_POST['id']??0)?'update':'create','erp_material_types',$id,[],['code'=>$code,'name'=>$name]);$flashSuccess='Tipo de material guardado com sucesso.';
+            } elseif ($action === 'save_document_control') {
+                $id = (int) ($_POST['id'] ?? 0);
+                $documentNumber = strtoupper(trim((string) ($_POST['document_number'] ?? '')));
+                if ($id < 1 || $documentNumber === '') throw new InvalidArgumentException('Indique o número de controlo do documento.');
+                if (strlen($documentNumber) > 50) throw new InvalidArgumentException('O número do documento não pode exceder 50 caracteres.');
+                $existing = $pdo->prepare('SELECT document_number,is_active FROM erp_document_catalog WHERE id=?');
+                $existing->execute([$id]); $oldDocument = $existing->fetch(PDO::FETCH_ASSOC);
+                if (!$oldDocument) throw new InvalidArgumentException('Documento inexistente no catálogo.');
+                $duplicate = $pdo->prepare('SELECT 1 FROM erp_document_catalog WHERE document_number=? AND id<>?');
+                $duplicate->execute([$documentNumber,$id]);
+                if ($duplicate->fetchColumn()) throw new InvalidArgumentException('Este número de documento já está atribuído a outro registo.');
+                $active = !empty($_POST['is_active']) ? 1 : 0;
+                $pdo->prepare('UPDATE erp_document_catalog SET document_number=?,is_active=?,updated_by=?,updated_at=CURRENT_TIMESTAMP WHERE id=?')->execute([$documentNumber,$active,$userId,$id]);
+                erp_audit($pdo,$userId,'update','erp_document_catalog',$id,$oldDocument,['document_number'=>$documentNumber,'is_active'=>$active]);
+                $flashSuccess = 'Controlo documental atualizado com sucesso.';
             } elseif ($action === 'delete_material_type') {
                 $id=(int)($_POST['id']??0);$used=0;foreach([['erp_raw_materials','material_type_id'],['erp_finished_products','material_type_id'],['erp_material_features','material_type_id']]as$reference){$stmt=$pdo->prepare('SELECT COUNT(*) FROM '.$reference[0].' WHERE '.$reference[1].'=?');$stmt->execute([$id]);$used+=(int)$stmt->fetchColumn();}if($used)throw new DomainException('Não é possível remover um tipo de material que está a ser utilizado.');
                 $pdo->prepare('DELETE FROM erp_material_types WHERE id=?')->execute([$id]);erp_audit($pdo,$userId,'delete','erp_material_types',$id,[],[]);$flashSuccess='Tipo de material removido com sucesso.';
@@ -113,6 +128,7 @@ $operationSectors = $pdo->query('SELECT wc.*,m.code machine_code,p.name printer_
 $machines = $pdo->query('SELECT id,code,name FROM erp_machines WHERE is_active=1 AND deleted_at IS NULL ORDER BY code')->fetchAll(PDO::FETCH_ASSOC);
 $printers = $pdo->query('SELECT * FROM erp_printers ORDER BY is_active DESC,name COLLATE NOCASE')->fetchAll(PDO::FETCH_ASSOC);
 $materialTypes = $pdo->query('SELECT id,code,name,is_active FROM erp_material_types ORDER BY is_active DESC,name COLLATE NOCASE')->fetchAll(PDO::FETCH_ASSOC);
+$controlledDocuments = $pdo->query('SELECT id,code,document_number,name,module,output_format,generation_route,is_active,updated_at FROM erp_document_catalog ORDER BY module COLLATE NOCASE,document_number COLLATE NOCASE')->fetchAll(PDO::FETCH_ASSOC);
 $sequenceLabels = [
     'customer' => 'Clientes',
     'finished_product' => 'Produtos acabados',
@@ -132,6 +148,31 @@ require __DIR__ . '/partials/header.php';
 
 <?php if ($flashSuccess): ?><div class="alert alert-success"><?= h($flashSuccess) ?></div><?php endif; ?>
 <?php if ($flashError): ?><div class="alert alert-danger"><?= h($flashError) ?></div><?php endif; ?>
+
+<section class="card shadow-sm soft-card mb-4" aria-labelledby="document-control-title">
+    <div class="card-body p-4">
+        <div class="d-flex flex-wrap justify-content-between align-items-start gap-3 mb-3">
+            <div><h2 class="h5 mb-1" id="document-control-title"><i class="bi bi-journal-check me-2 text-primary"></i>Controlo documental ISO 9001</h2><p class="text-muted mb-0">Listagem central de todos os modelos e documentos gerados pelo sistema. Cada tipo possui um número de controlo único e rastreável.</p></div>
+            <span class="badge text-bg-primary rounded-pill"><?= count($controlledDocuments) ?> documentos</span>
+        </div>
+        <div class="table-responsive">
+            <table class="table table-hover align-middle mb-0">
+                <thead><tr><th>N.º do documento</th><th>Documento</th><th>Módulo</th><th>Formato</th><th>Origem no sistema</th><th>Estado</th><th class="text-end">Ação</th></tr></thead>
+                <tbody><?php foreach ($controlledDocuments as $document): ?>
+                    <tr>
+                        <td><form method="post" id="document-control-<?= (int)$document['id'] ?>"><?= csrf_input() ?><input type="hidden" name="action" value="save_document_control"><input type="hidden" name="id" value="<?= (int)$document['id'] ?>"></form><input class="form-control font-monospace" form="document-control-<?= (int)$document['id'] ?>" name="document_number" maxlength="50" required value="<?= h($document['document_number']) ?>" aria-label="Número de <?= h($document['name']) ?>"></td>
+                        <td><strong><?= h($document['name']) ?></strong><small class="d-block text-muted font-monospace"><?= h($document['code']) ?></small></td>
+                        <td><?= h($document['module']) ?></td><td><span class="badge text-bg-light border"><?= h($document['output_format']) ?></span></td>
+                        <td><code class="small"><?= h($document['generation_route']) ?></code></td>
+                        <td><input type="hidden" form="document-control-<?= (int)$document['id'] ?>" name="is_active" value="0"><div class="form-check form-switch"><input class="form-check-input" form="document-control-<?= (int)$document['id'] ?>" type="checkbox" name="is_active" value="1" <?= $document['is_active'] ? 'checked' : '' ?> aria-label="Documento ativo"></div></td>
+                        <td class="text-end"><button class="btn btn-sm btn-outline-primary" form="document-control-<?= (int)$document['id'] ?>"><i class="bi bi-check-lg me-1"></i>Guardar</button></td>
+                    </tr>
+                <?php endforeach; ?></tbody>
+            </table>
+        </div>
+        <p class="small text-muted mt-3 mb-0"><i class="bi bi-info-circle me-1"></i>O número identifica o tipo/modelo documental; os números transacionais (por exemplo, OF e movimentos) continuam a ser geridos nas sequências abaixo. As alterações ficam registadas na auditoria.</p>
+    </div>
+</section>
 
 <div class="row g-4 mb-4">
     <div class="col-12">
