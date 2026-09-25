@@ -45,6 +45,43 @@ function erp_migrate_ink_types(PDO $pdo)
     }
 }
 
+/**
+ * Installs the editable production overhead catalogue shown in ERP settings.
+ *
+ * This is intentionally independent from the large phase-one migration so an
+ * existing installation receives the table as soon as the settings page is
+ * opened.
+ */
+function gt_erp_migrate_production_cost_settings(PDO $pdo)
+{
+    $pdo->exec('CREATE TABLE IF NOT EXISTS erp_production_cost_settings (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        cost_key TEXT NOT NULL UNIQUE,
+        report_cost_key TEXT,
+        label TEXT NOT NULL,
+        unit TEXT NOT NULL,
+        unit_cost REAL NOT NULL DEFAULT 0 CHECK(unit_cost >= 0),
+        sort_order INTEGER NOT NULL DEFAULT 0,
+        is_required INTEGER NOT NULL DEFAULT 0,
+        updated_by INTEGER,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY(updated_by) REFERENCES users(id) ON DELETE SET NULL
+    )');
+
+    $insert = $pdo->prepare('INSERT OR IGNORE INTO erp_production_cost_settings(cost_key,report_cost_key,label,unit,sort_order,is_required) VALUES (?,?,?,?,?,1)');
+    foreach ([
+        ['caixa', 'caixas', 'Caixa', '€/un.', 10],
+        ['palete', null, 'Palete', '€/un.', 20],
+        ['diluente', 'diluente', 'Diluente', '€/L', 30],
+        ['mao_obra_maquina', 'impressora', 'Preço mão de obra máquinas', '€/h', 40],
+        ['mao_obra_colaborador', 'corte_e_cose', 'Preço mão de obra colaborador', '€/h', 50],
+        ['energia_saco', 'energia', 'Custo energético por saco', '€/saco', 60],
+    ] as $cost) {
+        $insert->execute($cost);
+    }
+}
+
 function gt_erp_migrate_supplier_columns(PDO $pdo)
 {
     $supplierColumns = [
