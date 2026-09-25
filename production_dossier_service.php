@@ -41,11 +41,18 @@ final class ProductionDossierService
 
     public function dossier(int $orderId): array
     {
-        $order=$this->row('SELECT o.*,c.code customer_code,c.name customer_name,fp.code article_code,fp.description article_description,ts.version_no technical_version FROM erp_production_orders o LEFT JOIN erp_customers c ON c.id=o.customer_id LEFT JOIN erp_finished_products fp ON fp.id=o.finished_product_id LEFT JOIN erp_article_technical_sheet_versions ts ON ts.id=o.technical_sheet_version_id WHERE o.id=?',[$orderId]);
+        $order=$this->row('SELECT o.*,c.code customer_code,c.name customer_name,fp.code article_code,fp.description article_description,fp.of_front_colors article_of_front_colors,fp.of_back_colors article_of_back_colors,ts.version_no technical_version FROM erp_production_orders o LEFT JOIN erp_customers c ON c.id=o.customer_id LEFT JOIN erp_finished_products fp ON fp.id=o.finished_product_id LEFT JOIN erp_article_technical_sheet_versions ts ON ts.id=o.technical_sheet_version_id WHERE o.id=?',[$orderId]);
         if (!$order) throw new RuntimeException('Ordem de Fabrico não encontrada.');
         $snap=$this->row('SELECT snapshot_json FROM erp_production_order_snapshots WHERE production_order_id=?',[$orderId]);
         if (!$snap) $snap=$this->row('SELECT snapshot_json FROM erp_technical_sheets WHERE production_order_id=?',[$orderId]);
         $snapshot=$snap ? (json_decode((string)$snap['snapshot_json'],true) ?: []) : [];
+        // Complete legacy snapshots that predate the dedicated OF colour fields.
+        // A value already frozen in the snapshot always takes precedence.
+        foreach (['of_front_colors', 'of_back_colors'] as $colourField) {
+            if (trim((string) ($snapshot[$colourField] ?? '')) === '') {
+                $snapshot[$colourField] = (string) ($order['article_' . $colourField] ?? '');
+            }
+        }
         $operations=$this->all('SELECT opo.*,COALESCE(opo.operation_code,op.code) code,COALESCE(opo.operation_name,op.name) name,COALESCE(m.name,pm.name) machine_name,COALESCE(SUM(te.quantity_good),0) quantity_good,COALESCE(SUM(te.quantity_rejected),0) quantity_rejected,MIN(te.started_at) started_at,MAX(te.ended_at) ended_at,COALESCE(SUM((julianday(COALESCE(te.ended_at,CURRENT_TIMESTAMP))-julianday(te.started_at))*1440-te.pause_seconds/60.0),0) actual_minutes FROM erp_production_order_operations opo JOIN erp_operations op ON op.id=opo.operation_id LEFT JOIN erp_operation_time_entries te ON te.production_order_operation_id=opo.id LEFT JOIN erp_machines m ON m.id=te.selected_machine_id LEFT JOIN erp_machines pm ON pm.id=opo.primary_machine_id WHERE opo.production_order_id=? GROUP BY opo.id ORDER BY opo.sequence_no,opo.id',[$orderId]);
         $consumptions=$this->all('SELECT pc.*,COALESCE(rm.code,p.code) code,COALESCE(rm.description,p.description) description,u.code unit_code FROM erp_production_consumptions pc LEFT JOIN erp_raw_materials rm ON rm.id=pc.raw_material_id LEFT JOIN erp_products p ON p.id=pc.product_id LEFT JOIN erp_units u ON u.id=rm.primary_unit_id WHERE pc.production_order_id=? ORDER BY pc.id',[$orderId]);
         $costs=$this->calculateCosts($order,$snapshot,$operations,$consumptions);

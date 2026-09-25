@@ -4,7 +4,7 @@ declare(strict_types=1);
 /** Designed, dependency-free A4 dossier used when the optional mPDF package is absent. */
 final class ProductionDossierPdf
 {
-    public static function render(array $d, string $artworkDataUri = '', string $documentNumber = 'DOC-PRD-001', string $logoDataUri = ''): string
+    public static function render(array $d, string $artworkDataUri = '', string $documentNumber = 'DOC-PRD-001', string $logoDataUri = '', string $companyName = 'TISSER'): string
     {
         $order = (array) ($d['order'] ?? []);
         $snapshot = (array) ($d['snapshot'] ?? []);
@@ -27,10 +27,10 @@ final class ProductionDossierPdf
         $content = '';
         // Cabeçalho limpo, sem caixa exterior.
         if ($logo !== '') self::image($content, 'Logo', $logo, 30, 792, 112, 34);
-        else { self::rect($content, 30, 792, 112, 34, false, [0.12, 0.12, 0.12]); self::text($content, 40, 803, 19, 'TISSER', true, [1, 1, 1]); }
-        self::text($content, 297, 811, 16, 'FOLHA DE ACOMPANHAMENTO', true, [0, 0, 0], true);
-        self::text($content, 297, 796, 10, 'ORDEM DE FABRICO', true, [0, 0, 0], true);
-        self::text($content, 565, 811, 8, 'Tisser', true, [0, 0, 0], true);
+        else { self::rect($content, 30, 792, 112, 34, false, [0.12, 0.12, 0.12]); self::text($content, 40, 803, 14, self::shorten($companyName, 14), true, [1, 1, 1]); }
+        self::text($content, 157, 811, 16, 'FOLHA DE ACOMPANHAMENTO', true, [0, 0, 0]);
+        self::text($content, 216, 796, 10, 'ORDEM DE FABRICO', true, [0, 0, 0]);
+        self::text($content, 565, 811, 8, $companyName, true, [0, 0, 0], true);
         self::text($content, 565, 797, 7, date('d/m/Y'), false, [0, 0, 0], true);
         self::line($content, 28, 784, 567, 784, 1.3);
 
@@ -53,30 +53,39 @@ final class ProductionDossierPdf
         $due = trim((string)($order['due_date']??'')); $dueTime = $due === '' ? false : strtotime($due);
         self::fieldBox($content,394,554,173,28,'DATA PREVISTA',$dueTime?date('d/m/Y',$dueTime):$dash,9);
 
-        self::sectionBar($content,28,528,539,18,'MAQUETA DO ARTIGO / REFERENCIA VISUAL');
-        self::rect($content,28,318,350,210,true,[1,1,1]);
-        self::rect($content,384,318,183,210,true,[1,1,1]);
-        if ($jpeg !== '') self::image($content,'Artwork',$jpeg,38,326,330,192);
-        else self::text($content,203,418,8,'SEM MAQUETA ASSOCIADA AO ARTIGO',true,[.4,.4,.4],true);
-        self::text($content,394,505,11,'IMPRESSAO',true);
-        self::text($content,394,486,8,'Frente:',true,[.32,.38,.39]);
-        $front = self::orderColourRows((string)($snapshot['of_front_colors']??'')); $cy=472;
+        self::text($content,35,538,7,'CARACTERISTICAS DO SACO',true,[.32,.38,.39]);
+        $featureX=28; $featureWidth=539/5;
+        foreach ([['Microperfuracao','microperforation'],['Asa','has_handle'],['Furo','has_holes'],['Fole','has_gusset'],['Fole centrado','centered_gusset']] as $feature) {
+            self::featureCell($content,$featureX,506,$featureWidth,26,$feature[0],!empty($snapshot[$feature[1]]));
+            $featureX += $featureWidth;
+        }
+
+        self::sectionBar($content,28,480,539,18,'MAQUETA DO ARTIGO / REFERENCIA VISUAL');
+        self::rect($content,28,270,350,210,true,[1,1,1]);
+        self::rect($content,384,270,183,210,true,[1,1,1]);
+        if ($jpeg !== '') self::image($content,'Artwork',$jpeg,38,278,330,192);
+        else self::text($content,203,370,8,'SEM MAQUETA ASSOCIADA AO ARTIGO',true,[.4,.4,.4],true);
+        self::text($content,394,457,7,'N. PROVA',true,[.32,.38,.39]);
+        self::text($content,394,443,9,$value($snapshot['proof_reference']??''),true);
+        self::text($content,394,420,11,'IMPRESSAO',true);
+        self::text($content,394,401,8,'Frente:',true,[.32,.38,.39]);
+        $front = self::orderColourRows((string)($snapshot['of_front_colors']??'')); $cy=387;
         foreach ($front ?: [$dash] as $colour) { self::text($content,400,$cy,8,'- '.self::shorten($colour,27)); $cy-=13; }
         self::text($content,394,$cy-4,8,'Verso:',true,[.32,.38,.39]); $cy-=18;
         $back = self::orderColourRows((string)($snapshot['of_back_colors']??''));
         foreach ($back ?: [$dash] as $colour) { self::text($content,400,$cy,8,'- '.self::shorten($colour,27)); $cy-=13; }
-        self::line($content,394,382,557,382,.5,[.7,.7,.7]);
-        self::text($content,394,362,9,'ROLO IMPRESSOR',true);
-        self::text($content,394,344,9,$roll);
+        self::line($content,394,334,557,334,.5,[.7,.7,.7]);
+        self::text($content,394,314,9,'ROLO IMPRESSOR',true);
+        self::text($content,394,296,9,$roll);
 
-        self::sectionBar($content,28,292,539,18,'REGISTO DE PRODUCAO');
-        self::tableHeader($content,28,272,[48,222,155,114],['SEQ.','OPERACAO','MAQUINA','ESTADO']);
-        $rowY=252;
+        self::sectionBar($content,28,244,539,18,'REGISTO DE PRODUCAO');
+        self::tableHeader($content,28,224,[48,270,221],['SEQ.','OPERACAO','MAQUINA']);
+        $rowY=200;
         foreach (array_slice($operations,0,4) as $operation) {
-            self::tableRow($content,28,$rowY,[48,222,155,114],[(string)($operation['sequence_no']??$dash),self::shorten($value($operation['name']??''),35),self::shorten($value($operation['machine_name']??''),23),$value($operation['status']??'')]);
+            self::tableRow($content,28,$rowY,[48,270,221],[(string)($operation['sequence_no']??$dash),self::shorten($value($operation['name']??''),42),self::shorten($value($operation['machine_name']??''),34)]);
             $rowY-=20;
         }
-        if (!$operations) { self::tableRow($content,28,$rowY,[48,222,155,114],[$dash,$dash,$dash,$dash]); $rowY-=20; }
+        if (!$operations) { self::tableRow($content,28,$rowY,[48,270,221],[$dash,$dash,$dash]); $rowY-=20; }
 
         $notesTop = min(190, $rowY - 8);
         self::sectionBar($content,28,$notesTop,539,18,'OBSERVACOES');
@@ -96,7 +105,14 @@ final class ProductionDossierPdf
     { $content .= sprintf("%.3F %.3F %.3F rg\n%.2F %.2F %.2F %.2F re f\n",$fill[0],$fill[1],$fill[2],$x,$y,$w,$h); if($stroke)$content .= sprintf(".55 .58 .58 RG\n.65 w\n%.2F %.2F %.2F %.2F re S\n",$x,$y,$w,$h); }
 
     private static function sectionBar(string &$content, float $x, float $y, float $w, float $h, string $title)
-    { self::rect($content,$x,$y,$w,$h,true,[.93,.93,.93]); self::text($content,$x+$w/2,$y+5,9,$title,true,[0,0,0],true); }
+    { self::rect($content,$x,$y,$w,$h,true,[.93,.93,.93]); self::text($content,$x+7,$y+5,9,$title,true,[0,0,0]); }
+
+    private static function featureCell(string &$content, float $x, float $y, float $w, float $h, string $label, bool $enabled)
+    {
+        self::rect($content,$x,$y,$w,$h,true,[1,1,1]);
+        self::text($content,$x+6,$y+15,7,$label,true);
+        self::text($content,$x+6,$y+5,6,($enabled?'[X]':'[ ]').' Sim   '.($enabled?'[ ]':'[X]').' Nao');
+    }
 
     private static function fieldBox(string &$content, float $x, float $y, float $w, float $h, string $label, string $value, float $size, bool $highlight = false)
     { self::rect($content,$x,$y,$w,$h,true,$highlight?[.93,.97,.99]:[1,1,1]); self::text($content,$x+7,$y+$h-11,6,$label,true,[.32,.38,.39]); self::text($content,$x+7,$y+8,(int)$size,self::shorten($value,max(8,(int)($w/($size*.53)))),true); }
