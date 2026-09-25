@@ -16,4 +16,9 @@ production_dossier_layout_check(strpos($controllerSource,"assets/uploads/'.\$bas
 production_dossier_layout_check(strpos($printSource,'.operations tbody tr:first-child td{padding-top:3mm}')!==false,'A primeira operação não tem separação suficiente do cabeçalho.');
 production_dossier_layout_check(strpos($printSource,'<?=h($productionCompanyName)?>')!==false,'O cabeçalho não usa os dados da empresa.');
 production_dossier_layout_check(strpos((string)file_get_contents(__DIR__.'/../production_dossier_service.php'),'article_of_front_colors')!==false,'As cores de OF não têm fallback para snapshots antigos.');
+production_dossier_layout_check(strpos($printSource,'.section-title{font-size:9pt;text-align:left')!==false,'Os títulos das secções não estão alinhados à esquerda.');
+production_dossier_layout_check(strpos($printSource,'Características do saco')!==false&&strpos($printSource,"'centered_gusset'=>'Fole centrado'")!==false,'As características Sim/Não do saco estão incompletas.');
+production_dossier_layout_check(strpos($printSource,"$"."s['proof_reference']")!==false,'A referência de prova não aparece antes da impressão.');
+production_dossier_layout_check(strpos($printSource,'<th class="status">Estado</th>')===false&&strpos($printSource,"$"."op['status']")===false,'O estado ainda aparece na tabela de operações.');
+production_dossier_layout_check(strpos($pdfSource,"['SEQ.','OPERACAO','MAQUINA']")!==false&&strpos($pdfSource,"$"."operation['status']")===false,'O fallback ainda apresenta o estado das operações.');
 echo "production_dossier_print_layout_test: OK\n";
