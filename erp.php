@@ -12,7 +12,7 @@ if ($requestedPage === 'machines') {
 
 require_once __DIR__ . '/erp_migrations.php';
 require_once __DIR__ . '/app/Services/MachineAttachment.php';
-require_once __DIR__ . '/app/Services/ArticleDocument.php';
+require_once __DIR__ . '/article_document.php';
 require_once __DIR__ . '/app/Services/InventoryService.php';
 require_once __DIR__ . '/app/Services/StockTransferService.php';
 require_once __DIR__ . '/app/Services/PurchaseReceiptService.php';
