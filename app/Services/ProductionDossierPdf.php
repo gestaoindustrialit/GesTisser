@@ -12,12 +12,13 @@ final class ProductionDossierPdf
         $operations = (array) ($d['operations'] ?? []);
         $jpeg = self::jpegFromDataUri($artworkDataUri);
 
-        $content = "q\n0.12 0.11 0.12 rg\n32 786 126 40 re f\nQ\n";
-        self::text($content, 43, 799, 20, 'TISSER', true, [1, 1, 1]);
+        $content = "q\n0 0 0 RG\n1 w\n32 786 126 40 re S\nQ\n";
+        self::text($content, 43, 799, 20, 'TISSER', true, [0, 0, 0]);
         self::text($content, 297, 809, 15, 'FOLHA DE ACOMPANHAMENTO', true, [.05, .05, .05], true);
         self::text($content, 297, 792, 11, 'OF ' . (string) ($order['order_number'] ?? ''), true, [.05, .05, .05], true);
         self::text($content, 563, 811, 9, 'Tisser', true, [.05, .05, .05], true);
         self::text($content, 563, 795, 7, date('d/m/Y'), true, [.05, .05, .05], true);
+        self::barcode39($content, 430, 765, (string) ($order['order_number'] ?? ''));
         $content .= "0 0 0 RG\n1.5 w\n32 780 m 563 780 l S\n";
 
         self::heading($content, 32, 764, 'IDENTIFICACAO DA ENCOMENDA E DO ARTIGO');
@@ -44,6 +45,9 @@ final class ProductionDossierPdf
             'Quantidade' => $order['planned_quantity'] ?? '',
             'Entrega' => $order['due_date'] ?? '',
             'Encomenda' => $order['customer_order_reference'] ?? $snapshot['_order']['customer_order'] ?? '',
+            'N. prova' => $snapshot['_order']['proof_number'] ?? '',
+            'N. paletes previsto' => $snapshot['_order']['planned_pallets'] ?? '',
+            'Tipo de palete' => $snapshot['_order']['pallet_type'] ?? '',
             'Cor do fio' => $snapshot['thread_color'] ?? '', 'Costura' => $snapshot['seam_type'] ?? '',
         ];
         $y = 729;
@@ -67,19 +71,6 @@ final class ProductionDossierPdf
         if (!$operations) { self::text($content, 40, 457, 9, 'Esta OF ainda nao tem operacoes no routing.', false, [.40, .48, .45]); $y -= 22; }
 
         $summaryY = min($y - 12, 285);
-        self::heading($content, 32, $summaryY, 'RESUMO DE PRODUCAO');
-        $cards = [
-            ['QUANTIDADE PLANEADA', $order['planned_quantity'] ?? 0],
-            ['QUANTIDADE BOA', $metrics['good'] ?? 0],
-            ['DESPERDICIO', $metrics['rejected'] ?? 0],
-            ['EFICIENCIA', number_format((float) ($metrics['efficiency'] ?? 0), 1, ',', '.') . ' %'],
-        ];
-        foreach ($cards as $index => $card) {
-            $x = 32 + $index * 134;
-            $content .= "0.929 0.965 0.949 rg\n{$x} " . ($summaryY - 60) . " 124 43 re f\n";
-            self::text($content, $x + 7, $summaryY - 32, 6, $card[0], true, [.40, .48, .45]);
-            self::text($content, $x + 7, $summaryY - 50, 13, (string) $card[1], true, [.03, .47, .36]);
-        }
         self::heading($content, 32, $summaryY - 85, 'CORES A IMPRIMIR - ORDEM DE FABRICO');
         $front = self::orderColours((string) ($snapshot['of_front_colors'] ?? ''));
         $back = self::orderColours((string) ($snapshot['of_back_colors'] ?? ''));
@@ -94,14 +85,22 @@ final class ProductionDossierPdf
 
     private static function heading(string &$content, float $x, float $y, string $label)
     {
-        self::text($content, $x, $y, 9, $label, true, [.03, .47, .36]);
-        $content .= sprintf("0.031 0.467 0.365 RG\n0.8 w\n%.2F %.2F m 563 %.2F l S\n", $x, $y - 7, $y - 7);
+        self::text($content, $x, $y, 9, $label, true, [0, 0, 0]);
+        $content .= sprintf("0 0 0 RG\n0.8 w\n%.2F %.2F m 563 %.2F l S\n", $x, $y - 7, $y - 7);
     }
 
     private static function tableHeader(string &$content, float $x, float $y, array $widths, array $values)
     {
-        $content .= sprintf("0.929 0.965 0.949 rg\n%.2F %.2F 531 20 re f\n", $x, $y - 14);
+        $content .= sprintf("0.90 0.90 0.90 rg\n%.2F %.2F 531 20 re f\n", $x, $y - 14);
         self::tableText($content, $x, $y - 7, $widths, $values, 7, true);
+    }
+
+    private static function barcode39(string &$content, float $x, float $y, string $value)
+    {
+        $patterns=['0'=>'nnnwwnwnn','1'=>'wnnwnnnnw','2'=>'nnwwnnnnw','3'=>'wnwwnnnnn','4'=>'nnnwwnnnw','5'=>'wnnwwnnnn','6'=>'nnwwwnnnn','7'=>'nnnwnnwnw','8'=>'wnnwnnwnn','9'=>'nnwwnnwnn','A'=>'wnnnnwnnw','B'=>'nnwnnwnnw','C'=>'wnwnnwnnn','D'=>'nnnnwwnnw','E'=>'wnnnwwnnn','F'=>'nnwnwwnnn','G'=>'nnnnnwwnw','H'=>'wnnnnwwnn','I'=>'nnwnnwwnn','J'=>'nnnnwwwnn','K'=>'wnnnnnnww','L'=>'nnwnnnnww','M'=>'wnwnnnnwn','N'=>'nnnnwnnww','O'=>'wnnnwnnwn','P'=>'nnwnwnnwn','Q'=>'nnnnnnwww','R'=>'wnnnnnwwn','S'=>'nnwnnnwwn','T'=>'nnnnwnwwn','U'=>'wwnnnnnnw','V'=>'nwwnnnnnw','W'=>'wwwnnnnnn','X'=>'nwnnwnnnw','Y'=>'wwnnwnnnn','Z'=>'nwwnwnnnn','-'=>'nwnnnnwnw','.'=>'wwnnnnwnn',' '=>'nwwnnnwnn','*'=>'nwnnwnwnn'];
+        $clean=preg_replace('/[^0-9A-Z. -]/','',strtoupper($value));$cursor=$x;
+        foreach(str_split('*'.$clean.'*') as $character){foreach(str_split($patterns[$character]??$patterns['-']) as $index=>$width){$points=$width==='w'?2.1:.8;if($index%2===0)$content.=sprintf("0 0 0 rg\n%.2F %.2F %.2F 18 re f\n",$cursor,$y,$points);$cursor+=$points;}$cursor+=.8;}
+        self::text($content,$x,$y-9,6,$clean,true,[0,0,0]);
     }
 
     private static function tableRow(string &$content, float $x, float $y, array $widths, array $values)
