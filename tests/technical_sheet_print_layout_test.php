@@ -21,5 +21,8 @@ technical_sheet_layout_check(strpos($source, 'class="order-grid"') !== false, 'O
 technical_sheet_layout_check(strpos($source, 'SELECT front_colors, back_colors, pallet_weight, pallet_quantity FROM erp_finished_products') !== false, 'A ficha não recupera do artigo os dados técnicos ausentes em snapshots antigos.');
 technical_sheet_layout_check(strpos($source, "['front_colors', 'back_colors']") !== false, 'A ficha não apresenta as designações das cores de impressão.');
 technical_sheet_layout_check(strpos($source, "['pallet_quantity', 'pallet_weight']") !== false, 'A ficha não apresenta a quantidade e o peso previstos por palete.');
+technical_sheet_layout_check(strpos($source, "code = ? AND is_active = 1") !== false, 'A ficha não recupera o código interno ativo do catálogo documental.');
+technical_sheet_layout_check(strpos($source, 'Código interno do documento: <?= h($technicalSheetDocumentNumber) ?>') !== false, 'O código interno não está presente no rodapé da ficha.');
+technical_sheet_layout_check(strpos($source, 'font-size:5.5px') !== false, 'O código interno da ficha deve ser apresentado em tamanho muito pequeno.');
 
 echo "technical_sheet_print_layout_test: OK\n";
