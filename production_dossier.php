@@ -30,7 +30,16 @@ function pd_barcode128_html($value){
     $html='<span class="barcode-bars" role="img" aria-label="Código de barras Code 128 '.h($clean).'">';foreach($codes as$code){foreach(str_split($patterns[$code])as$i=>$width)$html.='<i class="'.($i%2===0?'bar':'gap').'" style="width:'.((int)$width).'px"></i>';}$html.='</span>';
     return$html.'<span class="barcode-text">'.h($clean).'</span>';
 }
-function pd_logo_src($path){$path=trim((string)$path);if($path===''||preg_match('#^https?://#i',$path))return$path;$absolute=__DIR__.'/'.ltrim($path,'/');if(!is_file($absolute))return'';$extension=strtolower((string)pathinfo($absolute,PATHINFO_EXTENSION));$mime=['png'=>'image/png','jpg'=>'image/jpeg','jpeg'=>'image/jpeg','webp'=>'image/webp','svg'=>'image/svg+xml'];$contents=file_get_contents($absolute);return$contents===false?'':'data:'.($mime[$extension]??'application/octet-stream').';base64,'.base64_encode($contents);}
+function pd_logo_src($path){
+    $path=trim((string)$path);if($path==='')return'';
+    $urlPath=parse_url($path,PHP_URL_PATH);if(is_string($urlPath)&&$urlPath!=='')$path=rawurldecode($urlPath);
+    $normalized=str_replace('\\','/',$path);$candidates=[$path,__DIR__.'/'.ltrim($path,'/')];
+    $assetsPosition=stripos($normalized,'assets/');if($assetsPosition!==false)$candidates[]=__DIR__.'/'.substr($normalized,$assetsPosition);
+    $basename=basename($normalized);if($basename!==''&&$basename!=='.'&&$basename!=='..')$candidates[]=__DIR__.'/assets/uploads/'.$basename;
+    $documentRoot=trim((string)($_SERVER['DOCUMENT_ROOT']??''));if($documentRoot!=='')$candidates[]=rtrim($documentRoot,'/\\').'/'.ltrim($path,'/\\');
+    $absolute='';foreach(array_unique($candidates)as$candidate)if(is_file($candidate)){$absolute=$candidate;break;}if($absolute==='')return'';
+    $extension=strtolower((string)pathinfo($absolute,PATHINFO_EXTENSION));$mime=['png'=>'image/png','jpg'=>'image/jpeg','jpeg'=>'image/jpeg','webp'=>'image/webp','svg'=>'image/svg+xml'];$contents=file_get_contents($absolute);return$contents===false?'':'data:'.($mime[$extension]??'application/octet-stream').';base64,'.base64_encode($contents);
+}
 $documentNumberStmt=$pdo->prepare('SELECT document_number FROM erp_document_catalog WHERE code = ? AND is_active = 1 LIMIT 1');$documentNumberStmt->execute(['production_dossier']);$productionDossierDocumentNumber=trim((string)$documentNumberStmt->fetchColumn())?:'DOC-PRD-001';
 $productionCompanyName=trim((string)app_setting($pdo,'company_name','TISSER'))?:'TISSER';$productionCompanyAddress=trim((string)app_setting($pdo,'company_address',''));$productionCompanyLogo=pd_logo_src((string)app_setting($pdo,'logo_report_dark',''));if($productionCompanyLogo==='')$productionCompanyLogo=pd_logo_src('docs/mapper-reference/ui/assets/logo-tisser-blue.png');$productionCompanyContacts=array_filter([trim((string)app_setting($pdo,'company_phone','')),trim((string)app_setting($pdo,'company_email',''))]);
 $productionOrderFrontColors=pd_order_colors($s['of_front_colors']??'');$productionOrderBackColors=pd_order_colors($s['of_back_colors']??'');$cr=(array)($d['closeReport']??[]);
@@ -45,7 +54,7 @@ if(($_GET['format']??'')==='pdf'){
         try{ob_start();include __DIR__.'/production_dossier_print.php';$html=(string)ob_get_clean();$pdf=new Mpdf\Mpdf(['format'=>'A4','margin_left'=>0,'margin_right'=>0,'margin_top'=>0,'margin_bottom'=>0]);$pdf->WriteHTML($html);$pdfOutput=$pdf->Output($filename,'S');}
         catch(Throwable $e){while(ob_get_level()>$pdfBufferLevel)ob_end_clean();error_log('Falha ao gerar PDF mPDF da OF '.$id.': '.$e->getMessage());}
     }
-    if($pdfOutput==='')$pdfOutput=ProductionDossierPdf::render($d,$mainDocumentThumbnail,$productionDossierDocumentNumber,$productionCompanyLogo);
+    if($pdfOutput==='')$pdfOutput=ProductionDossierPdf::render($d,$mainDocumentThumbnail,$productionDossierDocumentNumber,$productionCompanyLogo,$productionCompanyName);
     header('Content-Type: application/pdf');header('Content-Disposition: inline; filename="'.$filename.'"');header('Content-Length: '.strlen($pdfOutput));echo $pdfOutput;exit;
 }
 $pageTitle='Dossier de Produção · OF '.$o['order_number'];require __DIR__.'/partials/header.php';

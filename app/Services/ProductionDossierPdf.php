@@ -4,7 +4,7 @@ declare(strict_types=1);
 /** Designed, dependency-free A4 dossier used when the optional mPDF package is absent. */
 final class ProductionDossierPdf
 {
-    public static function render(array $d, string $artworkDataUri = '', string $documentNumber = 'DOC-PRD-001', string $logoDataUri = ''): string
+    public static function render(array $d, string $artworkDataUri = '', string $documentNumber = 'DOC-PRD-001', string $logoDataUri = '', string $companyName = 'TISSER'): string
     {
         $order = (array) ($d['order'] ?? []);
         $snapshot = (array) ($d['snapshot'] ?? []);
@@ -27,10 +27,10 @@ final class ProductionDossierPdf
         $content = '';
         // Cabeçalho limpo, sem caixa exterior.
         if ($logo !== '') self::image($content, 'Logo', $logo, 30, 792, 112, 34);
-        else { self::rect($content, 30, 792, 112, 34, false, [0.12, 0.12, 0.12]); self::text($content, 40, 803, 19, 'TISSER', true, [1, 1, 1]); }
-        self::text($content, 297, 811, 16, 'FOLHA DE ACOMPANHAMENTO', true, [0, 0, 0], true);
-        self::text($content, 297, 796, 10, 'ORDEM DE FABRICO', true, [0, 0, 0], true);
-        self::text($content, 565, 811, 8, 'Tisser', true, [0, 0, 0], true);
+        else { self::rect($content, 30, 792, 112, 34, false, [0.12, 0.12, 0.12]); self::text($content, 40, 803, 14, self::shorten($companyName, 14), true, [1, 1, 1]); }
+        self::text($content, 157, 811, 16, 'FOLHA DE ACOMPANHAMENTO', true, [0, 0, 0]);
+        self::text($content, 216, 796, 10, 'ORDEM DE FABRICO', true, [0, 0, 0]);
+        self::text($content, 565, 811, 8, $companyName, true, [0, 0, 0], true);
         self::text($content, 565, 797, 7, date('d/m/Y'), false, [0, 0, 0], true);
         self::line($content, 28, 784, 567, 784, 1.3);
 
@@ -71,7 +71,7 @@ final class ProductionDossierPdf
 
         self::sectionBar($content,28,292,539,18,'REGISTO DE PRODUCAO');
         self::tableHeader($content,28,272,[48,222,155,114],['SEQ.','OPERACAO','MAQUINA','ESTADO']);
-        $rowY=252;
+        $rowY=248;
         foreach (array_slice($operations,0,4) as $operation) {
             self::tableRow($content,28,$rowY,[48,222,155,114],[(string)($operation['sequence_no']??$dash),self::shorten($value($operation['name']??''),35),self::shorten($value($operation['machine_name']??''),23),$value($operation['status']??'')]);
             $rowY-=20;
