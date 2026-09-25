@@ -287,6 +287,7 @@ function gt_erp_run_phase1_migrations(PDO $pdo)
             'length_tolerance' => 'TEXT', 'front_colors' => 'TEXT', 'back_colors' => 'TEXT',
             'of_front_colors' => 'TEXT', 'of_back_colors' => 'TEXT',
             'of_colors_match_technical' => 'INTEGER NOT NULL DEFAULT 0',
+            'printer_roll_measure' => 'TEXT',
             'pallet_dimensions' => 'TEXT', 'pallet_lid' => 'TEXT', 'pallet_straps' => 'INTEGER',
             'pallet_film' => 'TEXT', 'pallet_weight' => 'REAL', 'pallet_quantity' => 'REAL',
             'microperforation' => 'INTEGER NOT NULL DEFAULT 0',

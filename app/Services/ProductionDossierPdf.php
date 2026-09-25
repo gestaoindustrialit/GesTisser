@@ -37,7 +37,8 @@ final class ProductionDossierPdf
             'Descricao' => $order['article_description'] ?? $snapshot['description'] ?? '',
             'Material' => $snapshot['material'] ?? '', 'Composicao' => $snapshot['composition'] ?? '',
             'Dimensoes' => trim((string) ($snapshot['width'] ?? '') . ' x ' . (string) ($snapshot['length'] ?? ''), ' x'),
-            'Gramagem' => $snapshot['grammage'] ?? '', 'Quantidade' => $order['planned_quantity'] ?? '',
+            'Gramagem' => $snapshot['grammage'] ?? '', 'Rolo impressor' => $snapshot['printer_roll_measure'] ?? '',
+            'Quantidade' => $order['planned_quantity'] ?? '',
             'Entrega' => $order['due_date'] ?? '',
         ];
         $y = 729;
