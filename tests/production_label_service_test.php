@@ -1,5 +1,10 @@
 <?php
-require_once __DIR__ . '/../app/Services/ProductionLabelService.php';
+$serviceFile = __DIR__ . '/../app/Services/ProductionLabelService.php';
+$serviceSource = (string) file_get_contents($serviceFile);
+if (preg_match('/\)\s*:\s*\?(?:array|int|string|float|bool)\b/', $serviceSource, $match)) {
+    throw new RuntimeException('ProductionLabelService contém retorno nullable incompatível com PHP 7.0: ' . $match[0]);
+}
+require_once $serviceFile;
 
 $pdo = new PDO('sqlite::memory:');
 $pdo->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
