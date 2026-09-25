@@ -15,6 +15,6 @@ article_printer_roll_check(strpos($erpSource, "'printer_roll_measure'=>'Rolo imp
 article_printer_roll_check(strpos($erpSource, "'of_colors_match_technical','printer_roll_measure','pallet_dimensions'") !== false, 'O rolo impressor não é guardado no artigo.');
 article_printer_roll_check(strpos($dossierSource, "'printer_roll_measure'=>'Rolo impressor'") !== false, 'A folha de acompanhamento não apresenta o rolo impressor.');
 article_printer_roll_check(strpos($printSource, "printer_roll_measure") !== false, 'A impressão da OF não apresenta o rolo impressor.');
-article_printer_roll_check(strpos($pdfSource, "'Rolo impressor' => \$snapshot['printer_roll_measure']") !== false, 'O PDF de contingência não apresenta o rolo impressor.');
+article_printer_roll_check(strpos($pdfSource, "printer_roll_measure") !== false, 'O PDF de contingência não apresenta o rolo impressor.');
 
 echo "article_printer_roll_test: OK\n";

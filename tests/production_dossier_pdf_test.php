@@ -29,7 +29,7 @@ if (strpos($pdfSource, 'barcode128') === false) throw new RuntimeException('O fa
 $dossier = (string) file_get_contents(__DIR__ . '/../production_dossier.php');
 $print = (string) file_get_contents(__DIR__ . '/../production_dossier_print.php');
 $sheet = (string) file_get_contents(__DIR__ . '/../erp_technical_sheet.php');
-if (strpos($dossier, 'ProductionDossierPdf::render($d,$mainDocumentThumbnail,$productionDossierDocumentNumber)') === false) throw new RuntimeException('Fallback PDF não está ligado ao dossier e à imagem.');
+if (strpos($dossier, 'ProductionDossierPdf::render($d,$mainDocumentThumbnail,$productionDossierDocumentNumber,$productionCompanyLogo)') === false) throw new RuntimeException('Fallback PDF não está ligado ao dossier e à imagem.');
 if (strpos($dossier, 'catch(Throwable $e)') === false || strpos($dossier, 'Output($filename,\'S\')') === false) throw new RuntimeException('O PDF da OF não tem recuperação segura em caso de falha do mPDF.');
 if (strpos($dossier, 'onclick="window.print()"') !== false) throw new RuntimeException('O botão Imprimir ainda aparece no dossier.');
 foreach (['Folha de Acompanhamento', 'Dados principais da encomenda', 'Identificação do cliente e do artigo', 'Maqueta do artigo / Referência visual', 'Registo de produção', 'Observações'] as $section) {

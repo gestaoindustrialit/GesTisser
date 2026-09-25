@@ -32,7 +32,7 @@ function pd_barcode128_html($value){
 }
 function pd_logo_src($path){$path=trim((string)$path);if($path===''||preg_match('#^https?://#i',$path))return$path;$absolute=__DIR__.'/'.ltrim($path,'/');if(!is_file($absolute))return'';$extension=strtolower((string)pathinfo($absolute,PATHINFO_EXTENSION));$mime=['png'=>'image/png','jpg'=>'image/jpeg','jpeg'=>'image/jpeg','webp'=>'image/webp','svg'=>'image/svg+xml'];$contents=file_get_contents($absolute);return$contents===false?'':'data:'.($mime[$extension]??'application/octet-stream').';base64,'.base64_encode($contents);}
 $documentNumberStmt=$pdo->prepare('SELECT document_number FROM erp_document_catalog WHERE code = ? AND is_active = 1 LIMIT 1');$documentNumberStmt->execute(['production_dossier']);$productionDossierDocumentNumber=trim((string)$documentNumberStmt->fetchColumn())?:'DOC-PRD-001';
-$productionCompanyName=trim((string)app_setting($pdo,'company_name','TISSER'))?:'TISSER';$productionCompanyAddress=trim((string)app_setting($pdo,'company_address',''));$productionCompanyLogo=pd_logo_src((string)app_setting($pdo,'logo_report_dark',''));$productionCompanyContacts=array_filter([trim((string)app_setting($pdo,'company_phone','')),trim((string)app_setting($pdo,'company_email',''))]);
+$productionCompanyName=trim((string)app_setting($pdo,'company_name','TISSER'))?:'TISSER';$productionCompanyAddress=trim((string)app_setting($pdo,'company_address',''));$productionCompanyLogo=pd_logo_src((string)app_setting($pdo,'logo_report_dark',''));if($productionCompanyLogo==='')$productionCompanyLogo=pd_logo_src('docs/mapper-reference/ui/assets/logo-tisser-blue.png');$productionCompanyContacts=array_filter([trim((string)app_setting($pdo,'company_phone','')),trim((string)app_setting($pdo,'company_email',''))]);
 $productionOrderFrontColors=pd_order_colors($s['of_front_colors']??'');$productionOrderBackColors=pd_order_colors($s['of_back_colors']??'');$cr=(array)($d['closeReport']??[]);
 $statusClass=['Planeada'=>'primary','Libertada'=>'info','Em produção'=>'warning','Suspensa'=>'secondary','Fechada'=>'success','Cancelada'=>'danger'][$o['status']]??'light';
 $mainDocument=ArticleDocument::mainArtwork((array)($s['_documents']??[]));
@@ -45,7 +45,7 @@ if(($_GET['format']??'')==='pdf'){
         try{ob_start();include __DIR__.'/production_dossier_print.php';$html=(string)ob_get_clean();$pdf=new Mpdf\Mpdf(['format'=>'A4','margin_left'=>0,'margin_right'=>0,'margin_top'=>0,'margin_bottom'=>0]);$pdf->WriteHTML($html);$pdfOutput=$pdf->Output($filename,'S');}
         catch(Throwable $e){while(ob_get_level()>$pdfBufferLevel)ob_end_clean();error_log('Falha ao gerar PDF mPDF da OF '.$id.': '.$e->getMessage());}
     }
-    if($pdfOutput==='')$pdfOutput=ProductionDossierPdf::render($d,$mainDocumentThumbnail,$productionDossierDocumentNumber);
+    if($pdfOutput==='')$pdfOutput=ProductionDossierPdf::render($d,$mainDocumentThumbnail,$productionDossierDocumentNumber,$productionCompanyLogo);
     header('Content-Type: application/pdf');header('Content-Disposition: inline; filename="'.$filename.'"');header('Content-Length: '.strlen($pdfOutput));echo $pdfOutput;exit;
 }
 $pageTitle='Dossier de Produção · OF '.$o['order_number'];require __DIR__.'/partials/header.php';
