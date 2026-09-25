@@ -15,4 +15,7 @@ $stored=$service->closeReport(9,[],[]);if((float)$stored['cost_impressora']!==12
 $page=(string)file_get_contents(__DIR__.'/../production_dossier.php');$print=(string)file_get_contents(__DIR__.'/../production_dossier_print.php');
 foreach(['Relatório administrativo de custos','change_reason','update_close_report'] as $term)if(strpos($page.$print.$service::class,$term)===false&&strpos((string)file_get_contents(__DIR__.'/../app/Services/ProductionDossierService.php'),$term)===false)throw new RuntimeException('Elemento administrativo em falta: '.$term);
 if(strpos($print,'Margem bruta')===false||strpos($print,'Composição')===false)throw new RuntimeException('O PDF não contém o relatório de fecho completo.');
+foreach(['Acelerador','Retardador','cost_acelerador','cost_retardador'] as $removedField){
+    if(strpos($page,$removedField)!==false||strpos($print,$removedField)!==false)throw new RuntimeException('Campo removido ainda presente no relatório administrativo: '.$removedField);
+}
 echo "production_dossier_close_report_test: OK\n";
