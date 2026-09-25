@@ -20,6 +20,8 @@ technical_sheet_layout_check(strpos($source, 'class="section artwork"') !== fals
 technical_sheet_layout_check(strpos($source, 'class="order-grid"') !== false, 'Os dados da encomenda estão em falta.');
 technical_sheet_layout_check(strpos($source, 'SELECT front_colors, back_colors, pallet_weight, pallet_quantity FROM erp_finished_products') !== false, 'A ficha não recupera do artigo os dados técnicos ausentes em snapshots antigos.');
 technical_sheet_layout_check(strpos($source, "['front_colors', 'back_colors']") !== false, 'A ficha não apresenta as designações das cores de impressão.');
+technical_sheet_layout_check(strpos($source, 'technical_sheet_ink_designations') !== false, 'A ficha não remove o código interno das tintas.');
+technical_sheet_layout_check(strpos($source, '.ink-value{display:block;font-size:6.5px') !== false, 'As designações das tintas devem usar uma fonte bastante mais pequena.');
 technical_sheet_layout_check(strpos($source, "['pallet_quantity', 'pallet_weight']") !== false, 'A ficha não apresenta a quantidade e o peso previstos por palete.');
 technical_sheet_layout_check(strpos($source, "code = ? AND is_active = 1") !== false, 'A ficha não recupera o código interno ativo do catálogo documental.');
 technical_sheet_layout_check(strpos($source, 'Código interno do documento: <?= h($technicalSheetDocumentNumber) ?>') !== false, 'O código interno não está presente no rodapé da ficha.');
