@@ -4,7 +4,7 @@ declare(strict_types=1);
 /** Designed, dependency-free A4 dossier used when the optional mPDF package is absent. */
 final class ProductionDossierPdf
 {
-    public static function render(array $d, string $artworkDataUri = ''): string
+    public static function render(array $d, string $artworkDataUri = '', string $documentNumber = 'DOC-PRD-001'): string
     {
         $order = (array) ($d['order'] ?? []);
         $snapshot = (array) ($d['snapshot'] ?? []);
@@ -76,7 +76,7 @@ final class ProductionDossierPdf
         }
         self::heading($content, 32, $summaryY - 85, 'OBSERVACOES IMPORTANTES');
         self::text($content, 32, $summaryY - 105, 9, self::shorten((string) ($order['notes'] ?? 'Sem observacoes.'), 92));
-        self::text($content, 32, 22, 7, 'Dossier de producao gerado pelo GesTisser', false, [.40, .48, .45]);
+        self::text($content, 32, 22, 7, 'Documento: ' . $documentNumber . '  |  OF: ' . (string) ($order['order_number'] ?? '') . '  |  Gerado pelo GesTisser', false, [.40, .48, .45]);
 
         return self::document($content, $jpeg);
     }

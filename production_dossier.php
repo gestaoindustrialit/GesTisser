@@ -19,6 +19,7 @@ if($_SERVER['REQUEST_METHOD']==='POST'){
 try{$d=$service->dossier($id);}catch(Throwable $e){http_response_code(404);exit(h($e->getMessage()));}
 $o=$d['order'];$s=$d['snapshot'];$m=$d['metrics'];$issues=$service->closureIssues($d);
 function pd_num($v,$dec=0){return number_format((float)$v,$dec,',','.');}function pd_money($v){return number_format((float)$v,2,',','.').' €';}function pd_time($v){$v=max(0,(int)round($v));return intdiv($v,60).'h '.str_pad((string)($v%60),2,'0',STR_PAD_LEFT).'m';}
+$documentNumberStmt=$pdo->prepare('SELECT document_number FROM erp_document_catalog WHERE code = ? AND is_active = 1 LIMIT 1');$documentNumberStmt->execute(['production_dossier']);$productionDossierDocumentNumber=trim((string)$documentNumberStmt->fetchColumn())?:'DOC-PRD-001';
 $statusClass=['Planeada'=>'primary','Libertada'=>'info','Em produção'=>'warning','Suspensa'=>'secondary','Fechada'=>'success','Cancelada'=>'danger'][$o['status']]??'light';
 $mainDocument=ArticleDocument::mainArtwork((array)($s['_documents']??[]));
 $mainDocumentThumbnail='';if($mainDocument){$path=ArticleDocument::absolutePath(__DIR__,(string)($mainDocument['file_url']??''));if($path!=='')$mainDocumentThumbnail='data:image/jpeg;base64,'.base64_encode(ArticleDocument::thumbnail($path));}
@@ -30,7 +31,7 @@ if(($_GET['format']??'')==='pdf'){
         try{ob_start();include __DIR__.'/production_dossier_print.php';$html=(string)ob_get_clean();$pdf=new Mpdf\Mpdf(['format'=>'A4','margin_left'=>0,'margin_right'=>0,'margin_top'=>0,'margin_bottom'=>0]);$pdf->WriteHTML($html);$pdfOutput=$pdf->Output($filename,'S');}
         catch(Throwable $e){while(ob_get_level()>$pdfBufferLevel)ob_end_clean();error_log('Falha ao gerar PDF mPDF da OF '.$id.': '.$e->getMessage());}
     }
-    if($pdfOutput==='')$pdfOutput=ProductionDossierPdf::render($d,$mainDocumentThumbnail);
+    if($pdfOutput==='')$pdfOutput=ProductionDossierPdf::render($d,$mainDocumentThumbnail,$productionDossierDocumentNumber);
     header('Content-Type: application/pdf');header('Content-Disposition: inline; filename="'.$filename.'"');header('Content-Length: '.strlen($pdfOutput));echo $pdfOutput;exit;
 }
 $pageTitle='Dossier de Produção · OF '.$o['order_number'];require __DIR__.'/partials/header.php';

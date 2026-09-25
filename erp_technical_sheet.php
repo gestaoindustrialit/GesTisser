@@ -88,6 +88,9 @@ $companyAddress = trim((string) app_setting($pdo, 'company_address', ''));
 $companyPhone = trim((string) app_setting($pdo, 'company_phone', ''));
 $companyEmail = trim((string) app_setting($pdo, 'company_email', ''));
 $companyLogo = technical_sheet_logo_src((string) app_setting($pdo, 'logo_report_dark', ''));
+$documentNumberStmt = $pdo->prepare('SELECT document_number FROM erp_document_catalog WHERE code = ? AND is_active = 1 LIMIT 1');
+$documentNumberStmt->execute(['technical_sheet']);
+$technicalSheetDocumentNumber = trim((string) $documentNumberStmt->fetchColumn()) ?: 'DOC-ERP-001';
 $documentDate = technical_sheet_date((string) ($sheet['created_at'] ?? ''), date('d/m/Y'));
 $contacts = array_filter([
     $companyPhone !== '' ? 'Tel.: ' . $companyPhone : '',
@@ -139,6 +142,7 @@ $materialFields = [
     .artwork{flex:1;min-height:43mm;display:flex;flex-direction:column}.artwork-body{flex:1;min-height:0;padding:2mm;text-align:center;display:flex;flex-direction:column}.document-title{font-weight:700;font-size:9px;margin-bottom:1mm}.artwork img{display:block;flex:1;min-height:0;max-width:100%;width:100%;height:100%;object-fit:contain;margin:auto}
     .empty-artwork{flex:1;display:flex;align-items:center;justify-content:center;color:#777;font-style:italic}
     .order-grid{display:grid;grid-template-columns:1fr 1fr 2fr}.order-grid .cell{border-bottom:0;min-height:12mm}.order-grid .cell:last-child{border-right:0}
+    .document-footer{margin-top:.2mm;border-top:1px solid #aaa;padding-top:1mm;text-align:right;color:#777;font-size:5.5px;line-height:1;letter-spacing:.25px}
     @page{size:A4 portrait;margin:0}
     @media print{html,body{width:210mm;height:297mm;background:#fff}.actions{display:none}.page{margin:0;box-shadow:none;break-after:avoid;page-break-after:avoid}}
 </style>
@@ -178,6 +182,7 @@ $materialFields = [
     </section>
 
     <section class="section"><h2 class="section-title">Dados da encomenda</h2><div class="order-grid"><div class="cell"><b>Quantidade</b><?= h(sheet_value($o, 'quantity')) ?></div><div class="cell"><b>Lote</b><?= h(sheet_value($o, 'lot')) ?></div><div class="cell wide"><b>Observações</b><?= h(sheet_value($o, 'notes')) ?></div></div></section>
+    <footer class="document-footer">Código interno do documento: <?= h($technicalSheetDocumentNumber) ?></footer>
 </main>
 </body>
 </html>
