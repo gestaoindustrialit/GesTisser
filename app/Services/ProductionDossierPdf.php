@@ -12,12 +12,15 @@ final class ProductionDossierPdf
         $operations = (array) ($d['operations'] ?? []);
         $jpeg = self::jpegFromDataUri($artworkDataUri);
 
-        $content = "q\n0.031 0.467 0.365 rg\n0 790 595 52 re f\nQ\n";
-        self::text($content, 32, 816, 8, 'TISSER  /  ORDEM DE FABRICO', true, [1, 1, 1]);
-        self::text($content, 32, 797, 19, 'OF ' . (string) ($order['order_number'] ?? ''), true, [1, 1, 1]);
-        self::text($content, 563, 816, 9, (string) ($order['status'] ?? ''), true, [1, 1, 1], true);
+        $content = "q\n0.12 0.11 0.12 rg\n32 786 126 40 re f\nQ\n";
+        self::text($content, 43, 799, 20, 'TISSER', true, [1, 1, 1]);
+        self::text($content, 297, 809, 15, 'FOLHA DE ACOMPANHAMENTO', true, [.05, .05, .05], true);
+        self::text($content, 297, 792, 11, 'OF ' . (string) ($order['order_number'] ?? ''), true, [.05, .05, .05], true);
+        self::text($content, 563, 811, 9, 'Tisser', true, [.05, .05, .05], true);
+        self::text($content, 563, 795, 7, date('d/m/Y'), true, [.05, .05, .05], true);
+        $content .= "0 0 0 RG\n1.5 w\n32 780 m 563 780 l S\n";
 
-        self::heading($content, 32, 764, 'ARTIGO E FICHA TECNICA');
+        self::heading($content, 32, 764, 'IDENTIFICACAO DA ENCOMENDA E DO ARTIGO');
         $imageX = 32; $imageY = 535; $imageW = 250; $imageH = 205;
         $content .= "0.965 0.976 0.973 rg\n{$imageX} {$imageY} {$imageW} {$imageH} re f\n";
         if ($jpeg !== '') {
@@ -39,6 +42,8 @@ final class ProductionDossierPdf
             'Dimensoes' => trim((string) ($snapshot['width'] ?? '') . ' x ' . (string) ($snapshot['length'] ?? ''), ' x'),
             'Gramagem' => $snapshot['grammage'] ?? '', 'Quantidade' => $order['planned_quantity'] ?? '',
             'Entrega' => $order['due_date'] ?? '',
+            'Encomenda' => $order['customer_order_reference'] ?? $snapshot['_order']['customer_order'] ?? '',
+            'Cor do fio' => $snapshot['thread_color'] ?? '', 'Costura' => $snapshot['seam_type'] ?? '',
         ];
         $y = 729;
         foreach ($details as $label => $value) {
@@ -48,7 +53,7 @@ final class ProductionDossierPdf
             $y -= 31;
         }
 
-        self::heading($content, 32, 507, 'ROUTING E OPERACOES');
+        self::heading($content, 32, 507, 'REGISTO DE PRODUCAO');
         self::tableHeader($content, 32, 482, [45, 235, 125, 126], ['SEQ.', 'OPERACAO', 'MAQUINA', 'ESTADO']);
         $y = 461;
         foreach (array_slice($operations, 0, 7) as $operation) {
@@ -74,8 +79,13 @@ final class ProductionDossierPdf
             self::text($content, $x + 7, $summaryY - 32, 6, $card[0], true, [.40, .48, .45]);
             self::text($content, $x + 7, $summaryY - 50, 13, (string) $card[1], true, [.03, .47, .36]);
         }
-        self::heading($content, 32, $summaryY - 85, 'OBSERVACOES IMPORTANTES');
-        self::text($content, 32, $summaryY - 105, 9, self::shorten((string) ($order['notes'] ?? 'Sem observacoes.'), 92));
+        self::heading($content, 32, $summaryY - 85, 'CORES A IMPRIMIR - ORDEM DE FABRICO');
+        $front = self::orderColours((string) ($snapshot['of_front_colors'] ?? ''));
+        $back = self::orderColours((string) ($snapshot['of_back_colors'] ?? ''));
+        self::text($content, 32, $summaryY - 104, 8, 'FRENTE: ' . ($front ?: '-'), true);
+        self::text($content, 302, $summaryY - 104, 8, 'VERSO: ' . ($back ?: '-'), true);
+        self::heading($content, 32, $summaryY - 126, 'OBSERVACOES');
+        self::text($content, 32, $summaryY - 145, 9, self::shorten((string) ($order['notes'] ?? 'Sem observacoes.'), 92));
         self::text($content, 32, 22, 7, 'Documento: ' . $documentNumber . '  |  OF: ' . (string) ($order['order_number'] ?? '') . '  |  Gerado pelo GesTisser', false, [.40, .48, .45]);
 
         return self::document($content, $jpeg);
@@ -106,7 +116,7 @@ final class ProductionDossierPdf
 
     private static function text(string &$content, float $x, float $y, int $size, string $value, bool $bold = false, array $colour = [0.09, .15, .12], bool $right = false)
     {
-        $safe = self::escape(self::ascii($value));
+        $safe = self::escape(self::winAnsi($value));
         if ($right) $x -= strlen($safe) * $size * .52;
         $content .= sprintf("BT\n%.3F %.3F %.3F rg\n/%s %d Tf\n%.2F %.2F Td\n(%s) Tj\nET\n", $colour[0], $colour[1], $colour[2], $bold ? 'F2' : 'F1', $size, $x, $y, $safe);
     }
@@ -118,8 +128,8 @@ final class ProductionDossierPdf
             '<< /Type /Catalog /Pages 2 0 R >>',
             '<< /Type /Pages /Kids [3 0 R] /Count 1 >>',
             '',
-            '<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>',
-            '<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica-Bold >>',
+            '<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica /Encoding /WinAnsiEncoding >>',
+            '<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica-Bold /Encoding /WinAnsiEncoding >>',
             "<< /Length " . strlen($content) . ">>\nstream\n{$content}\nendstream",
         ];
         if ($jpeg !== '') {
@@ -144,9 +154,16 @@ final class ProductionDossierPdf
 
     private static function shorten(string $value, int $length): string { return strlen($value) > $length ? substr($value, 0, $length - 3) . '...' : $value; }
     private static function escape(string $value): string { return str_replace(['\\', '(', ')', "\r", "\n"], ['\\\\', '\\(', '\\)', ' ', ' '], $value); }
-    private static function ascii(string $value): string
+    private static function winAnsi(string $value): string
     {
-        if (function_exists('iconv')) { $converted = @iconv('UTF-8', 'ASCII//TRANSLIT//IGNORE', $value); if (is_string($converted)) return $converted; }
+        if (function_exists('iconv')) { $converted = @iconv('UTF-8', 'Windows-1252//TRANSLIT//IGNORE', $value); if (is_string($converted)) return $converted; }
         return preg_replace('/[^\x20-\x7E]/', '', $value) ?: '';
+    }
+
+    private static function orderColours(string $value): string
+    {
+        $rows = preg_split('/\R/u', trim($value)) ?: [];
+        $rows = array_map(function ($row) { return preg_replace('/^\s*\S+\s+(?:—|–|-)\s+/u', '', trim((string) $row)) ?: trim((string) $row); }, $rows);
+        return implode(' / ', array_values(array_filter($rows, 'strlen')));
     }
 }
