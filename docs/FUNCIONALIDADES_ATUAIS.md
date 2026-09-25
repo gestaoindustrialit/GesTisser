@@ -546,7 +546,7 @@ A taxa válida é a específica da referência, se existir; caso contrário a ge
 ### 13.5 Relatório administrativo e fecho
 
 - Campos: quantidade, preço unitário de venda, desperdício kg/%, paletes e composição.
-- Custos editáveis: matéria-prima, tintas, diluente, acelerador, retardador, outro, impressora, corte/costura, cliché, energia, embalagem, caixas e transporte.
+- Custos editáveis: matéria-prima, tintas, diluente, outro, impressora, corte/costura, cliché, energia, embalagem, caixas e transporte.
 - Os valores automáticos preenchem inicialmente matéria-prima, máquina e mão de obra; alterações ficam auditadas.
 
 ```text
