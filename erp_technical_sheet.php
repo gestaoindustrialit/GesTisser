@@ -16,6 +16,9 @@ if (!$sheet) {
 
 $a = json_decode($sheet['snapshot_json'], true) ?: [];
 $o = $a['_order'] ?? [];
+$currentArticleStmt = $pdo->prepare('SELECT front_colors, back_colors, pallet_weight, pallet_quantity FROM erp_finished_products WHERE id = ?');
+$currentArticleStmt->execute([(int) $sheet['finished_product_id']]);
+$currentArticle = $currentArticleStmt->fetch(PDO::FETCH_ASSOC) ?: [];
 $documents = is_array($a['_documents'] ?? null) ? $a['_documents'] : [];
 $mainDocument = ArticleDocument::mainArtwork($documents);
 $mainDocumentThumbnail = '';
@@ -33,6 +36,26 @@ if ($mainDocument) {
 function sheet_value(array $data, string $key): string
 {
     return trim((string) ($data[$key] ?? ''));
+}
+
+function technical_sheet_article_value(array $snapshot, array $article, string $key): string
+{
+    $snapshotValue = sheet_value($snapshot, $key);
+    $articleValue = sheet_value($article, $key);
+
+    // Older snapshots may contain only the number of printing colours.  The
+    // article now stores the selected ink designations, which are what the
+    // operator needs on the technical sheet.
+    if (in_array($key, ['front_colors', 'back_colors'], true)
+        && $articleValue !== ''
+        && ($snapshotValue === '' || is_numeric(str_replace(',', '.', $snapshotValue)))) {
+        return $articleValue;
+    }
+
+    // Pallet fields were added after some technical sheets had already been
+    // generated.  Use the article value only when it is absent from that
+    // immutable snapshot, so existing historical values remain unchanged.
+    return $snapshotValue !== '' ? $snapshotValue : $articleValue;
 }
 
 function technical_sheet_date(string $value, string $fallback = ''): string
@@ -139,12 +162,12 @@ $materialFields = [
 
     <section class="section">
         <h2 class="section-title">Especificações do material e dimensões do saco</h2>
-        <div class="grid material-grid"><?php foreach ($materialFields as $key => $label): ?><div class="cell"><b><?= h($label) ?></b><?= sheet_value($a, $key) !== '' ? nl2br(h(sheet_value($a, $key))) : '—' ?></div><?php endforeach; ?></div>
+        <div class="grid material-grid"><?php foreach ($materialFields as $key => $label): $value = in_array($key, ['front_colors', 'back_colors'], true) ? technical_sheet_article_value($a, $currentArticle, $key) : sheet_value($a, $key); ?><div class="cell"><b><?= h($label) ?></b><?= $value !== '' ? nl2br(h($value)) : '—' ?></div><?php endforeach; ?></div>
     </section>
 
     <section class="section">
         <h2 class="section-title">Especificações do saco e empaletização</h2>
-        <div class="features"><?php foreach (['microperforation' => 'Microperfuração', 'has_handle' => 'Asa', 'has_holes' => 'Furo', 'has_gusset' => 'Fole', 'centered_gusset' => 'Fole centrado'] as $key => $label): ?><div class="cell"><b><?= h($label) ?></b><?= !empty($a[$key]) ? '☑ Sim&nbsp;&nbsp;☐ Não' : '☐ Sim&nbsp;&nbsp;☑ Não' ?></div><?php endforeach; ?><?php foreach (['pallet_dimensions' => 'Medidas da palete', 'pallet_lid' => 'Tampa', 'pallet_straps' => 'Fitas', 'pallet_film' => 'Filme', 'pallet_quantity' => 'Qtd. ~ Palete', 'pallet_weight' => 'Kg ~ Palete'] as $key => $label): ?><div class="cell"><b><?= h($label) ?></b><?= sheet_value($a, $key) !== '' ? h(sheet_value($a, $key)) : '—' ?></div><?php endforeach; ?><div class="cell"><b>Observação</b>—</div></div>
+        <div class="features"><?php foreach (['microperforation' => 'Microperfuração', 'has_handle' => 'Asa', 'has_holes' => 'Furo', 'has_gusset' => 'Fole', 'centered_gusset' => 'Fole centrado'] as $key => $label): ?><div class="cell"><b><?= h($label) ?></b><?= !empty($a[$key]) ? '☑ Sim&nbsp;&nbsp;☐ Não' : '☐ Sim&nbsp;&nbsp;☑ Não' ?></div><?php endforeach; ?><?php foreach (['pallet_dimensions' => 'Medidas da palete', 'pallet_lid' => 'Tampa', 'pallet_straps' => 'Fitas', 'pallet_film' => 'Filme', 'pallet_quantity' => 'Qtd. ~ Palete', 'pallet_weight' => 'Kg ~ Palete'] as $key => $label): $value = in_array($key, ['pallet_quantity', 'pallet_weight'], true) ? technical_sheet_article_value($a, $currentArticle, $key) : sheet_value($a, $key); ?><div class="cell"><b><?= h($label) ?></b><?= $value !== '' ? h($value) : '—' ?></div><?php endforeach; ?><div class="cell"><b>Observação</b>—</div></div>
     </section>
 
     <?php if ($filledAnalysis): ?><section class="section"><h2 class="section-title">Boletim de análise</h2><div class="analysis-grid"><?php foreach ($filledAnalysis as $key => $label): ?><div class="analysis-item"><b><?= h($label) ?></b><span><?= h(sheet_value($a, $key)) ?></span></div><?php endforeach; ?></div></section><?php endif; ?>
