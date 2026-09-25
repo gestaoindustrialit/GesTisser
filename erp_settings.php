@@ -10,8 +10,15 @@ if (!is_admin($pdo, $userId)) {
 
 gt_erp_run_phase1_migrations($pdo);
 erp_migrate_ink_types($pdo);
+gt_erp_migrate_production_cost_settings($pdo);
 $flashSuccess = null;
 $flashError = null;
+$administrativeCostFields = [
+    'materia_prima' => 'Matéria-prima', 'tintas' => 'Tintas', 'diluente' => 'Diluente',
+    'acelerador' => 'Acelerador', 'retardador' => 'Retardador', 'outro' => 'Outro',
+    'impressora' => 'Impressora', 'corte_e_cose' => 'Corte e cose', 'cliche' => 'Cliché',
+    'energia' => 'Energia', 'embalagem' => 'Embalagem', 'caixas' => 'Caixas', 'transporte' => 'Transporte',
+];
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     if (!validate_csrf_or_abort(false)) {
@@ -19,7 +26,40 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     } else {
         $action = (string) ($_POST['action'] ?? 'save_settings');
         try {
-            if ($action === 'save_material_type') {
+            if ($action === 'save_production_costs') {
+                $keys = is_array($_POST['cost_key'] ?? null) ? $_POST['cost_key'] : [];
+                $values = is_array($_POST['unit_cost'] ?? null) ? $_POST['unit_cost'] : [];
+                $units = is_array($_POST['unit'] ?? null) ? $_POST['unit'] : [];
+                $requiredKeys = ['caixa','palete','diluente','mao_obra_maquina','mao_obra_colaborador','energia_saco'];
+                $existingRequired = $pdo->query('SELECT cost_key FROM erp_production_cost_settings WHERE is_required=1')->fetchAll(PDO::FETCH_COLUMN);
+                $allowedKeys = array_merge($requiredKeys, array_keys($administrativeCostFields));
+                $seen = [];
+                $pdo->beginTransaction();
+                $saveCost = $pdo->prepare('UPDATE erp_production_cost_settings SET unit_cost=?,unit=?,sort_order=?,updated_by=?,updated_at=CURRENT_TIMESTAMP WHERE cost_key=?');
+                $insertCost = $pdo->prepare('INSERT INTO erp_production_cost_settings(cost_key,report_cost_key,label,unit,unit_cost,sort_order,is_required,updated_by) VALUES (?,?,?,?,?,?,0,?)');
+                foreach ($keys as $index => $rawKey) {
+                    $key = strtolower(trim((string) $rawKey));
+                    if (!in_array($key, $allowedKeys, true) || isset($seen[$key])) throw new InvalidArgumentException('Foi indicado um campo de custo inválido ou repetido.');
+                    $valueText = str_replace(',', '.', trim((string) ($values[$index] ?? '')));
+                    $unit = trim((string) ($units[$index] ?? ''));
+                    if (!is_numeric($valueText) || (float) $valueText < 0) throw new InvalidArgumentException('Todos os custos devem ter um valor igual ou superior a zero.');
+                    if ($unit === '' || strlen($unit) > 20) throw new InvalidArgumentException('Indique uma unidade válida para cada custo.');
+                    $seen[$key] = true;
+                    $saveCost->execute([(float) $valueText,$unit,($index+1)*10,$userId,$key]);
+                    if ($saveCost->rowCount() === 0 && isset($administrativeCostFields[$key])) {
+                        $insertCost->execute([$key,$key,$administrativeCostFields[$key],$unit,(float) $valueText,($index+1)*10,$userId]);
+                    }
+                }
+                foreach ($existingRequired as $requiredKey) if (!isset($seen[$requiredKey])) throw new InvalidArgumentException('Os custos base de produção não podem ser removidos.');
+                $customKeys = array_values(array_diff(array_keys($administrativeCostFields), array_keys($seen)));
+                if ($customKeys) {
+                    $placeholders = implode(',', array_fill(0,count($customKeys),'?'));
+                    $pdo->prepare('DELETE FROM erp_production_cost_settings WHERE is_required=0 AND cost_key IN ('.$placeholders.')')->execute($customKeys);
+                }
+                gt_erp_audit($pdo,$userId,'update','erp_production_cost_settings',null,[],['costs'=>array_keys($seen)]);
+                $pdo->commit();
+                $flashSuccess = 'Custos inerentes à produção guardados com sucesso.';
+            } elseif ($action === 'save_material_type') {
                 $id=(int)($_POST['id']??0);$code=strtoupper(trim((string)($_POST['code']??'')));$name=trim((string)($_POST['name']??''));
                 if($code===''||$name==='')throw new InvalidArgumentException('O código e o nome do tipo de material são obrigatórios.');
                 if($id){$exists=$pdo->prepare('SELECT 1 FROM erp_material_types WHERE id=?');$exists->execute([$id]);if(!$exists->fetchColumn())throw new InvalidArgumentException('Tipo de material inexistente.');$pdo->prepare('UPDATE erp_material_types SET code=?,name=?,is_active=? WHERE id=?')->execute([$code,$name,!empty($_POST['is_active'])?1:0,$id]);}
@@ -142,6 +182,8 @@ $printers = $pdo->query('SELECT * FROM erp_printers ORDER BY is_active DESC,name
 $materialTypes = $pdo->query('SELECT id,code,name,is_active FROM erp_material_types ORDER BY is_active DESC,name COLLATE NOCASE')->fetchAll(PDO::FETCH_ASSOC);
 $inkTypes = $pdo->query('SELECT id,code,name,icon,is_active FROM erp_ink_types ORDER BY is_active DESC,name COLLATE NOCASE')->fetchAll(PDO::FETCH_ASSOC);
 $controlledDocuments = $pdo->query('SELECT id,code,document_number,name,module,output_format,generation_route,is_active,updated_at FROM erp_document_catalog ORDER BY module COLLATE NOCASE,document_number COLLATE NOCASE')->fetchAll(PDO::FETCH_ASSOC);
+$productionCosts = $pdo->query('SELECT cost_key,report_cost_key,label,unit,unit_cost,is_required FROM erp_production_cost_settings ORDER BY sort_order,id')->fetchAll(PDO::FETCH_ASSOC);
+$configuredCostKeys = array_column($productionCosts, 'cost_key');
 $sequenceLabels = [
     'customer' => 'Clientes',
     'finished_product' => 'Produtos acabados',
@@ -161,6 +203,49 @@ require __DIR__ . '/partials/header.php';
 
 <?php if ($flashSuccess): ?><div class="alert alert-success"><?= h($flashSuccess) ?></div><?php endif; ?>
 <?php if ($flashError): ?><div class="alert alert-danger"><?= h($flashError) ?></div><?php endif; ?>
+
+<section class="card shadow-sm soft-card mb-4" aria-labelledby="production-costs-title">
+    <div class="card-body p-4">
+        <div class="d-flex flex-wrap justify-content-between align-items-start gap-3 mb-3">
+            <div>
+                <h2 class="h5 mb-1" id="production-costs-title"><i class="bi bi-cash-coin me-2 text-primary"></i>Custos inerentes à produção</h2>
+                <p class="text-muted mb-0">Defina os valores unitários usados como referência na produção. Pode acrescentar rubricas existentes no relatório administrativo de custos.</p>
+            </div>
+        </div>
+        <form method="post" id="production-costs-form">
+            <?= csrf_input() ?>
+            <input type="hidden" name="action" value="save_production_costs">
+            <div class="table-responsive">
+                <table class="table align-middle mb-3">
+                    <thead><tr><th>Rubrica</th><th style="width: 11rem">Custo unitário</th><th style="width: 10rem">Unidade</th><th class="text-end" style="width: 6rem">Ações</th></tr></thead>
+                    <tbody id="production-cost-rows">
+                    <?php foreach ($productionCosts as $cost): ?>
+                        <tr data-cost-key="<?= h($cost['cost_key']) ?>">
+                            <td><input type="hidden" name="cost_key[]" value="<?= h($cost['cost_key']) ?>"><strong><?= h($cost['label']) ?></strong><?php if ($cost['report_cost_key']): ?><div class="small text-muted">Relatório administrativo</div><?php endif; ?></td>
+                            <td><input class="form-control" type="number" min="0" step="0.0001" name="unit_cost[]" required value="<?= h(number_format((float) $cost['unit_cost'], 4, '.', '')) ?>"></td>
+                            <td><input class="form-control" name="unit[]" maxlength="20" required value="<?= h($cost['unit']) ?>" aria-label="Unidade de <?= h($cost['label']) ?>"></td>
+                            <td class="text-end"><?php if (empty($cost['is_required'])): ?><button class="btn btn-sm btn-outline-danger js-remove-cost" type="button" title="Remover <?= h($cost['label']) ?>"><i class="bi bi-trash"></i></button><?php else: ?><span class="badge text-bg-light">Base</span><?php endif; ?></td>
+                        </tr>
+                    <?php endforeach; ?>
+                    </tbody>
+                </table>
+            </div>
+            <div class="row g-2 align-items-end">
+                <div class="col-md-6 col-lg-4">
+                    <label class="form-label" for="administrative-cost-field">Adicionar rubrica do relatório administrativo</label>
+                    <select class="form-select" id="administrative-cost-field">
+                        <option value="">Selecione uma rubrica…</option>
+                        <?php foreach ($administrativeCostFields as $key=>$label): if (in_array($key,$configuredCostKeys,true)) continue; ?>
+                            <option value="<?=h($key)?>" data-label="<?=h($label)?>"><?=h($label)?></option>
+                        <?php endforeach; ?>
+                    </select>
+                </div>
+                <div class="col-auto"><button class="btn btn-outline-primary" type="button" id="add-production-cost"><i class="bi bi-plus-lg me-1"></i>Adicionar campo</button></div>
+                <div class="col-md text-md-end"><button class="btn btn-primary" type="submit"><i class="bi bi-check-lg me-1"></i>Guardar custos</button></div>
+            </div>
+        </form>
+    </div>
+</section>
 
 <section class="card shadow-sm soft-card mb-4" aria-labelledby="document-control-title">
     <div class="card-body p-4">
@@ -318,5 +403,40 @@ document.querySelectorAll('.js-center-type').forEach(function (type) {
     }
     type.addEventListener('change', toggleMachine); toggleMachine();
 });
+(function () {
+    var rows = document.getElementById('production-cost-rows');
+    var select = document.getElementById('administrative-cost-field');
+    var addButton = document.getElementById('add-production-cost');
+    if (!rows || !select || !addButton) return;
+    function bindRemove(button) {
+        button.addEventListener('click', function () {
+            var row = button.closest('tr');
+            var option = document.createElement('option');
+            option.value = row.dataset.costKey;
+            option.dataset.label = row.querySelector('strong').textContent;
+            option.textContent = option.dataset.label;
+            select.appendChild(option);
+            row.remove();
+        });
+    }
+    rows.querySelectorAll('.js-remove-cost').forEach(bindRemove);
+    addButton.addEventListener('click', function () {
+        var selected = select.options[select.selectedIndex];
+        if (!selected || !selected.value) return;
+        var row = document.createElement('tr');
+        row.dataset.costKey = selected.value;
+        row.innerHTML = '<td><input type="hidden" name="cost_key[]"><strong></strong><div class="small text-muted">Relatório administrativo</div></td>'+
+            '<td><input class="form-control" type="number" min="0" step="0.0001" name="unit_cost[]" required value="0.0000"></td>'+
+            '<td><input class="form-control" name="unit[]" maxlength="20" required value="€/un." aria-label="Unidade"></td>'+
+            '<td class="text-end"><button class="btn btn-sm btn-outline-danger js-remove-cost" type="button" title="Remover"><i class="bi bi-trash"></i></button></td>';
+        row.querySelector('[name="cost_key[]"]').value = selected.value;
+        row.querySelector('strong').textContent = selected.dataset.label;
+        rows.appendChild(row);
+        bindRemove(row.querySelector('.js-remove-cost'));
+        selected.remove();
+        select.value = '';
+        row.querySelector('[name="unit_cost[]"]').focus();
+    });
+}());
 </script>
 <?php require __DIR__ . '/partials/footer.php'; ?>
