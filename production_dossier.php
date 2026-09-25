@@ -2,7 +2,6 @@
 require_once __DIR__.'/helpers.php';
 require_once __DIR__.'/erp_migrations.php';
 require_once __DIR__ . '/production_dossier_service.php';
-require_once __DIR__ . '/article_document.php';
 require_once __DIR__ . '/app/Services/ProductionDossierPdf.php';
 require_login();gt_erp_run_phase1_migrations($pdo);
 $user=current_user($pdo)?:[];if(!gt_erp_user_can($pdo,$user,'erp.view')){http_response_code(403);exit('Sem acesso à Ordem de Fabrico.');}

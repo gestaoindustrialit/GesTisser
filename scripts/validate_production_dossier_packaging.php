@@ -2,7 +2,7 @@
 declare(strict_types=1);
 
 $root = dirname(__DIR__);
-$entryPoints = ['erp.php', 'production_dossier.php'];
+$entryPoints = ['erp.php', 'erp_technical_sheet.php', 'production_dossier.php'];
 $service = $root . '/production_dossier_service.php';
 $applicationEntryPoint = $root . '/app/Services/ProductionDossierService.php';
 
@@ -31,6 +31,10 @@ require_once $applicationEntryPoint;
 require_once $service;
 if (!class_exists('ProductionDossierService', false)) {
     fwrite(STDERR, "FAIL - ProductionDossierService não foi carregado.\n");
+    exit(1);
+}
+if (!class_exists('ArticleDocument', false)) {
+    fwrite(STDERR, "FAIL - ArticleDocument não foi carregado pelo serviço raiz.\n");
     exit(1);
 }
 
