@@ -20,7 +20,11 @@ if (strpos($pdf, '%PDF-1.4') !== 0 || strpos($pdf, 'xref') === false || strpos($
     throw new RuntimeException('O fallback não produziu um PDF válido do dossier.');
 }
 if ($jpeg !== '' && strpos($pdf, '/Subtype /Image') === false) throw new RuntimeException('A imagem do artigo não foi incorporada no PDF da OF.');
-if (strpos($pdf, 'FOLHA DE ACOMPANHAMENTO') === false || strpos($pdf, 'RESUMO DE PRODUCAO') === false) throw new RuntimeException('O PDF não tem a estrutura gráfica da folha de acompanhamento.');
+if (strpos($pdf, 'FOLHA DE ACOMPANHAMENTO') === false || strpos($pdf, 'REGISTO DE PRODUCAO') === false) throw new RuntimeException('O PDF não tem a estrutura gráfica da folha de acompanhamento.');
+foreach (['QUANTIDADE BOA', 'DESPERDICIO', 'EFICIENCIA'] as $removedMetric) {
+    if (strpos($pdf, $removedMetric) !== false) throw new RuntimeException('A métrica removida ainda aparece no PDF: ' . $removedMetric);
+}
+if (strpos($pdfSource, 'barcode39') === false) throw new RuntimeException('O fallback não inclui o código de barras da OF.');
 
 $dossier = (string) file_get_contents(__DIR__ . '/../production_dossier.php');
 $print = (string) file_get_contents(__DIR__ . '/../production_dossier_print.php');
@@ -32,6 +36,9 @@ foreach (['Folha de Acompanhamento', 'Identificação da encomenda e do artigo',
     if (strpos($print, $section) === false) throw new RuntimeException('Secção em falta na folha de acompanhamento: ' . $section);
 }
 if (strpos($print, '$productionOrderFrontColors') === false || strpos($print, '$productionOrderBackColors') === false) throw new RuntimeException('A folha não usa as cores próprias da OF.');
+foreach (['proof_number', 'planned_pallets', 'pallet_type', 'pd_barcode39_html', '$productionCompanyLogo'] as $field) {
+    if (strpos($print, $field) === false) throw new RuntimeException('Dado operacional em falta na folha: ' . $field);
+}
 if (strpos($dossier, 'ArticleDocument::thumbnailUrl') === false) throw new RuntimeException('Thumbnail em falta no dossier.');
 if (strpos($sheet, '<object') !== false || strpos($sheet, 'target="_blank"') !== false) throw new RuntimeException('A ficha técnica ainda contém links/objetos interativos.');
 if (strpos($sheet, 'MAQUETA DO ARTIGO') === false || strpos($sheet, 'ArticleDocument::thumbnailUrl') === false) throw new RuntimeException('Maqueta em falta na ficha técnica.');
