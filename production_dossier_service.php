@@ -59,9 +59,23 @@ final class ProductionDossierService
     {
         $defaults=['produced_quantity'=>$metrics['good']??0,'waste_kg'=>$metrics['rejected']??0,'waste_percent'=>$metrics['waste_percent']??0,'sale_unit_price'=>0,'pallet_count'=>0,'pallet_details'=>'','notes'=>''];
         foreach(['materia_prima','tintas','diluente','acelerador','retardador','outro','impressora','corte_e_cose','cliche','energia','embalagem','caixas','transporte'] as $key)$defaults['cost_'.$key]=0;
+        $unitCosts=$this->productionUnitCosts();
+        $defaults['cost_energia']=(float)$defaults['produced_quantity']*$unitCosts['energia_saco'];
+        $defaults['cost_embalagem']=(float)$defaults['pallet_count']*$unitCosts['palete'];
         foreach((array)($costs['rows']??[]) as $row){$category=(string)($row['category']??'');if($category==='Matérias-primas')$defaults['cost_materia_prima']=(float)$row['actual'];elseif($category==='Máquina')$defaults['cost_impressora']=(float)$row['actual'];elseif($category==='Mão de obra')$defaults['cost_corte_e_cose']=(float)$row['actual'];}
         $saved=$this->row('SELECT report_json FROM erp_production_order_close_reports WHERE production_order_id=?',[$orderId]);
         return array_merge($defaults,$saved?(json_decode((string)$saved['report_json'],true)?:[]):[]);
+    }
+
+    public function productionUnitCosts(): array
+    {
+        $costs=['energia_saco'=>0.0,'palete'=>0.0];
+        try {
+            foreach($this->all('SELECT cost_key,unit_cost FROM erp_production_cost_settings WHERE cost_key IN ("energia_saco","palete")') as $row)$costs[(string)$row['cost_key']]=(float)$row['unit_cost'];
+        } catch (PDOException $e) {
+            // Older/test databases can legitimately predate the independent settings migration.
+        }
+        return $costs;
     }
 
     public function saveCloseReport(int $orderId,int $userId,array $input,string $reason=''): array

@@ -34,6 +34,21 @@
         if (output) output.textContent = money.format(value);
     }
 
+    function setAutomaticCost(form, costName, quantity, unitCost) {
+        var input = form.querySelector('[name="report[cost_' + costName + ']"]');
+        if (input) input.value = (quantity * unitCost).toFixed(2);
+    }
+
+    function applyAutomaticCosts(form, changedInput) {
+        if (!changedInput) return;
+        if (changedInput.name === 'report[produced_quantity]') {
+            setAutomaticCost(form, 'energia', numberValue(changedInput), Number(form.dataset.energyUnitCost || 0));
+        }
+        if (changedInput.name === 'report[pallet_count]') {
+            setAutomaticCost(form, 'embalagem', numberValue(changedInput), Number(form.dataset.palletUnitCost || 0));
+        }
+    }
+
     function refresh(document, form) {
         var costInputs = Array.prototype.slice.call(form.querySelectorAll('input[name^="report[cost_"]'));
         var result = calculate({
@@ -54,11 +69,12 @@
         var form = document.querySelector('[data-cost-report]');
         if (!form) return;
         form.addEventListener('input', function (event) {
-            if (event.target && event.target.matches('input[name^="report[cost_"], input[name="report[produced_quantity]"], input[name="report[sale_unit_price]"]')) {
+            if (event.target && event.target.matches('input[name^="report[cost_"], input[name="report[produced_quantity]"], input[name="report[pallet_count]"], input[name="report[sale_unit_price]"]')) {
+                applyAutomaticCosts(form, event.target);
                 refresh(document, form);
             }
         });
     }
 
-    return { calculate: calculate, numberValue: numberValue, refresh: refresh, bind: bind };
+    return { calculate: calculate, numberValue: numberValue, applyAutomaticCosts: applyAutomaticCosts, refresh: refresh, bind: bind };
 }));
