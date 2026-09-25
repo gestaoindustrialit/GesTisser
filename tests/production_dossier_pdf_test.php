@@ -1,6 +1,11 @@
 <?php
 require_once __DIR__ . '/../app/Services/ProductionDossierPdf.php';
 
+$pdfSource = (string) file_get_contents(__DIR__ . '/../app/Services/ProductionDossierPdf.php');
+if (preg_match('/\)\s*:\s*void\b/', $pdfSource)) {
+    throw new RuntimeException('O gerador PDF contém retornos void incompatíveis com PHP 7.0.');
+}
+
 $image = function_exists('imagecreatetruecolor') ? imagecreatetruecolor(20, 10) : null;
 $jpeg = '';
 if ($image) { ob_start(); imagejpeg($image); $jpeg = (string) ob_get_clean(); imagedestroy($image); }

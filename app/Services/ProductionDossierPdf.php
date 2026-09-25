@@ -81,30 +81,30 @@ final class ProductionDossierPdf
         return self::document($content, $jpeg);
     }
 
-    private static function heading(string &$content, float $x, float $y, string $label): void
+    private static function heading(string &$content, float $x, float $y, string $label)
     {
         self::text($content, $x, $y, 9, $label, true, [.03, .47, .36]);
         $content .= sprintf("0.031 0.467 0.365 RG\n0.8 w\n%.2F %.2F m 563 %.2F l S\n", $x, $y - 7, $y - 7);
     }
 
-    private static function tableHeader(string &$content, float $x, float $y, array $widths, array $values): void
+    private static function tableHeader(string &$content, float $x, float $y, array $widths, array $values)
     {
         $content .= sprintf("0.929 0.965 0.949 rg\n%.2F %.2F 531 20 re f\n", $x, $y - 14);
         self::tableText($content, $x, $y - 7, $widths, $values, 7, true);
     }
 
-    private static function tableRow(string &$content, float $x, float $y, array $widths, array $values): void
+    private static function tableRow(string &$content, float $x, float $y, array $widths, array $values)
     {
         self::tableText($content, $x, $y, $widths, $values, 8, false);
         $content .= sprintf("0.86 0.90 0.88 RG\n%.2F %.2F m 563 %.2F l S\n", $x, $y - 7, $y - 7);
     }
 
-    private static function tableText(string &$content, float $x, float $y, array $widths, array $values, int $size, bool $bold): void
+    private static function tableText(string &$content, float $x, float $y, array $widths, array $values, int $size, bool $bold)
     {
         foreach ($values as $index => $value) { self::text($content, $x + 7, $y, $size, (string) $value, $bold); $x += $widths[$index]; }
     }
 
-    private static function text(string &$content, float $x, float $y, int $size, string $value, bool $bold = false, array $colour = [0.09, .15, .12], bool $right = false): void
+    private static function text(string &$content, float $x, float $y, int $size, string $value, bool $bold = false, array $colour = [0.09, .15, .12], bool $right = false)
     {
         $safe = self::escape(self::ascii($value));
         if ($right) $x -= strlen($safe) * $size * .52;
