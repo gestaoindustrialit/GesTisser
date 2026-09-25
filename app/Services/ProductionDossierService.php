@@ -1,6 +1,7 @@
 <?php
 declare(strict_types=1);
 
+if (!class_exists('ProductionDossierService', false)) {
 final class ProductionDossierService
 {
     private $pdo;
@@ -104,4 +105,5 @@ final class ProductionDossierService
     private function row(string $sql,array $p=[]){$s=$this->pdo->prepare($sql);$s->execute($p);return$s->fetch(PDO::FETCH_ASSOC);}
     private function all(string $sql,array $p=[]):array{$s=$this->pdo->prepare($sql);$s->execute($p);return$s->fetchAll(PDO::FETCH_ASSOC);}
     private function scalar(string $sql,array $p=[]){$s=$this->pdo->prepare($sql);$s->execute($p);return$s->fetchColumn();}
+}
 }

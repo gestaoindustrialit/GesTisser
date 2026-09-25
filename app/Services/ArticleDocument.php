@@ -1,6 +1,7 @@
 <?php
 declare(strict_types=1);
 
+if (!class_exists('ArticleDocument', false)) {
 final class ArticleDocument
 {
     /** Maximum size accepted for each document attached to an article (20 MiB). */
@@ -200,4 +201,5 @@ final class ArticleDocument
 
         return ['kind' => 'document', 'label' => 'DOC', 'icon' => 'bi-file-earmark-text', 'class' => 'text-secondary'];
     }
+}
 }

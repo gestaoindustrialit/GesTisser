@@ -1,7 +1,7 @@
 <?php
 require_once __DIR__ . '/helpers.php';
 require_once __DIR__ . '/erp_migrations.php';
-require_once __DIR__ . '/app/Services/ArticleDocument.php';
+require_once __DIR__ . '/production_dossier_service.php';
 
 require_login();
 gt_erp_run_phase1_migrations($pdo);
