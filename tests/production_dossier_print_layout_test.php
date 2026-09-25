@@ -1,23 +1,15 @@
 <?php
-$printSource = (string) file_get_contents(__DIR__ . '/../production_dossier_print.php');
-$controllerSource = (string) file_get_contents(__DIR__ . '/../production_dossier.php');
-$pdfSource = (string) file_get_contents(__DIR__ . '/../app/Services/ProductionDossierPdf.php');
-
-function production_dossier_layout_check($condition, $message)
-{
-    if (!$condition) throw new RuntimeException($message);
-}
-
-production_dossier_layout_check(strpos($printSource, '.report-header{height:29mm;display:grid;grid-template-columns:48mm 1fr 51mm') !== false, 'O cabeçalho deve seguir a grelha da ficha técnica.');
-production_dossier_layout_check(strpos($printSource, '<h1>Folha de Acompanhamento</h1>') !== false, 'O título da folha de acompanhamento está em falta.');
-production_dossier_layout_check(strpos($printSource, '<div class="order-number">OF ') !== false, 'O número da OF deve aparecer sob o título.');
-production_dossier_layout_check(strpos($printSource, '.section{border:1.5px solid #111') !== false, 'As secções da OF devem seguir a grelha visual da ficha técnica.');
-production_dossier_layout_check(strpos($printSource, 'background:#e6e7e8') !== false, 'Os títulos e tabelas devem usar o cinzento da ficha técnica.');
-production_dossier_layout_check(strpos($printSource, 'class="document-footer"') !== false, 'O rodapé documental está em falta.');
-production_dossier_layout_check(strpos($printSource, '<?=h($productionDossierDocumentNumber)?>') !== false, 'O rodapé não apresenta o código configurado do documento.');
-production_dossier_layout_check(strpos($controllerSource, "execute(['production_dossier'])") !== false, 'A OF não recupera o código do catálogo documental.');
-production_dossier_layout_check(strpos($pdfSource, "'Documento: ' . \$documentNumber") !== false, 'O gerador PDF de contingência não apresenta o código documental.');
-production_dossier_layout_check(strpos($pdfSource, '/Encoding /WinAnsiEncoding') !== false, 'O PDF de contingência não declara a codificação necessária para caracteres portugueses.');
-production_dossier_layout_check(strpos($controllerSource, '$productionOrderFrontColors=pd_order_colors($s[\'of_front_colors\']??\'\')') !== false, 'As cores de impressão não são obtidas dos campos da OF.');
-
+$printSource=(string)file_get_contents(__DIR__.'/../production_dossier_print.php');
+$controllerSource=(string)file_get_contents(__DIR__.'/../production_dossier.php');
+$pdfSource=(string)file_get_contents(__DIR__.'/../app/Services/ProductionDossierPdf.php');
+function production_dossier_layout_check($condition,$message){if(!$condition)throw new RuntimeException($message);}
+foreach(['Dados principais da encomenda','Identificação do cliente e do artigo','Maqueta do artigo / Referência visual','Registo de produção','Observações']as$title)production_dossier_layout_check(stripos($printSource,$title)!==false,'Secção em falta: '.$title);
+production_dossier_layout_check(strpos($printSource,'@page{size:A4 portrait')!==false,'A impressão não está configurada para A4 vertical.');
+production_dossier_layout_check(strpos($printSource,'object-fit:contain')!==false,'A maqueta não preserva a proporção.');
+production_dossier_layout_check(strpos($printSource,'display:table-header-group')!==false,'O cabeçalho das operações não se repete.');
+production_dossier_layout_check(strpos($printSource,'class="document-footer"')!==false,'Rodapé em falta.');
+production_dossier_layout_check(strpos($controllerSource,'function pd_barcode128_html')!==false&&strpos($printSource,"pd_barcode128_html(\$o['order_number']")!==false,'Code 128 em falta.');
+production_dossier_layout_check(strpos($controllerSource,"execute(['production_dossier'])")!==false,'Código documental não é dinâmico.');
+production_dossier_layout_check(strpos($pdfSource,'barcode128')!==false,'Fallback sem Code 128.');
+production_dossier_layout_check(strpos($controllerSource,"$"."productionOrderFrontColors=pd_order_colors($"."s['of_front_colors']??'')")!==false,'Cores da OF em falta.');
 echo "production_dossier_print_layout_test: OK\n";

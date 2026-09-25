@@ -18,10 +18,10 @@ final class ProductionDossierPdf
         self::text($content, 297, 792, 11, 'OF ' . (string) ($order['order_number'] ?? ''), true, [.05, .05, .05], true);
         self::text($content, 563, 811, 9, 'Tisser', true, [.05, .05, .05], true);
         self::text($content, 563, 795, 7, date('d/m/Y'), true, [.05, .05, .05], true);
-        self::barcode39($content, 430, 765, (string) ($order['order_number'] ?? ''));
+        self::barcode128($content, 430, 765, (string) ($order['order_number'] ?? ''));
         $content .= "0 0 0 RG\n1.5 w\n32 780 m 563 780 l S\n";
 
-        self::heading($content, 32, 764, 'IDENTIFICACAO DA ENCOMENDA E DO ARTIGO');
+        self::heading($content, 32, 764, 'DADOS PRINCIPAIS DA ENCOMENDA');
         $imageX = 32; $imageY = 535; $imageW = 250; $imageH = 205;
         $content .= "0.965 0.976 0.973 rg\n{$imageX} {$imageY} {$imageW} {$imageH} re f\n";
         if ($jpeg !== '') {
@@ -71,7 +71,7 @@ final class ProductionDossierPdf
         if (!$operations) { self::text($content, 40, 457, 9, 'Esta OF ainda nao tem operacoes no routing.', false, [.40, .48, .45]); $y -= 22; }
 
         $summaryY = min($y - 12, 285);
-        self::heading($content, 32, $summaryY - 85, 'CORES A IMPRIMIR - ORDEM DE FABRICO');
+        self::heading($content, 32, $summaryY - 85, 'MAQUETA DO ARTIGO / REFERENCIA VISUAL');
         $front = self::orderColours((string) ($snapshot['of_front_colors'] ?? ''));
         $back = self::orderColours((string) ($snapshot['of_back_colors'] ?? ''));
         self::text($content, 32, $summaryY - 104, 8, 'FRENTE: ' . ($front ?: '-'), true);
@@ -95,11 +95,11 @@ final class ProductionDossierPdf
         self::tableText($content, $x, $y - 7, $widths, $values, 7, true);
     }
 
-    private static function barcode39(string &$content, float $x, float $y, string $value)
+    private static function barcode128(string &$content, float $x, float $y, string $value)
     {
-        $patterns=['0'=>'nnnwwnwnn','1'=>'wnnwnnnnw','2'=>'nnwwnnnnw','3'=>'wnwwnnnnn','4'=>'nnnwwnnnw','5'=>'wnnwwnnnn','6'=>'nnwwwnnnn','7'=>'nnnwnnwnw','8'=>'wnnwnnwnn','9'=>'nnwwnnwnn','A'=>'wnnnnwnnw','B'=>'nnwnnwnnw','C'=>'wnwnnwnnn','D'=>'nnnnwwnnw','E'=>'wnnnwwnnn','F'=>'nnwnwwnnn','G'=>'nnnnnwwnw','H'=>'wnnnnwwnn','I'=>'nnwnnwwnn','J'=>'nnnnwwwnn','K'=>'wnnnnnnww','L'=>'nnwnnnnww','M'=>'wnwnnnnwn','N'=>'nnnnwnnww','O'=>'wnnnwnnwn','P'=>'nnwnwnnwn','Q'=>'nnnnnnwww','R'=>'wnnnnnwwn','S'=>'nnwnnnwwn','T'=>'nnnnwnwwn','U'=>'wwnnnnnnw','V'=>'nwwnnnnnw','W'=>'wwwnnnnnn','X'=>'nwnnwnnnw','Y'=>'wwnnwnnnn','Z'=>'nwwnwnnnn','-'=>'nwnnnnwnw','.'=>'wwnnnnwnn',' '=>'nwwnnnwnn','*'=>'nwnnwnwnn'];
-        $clean=preg_replace('/[^0-9A-Z. -]/','',strtoupper($value));$cursor=$x;
-        foreach(str_split('*'.$clean.'*') as $character){foreach(str_split($patterns[$character]??$patterns['-']) as $index=>$width){$points=$width==='w'?2.1:.8;if($index%2===0)$content.=sprintf("0 0 0 rg\n%.2F %.2F %.2F 18 re f\n",$cursor,$y,$points);$cursor+=$points;}$cursor+=.8;}
+        $patterns=['212222','222122','222221','121223','121322','131222','122213','122312','132212','221213','221312','231212','112232','122132','122231','113222','123122','123221','223211','221132','221231','213212','223112','312131','311222','321122','321221','312212','322112','322211','212123','212321','232121','111323','131123','131321','112313','132113','132311','211313','231113','231311','112133','112331','132131','113123','113321','133121','313121','211331','231131','213113','213311','213131','311123','311321','331121','312113','312311','332111','314111','221411','431111','111224','111422','121124','121421','141122','141221','112214','112412','122114','122411','142112','142211','241211','221114','413111','241112','134111','111242','121142','121241','114212','124112','124211','411212','421112','421211','212141','214121','412121','111143','111341','131141','114113','114311','411113','411311','113141','114131','311141','411131','211412','211214','211232','2331112'];
+        $clean=preg_replace('/[^\x20-\x7E]/','',$value);$codes=[104];foreach(str_split($clean)as$char)$codes[]=ord($char)-32;$checksum=104;foreach(array_slice($codes,1)as$i=>$code)$checksum+=($i+1)*$code;$codes[]=$checksum%103;$codes[]=106;
+        $module=.55;$cursor=$x;foreach($codes as$code){foreach(str_split($patterns[$code])as$i=>$width){$points=(int)$width*$module;if($i%2===0)$content.=sprintf("0 0 0 rg\n%.2F %.2F %.2F 18 re f\n",$cursor,$y,$points);$cursor+=$points;}}
         self::text($content,$x,$y-9,6,$clean,true,[0,0,0]);
     }
 
