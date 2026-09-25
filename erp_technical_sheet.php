@@ -58,6 +58,17 @@ function technical_sheet_article_value(array $snapshot, array $article, string $
     return $snapshotValue !== '' ? $snapshotValue : $articleValue;
 }
 
+function technical_sheet_ink_designations(string $value): string
+{
+    $designations = array_map(function (string $line): string {
+        // Ink selections are persisted as "internal code — designation". The
+        // production sheet only needs the human-readable designation.
+        return preg_replace('/^\s*\S+\s+(?:—|–|-)\s+/u', '', trim($line)) ?? trim($line);
+    }, preg_split('/\R/u', $value) ?: []);
+
+    return implode("\n", array_values(array_filter($designations, 'strlen')));
+}
+
 function technical_sheet_date(string $value, string $fallback = ''): string
 {
     $timestamp = strtotime($value);
@@ -136,7 +147,7 @@ $materialFields = [
     .company{text-align:right;font-size:8.5px;line-height:1.35}.company strong{display:block;font-size:10px}.company .date{margin-top:1.2mm;font-weight:700}
     .section{border:1.5px solid #111;break-inside:avoid;page-break-inside:avoid}.section-title{font-size:11px;text-align:center;text-transform:uppercase;background:#e6e7e8;border-bottom:1px solid #777;margin:0;padding:1.2mm 2mm;line-height:1.1}
     .grid{display:grid;grid-template-columns:repeat(4,1fr)}.cell{border-right:1px solid #999;border-bottom:1px solid #999;padding:1.3mm 1.8mm;min-height:10.5mm;line-height:1.18;overflow-wrap:anywhere}.cell:nth-child(4n){border-right:0}.cell b{display:block;font-size:7.5px;line-height:1;text-transform:uppercase;margin-bottom:.7mm}.wide{grid-column:span 2}.identification .cell{min-height:11.5mm}.grid .cell.no-bottom{border-bottom:0}
-    .material-grid .cell{min-height:9.5mm}.material-grid .cell:nth-last-child(-n+4){border-bottom:0}
+    .material-grid .cell{min-height:9.5mm}.material-grid .cell:nth-last-child(-n+4){border-bottom:0}.ink-value{display:block;font-size:6.5px;line-height:1.2}
     .features{display:grid;grid-template-columns:repeat(5,1fr)}.features .cell{min-height:8.5mm}.features .cell:nth-child(5n){border-right:0}.features .cell:nth-last-child(-n+2){border-bottom:0}
     .analysis-grid{display:grid;grid-template-columns:repeat(2,1fr)}.analysis-item{display:flex;justify-content:space-between;gap:3mm;border-right:1px solid #999;border-bottom:1px solid #999;padding:1mm 1.7mm;min-height:6mm}.analysis-item:nth-child(2n){border-right:0}.analysis-item:nth-last-child(-n+2){border-bottom:0}.analysis-item b{font-size:7.5px;text-transform:uppercase}.analysis-item span{text-align:right}
     .artwork{flex:1;min-height:43mm;display:flex;flex-direction:column}.artwork-body{flex:1;min-height:0;padding:2mm;text-align:center;display:flex;flex-direction:column}.document-title{font-weight:700;font-size:9px;margin-bottom:1mm}.artwork img{display:block;flex:1;min-height:0;max-width:100%;width:100%;height:100%;object-fit:contain;margin:auto}
@@ -166,7 +177,7 @@ $materialFields = [
 
     <section class="section">
         <h2 class="section-title">Especificações do material e dimensões do saco</h2>
-        <div class="grid material-grid"><?php foreach ($materialFields as $key => $label): $value = in_array($key, ['front_colors', 'back_colors'], true) ? technical_sheet_article_value($a, $currentArticle, $key) : sheet_value($a, $key); ?><div class="cell"><b><?= h($label) ?></b><?= $value !== '' ? nl2br(h($value)) : '—' ?></div><?php endforeach; ?></div>
+        <div class="grid material-grid"><?php foreach ($materialFields as $key => $label): $isInk = in_array($key, ['front_colors', 'back_colors'], true); $value = $isInk ? technical_sheet_ink_designations(technical_sheet_article_value($a, $currentArticle, $key)) : sheet_value($a, $key); ?><div class="cell"><b><?= h($label) ?></b><?php if ($value !== ''): ?><span<?= $isInk ? ' class="ink-value"' : '' ?>><?= nl2br(h($value)) ?></span><?php else: ?>—<?php endif; ?></div><?php endforeach; ?></div>
     </section>
 
     <section class="section">
