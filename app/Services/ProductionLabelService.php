@@ -7,7 +7,7 @@ final class ProductionLabelService
 
     public function __construct(PDO $pdo) { $this->pdo = $pdo; }
 
-    public function find(int $orderId, string $type, string $reference): ?array
+    public function find(int $orderId, string $type, string $reference)
     {
         $stmt=$this->pdo->prepare('SELECT l.*,u.name validator_name FROM erp_production_labels l LEFT JOIN users u ON u.id=l.validated_by WHERE l.production_order_id=? AND l.label_type=? AND l.reference_key=?');
         $stmt->execute([$orderId,$type,$reference]);$row=$stmt->fetch(PDO::FETCH_ASSOC);
