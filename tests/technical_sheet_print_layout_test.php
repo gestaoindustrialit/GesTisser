@@ -18,5 +18,8 @@ technical_sheet_layout_check(strpos($source, 'height:297mm') !== false, 'A altur
 technical_sheet_layout_check(strpos($source, 'overflow:hidden') !== false, 'A ficha não impede conteúdo numa segunda página.');
 technical_sheet_layout_check(strpos($source, 'class="section artwork"') !== false, 'A área principal da maqueta está em falta.');
 technical_sheet_layout_check(strpos($source, 'class="order-grid"') !== false, 'Os dados da encomenda estão em falta.');
+technical_sheet_layout_check(strpos($source, 'SELECT front_colors, back_colors, pallet_weight, pallet_quantity FROM erp_finished_products') !== false, 'A ficha não recupera do artigo os dados técnicos ausentes em snapshots antigos.');
+technical_sheet_layout_check(strpos($source, "['front_colors', 'back_colors']") !== false, 'A ficha não apresenta as designações das cores de impressão.');
+technical_sheet_layout_check(strpos($source, "['pallet_quantity', 'pallet_weight']") !== false, 'A ficha não apresenta a quantidade e o peso previstos por palete.');
 
 echo "technical_sheet_print_layout_test: OK\n";
