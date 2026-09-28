@@ -30,18 +30,14 @@ function pd_barcode128_html($value){
     $html='<span class="barcode-bars" role="img" aria-label="Código de barras Code 128 '.h($clean).'">';foreach($codes as$code){foreach(str_split($patterns[$code])as$i=>$width)$html.='<i class="'.($i%2===0?'bar':'gap').'" style="width:'.((int)$width).'px"></i>';}$html.='</span>';
     return$html.'<span class="barcode-text">'.h($clean).'</span>';
 }
-function pd_logo_src($path){
-    $path=trim((string)$path);if($path==='')return'';
-    $urlPath=parse_url($path,PHP_URL_PATH);if(is_string($urlPath)&&$urlPath!=='')$path=rawurldecode($urlPath);
-    $normalized=str_replace('\\','/',$path);$candidates=[$path,__DIR__.'/'.ltrim($path,'/')];
-    $assetsPosition=stripos($normalized,'assets/');if($assetsPosition!==false)$candidates[]=__DIR__.'/'.substr($normalized,$assetsPosition);
-    $basename=basename($normalized);if($basename!==''&&$basename!=='.'&&$basename!=='..')$candidates[]=__DIR__.'/assets/uploads/'.$basename;
-    $documentRoot=trim((string)($_SERVER['DOCUMENT_ROOT']??''));if($documentRoot!=='')$candidates[]=rtrim($documentRoot,'/\\').'/'.ltrim($path,'/\\');
-    $absolute='';foreach(array_unique($candidates)as$candidate)if(is_file($candidate)){$absolute=$candidate;break;}if($absolute==='')return'';
-    $extension=strtolower((string)pathinfo($absolute,PATHINFO_EXTENSION));$mime=['png'=>'image/png','jpg'=>'image/jpeg','jpeg'=>'image/jpeg','webp'=>'image/webp','svg'=>'image/svg+xml'];$contents=file_get_contents($absolute);return$contents===false?'':'data:'.($mime[$extension]??'application/octet-stream').';base64,'.base64_encode($contents);
+function pd_logo_src($configuredPath){
+    $configuredPath=trim((string)$configuredPath);if($configuredPath==='')return'';
+    if(preg_match('#^https?://#i',$configuredPath))return$configuredPath;
+    $absolutePath=__DIR__.'/'.ltrim($configuredPath,'/');if(!is_file($absolutePath))return'';
+    $extension=strtolower((string)pathinfo($absolutePath,PATHINFO_EXTENSION));$mimeTypes=['png'=>'image/png','jpg'=>'image/jpeg','jpeg'=>'image/jpeg','webp'=>'image/webp','svg'=>'image/svg+xml'];$contents=file_get_contents($absolutePath);return$contents===false?'':'data:'.($mimeTypes[$extension]??'application/octet-stream').';base64,'.base64_encode($contents);
 }
 $documentNumberStmt=$pdo->prepare('SELECT document_number FROM erp_document_catalog WHERE code = ? AND is_active = 1 LIMIT 1');$documentNumberStmt->execute(['production_dossier']);$productionDossierDocumentNumber=trim((string)$documentNumberStmt->fetchColumn())?:'DOC-PRD-001';
-$productionCompanyName=trim((string)app_setting($pdo,'company_name','TISSER'))?:'TISSER';$productionCompanyAddress=trim((string)app_setting($pdo,'company_address',''));$productionCompanyLogo=pd_logo_src((string)app_setting($pdo,'logo_report_dark',''));if($productionCompanyLogo==='')$productionCompanyLogo=pd_logo_src('docs/mapper-reference/ui/assets/logo-tisser-blue.png');$productionCompanyContacts=array_filter([trim((string)app_setting($pdo,'company_phone','')),trim((string)app_setting($pdo,'company_email',''))]);
+$productionCompanyName=trim((string)app_setting($pdo,'company_name','TISSER'))?:'TISSER';$productionCompanyAddress=trim((string)app_setting($pdo,'company_address',''));$productionCompanyLogo=pd_logo_src((string)app_setting($pdo,'logo_report_dark',''));$productionCompanyContacts=array_filter([trim((string)app_setting($pdo,'company_phone','')),trim((string)app_setting($pdo,'company_email',''))]);
 $productionOrderFrontColors=pd_order_colors($s['of_front_colors']??'');$productionOrderBackColors=pd_order_colors($s['of_back_colors']??'');$cr=(array)($d['closeReport']??[]);
 $statusClass=['Planeada'=>'primary','Libertada'=>'info','Em produção'=>'warning','Suspensa'=>'secondary','Fechada'=>'success','Cancelada'=>'danger'][$o['status']]??'light';
 $mainDocument=ArticleDocument::mainArtwork((array)($s['_documents']??[]));

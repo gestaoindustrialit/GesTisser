@@ -9,8 +9,8 @@ final class ProductionDossierPdf
         $order = (array) ($d['order'] ?? []);
         $snapshot = (array) ($d['snapshot'] ?? []);
         $operations = (array) ($d['operations'] ?? []);
-        $jpeg = self::jpegFromDataUri($artworkDataUri);
-        $logo = self::jpegFromDataUri($logoDataUri);
+        $jpeg = self::imageFromDataUri($artworkDataUri);
+        $logo = self::imageFromDataUri($logoDataUri);
         $dash = '-';
         $value = function ($candidate) use ($dash) { $candidate = trim((string) $candidate); return $candidate === '' ? $dash : $candidate; };
         $orderNo = $value($order['order_number'] ?? '');
@@ -26,7 +26,7 @@ final class ProductionDossierPdf
 
         $content = '';
         // Cabeçalho limpo, sem caixa exterior.
-        if ($logo !== '') self::image($content, 'Logo', $logo, 30, 792, 112, 34);
+        if ($logo) self::image($content, 'Logo', $logo, 30, 792, 112, 34);
         else { self::rect($content, 30, 792, 112, 34, false, [0.12, 0.12, 0.12]); self::text($content, 40, 803, 14, self::shorten($companyName, 14), true, [1, 1, 1]); }
         self::text($content, 157, 811, 16, 'FOLHA DE ACOMPANHAMENTO', true, [0, 0, 0]);
         self::text($content, 216, 796, 10, 'ORDEM DE FABRICO', true, [0, 0, 0]);
@@ -54,16 +54,22 @@ final class ProductionDossierPdf
         self::fieldBox($content,394,554,173,28,'DATA PREVISTA',$dueTime?date('d/m/Y',$dueTime):$dash,9);
 
         self::text($content,35,538,7,'CARACTERISTICAS DO SACO',true,[.32,.38,.39]);
-        $featureX=28; $featureWidth=539/5;
+        $featureX=28; $featureWidth=539/7;
         foreach ([['Microperfuracao','microperforation'],['Asa','has_handle'],['Furo','has_holes'],['Fole','has_gusset'],['Fole centrado','centered_gusset']] as $feature) {
-            self::featureCell($content,$featureX,506,$featureWidth,26,$feature[0],!empty($snapshot[$feature[1]]));
+            $detail = $feature[1] === 'has_gusset' && !empty($snapshot[$feature[1]]) ? $value($snapshot['gusset_length'] ?? '') : '';
+            self::featureCell($content,$featureX,506,$featureWidth,26,$feature[0],!empty($snapshot[$feature[1]]),$detail);
             $featureX += $featureWidth;
         }
+        self::metricCell($content,$featureX,506,$featureWidth,26,'SACOS / PALETE',$value($snapshot['pallet_quantity']??''));
+        $featureX += $featureWidth;
+        $palletWeight=$value($snapshot['pallet_weight']??'');
+        if($palletWeight!==$dash&&!preg_match('/\bkg\s*$/i',$palletWeight))$palletWeight.=' kg';
+        self::metricCell($content,$featureX,506,$featureWidth,26,'PESO TEORICO PALETE',$palletWeight);
 
         self::sectionBar($content,28,480,539,18,'MAQUETA DO ARTIGO / REFERENCIA VISUAL');
         self::rect($content,28,270,350,210,true,[1,1,1]);
         self::rect($content,384,270,183,210,true,[1,1,1]);
-        if ($jpeg !== '') self::image($content,'Artwork',$jpeg,38,278,330,192);
+        if ($jpeg) self::image($content,'Artwork',$jpeg,38,278,330,192);
         else self::text($content,203,370,8,'SEM MAQUETA ASSOCIADA AO ARTIGO',true,[.4,.4,.4],true);
         self::text($content,394,457,7,'N. PROVA',true,[.32,.38,.39]);
         self::text($content,394,443,9,$value($snapshot['proof_reference']??''),true);
@@ -107,18 +113,26 @@ final class ProductionDossierPdf
     private static function sectionBar(string &$content, float $x, float $y, float $w, float $h, string $title)
     { self::rect($content,$x,$y,$w,$h,true,[.93,.93,.93]); self::text($content,$x+7,$y+5,9,$title,true,[0,0,0]); }
 
-    private static function featureCell(string &$content, float $x, float $y, float $w, float $h, string $label, bool $enabled)
+    private static function featureCell(string &$content, float $x, float $y, float $w, float $h, string $label, bool $enabled, string $detail = '')
     {
         self::rect($content,$x,$y,$w,$h,true,[1,1,1]);
-        self::text($content,$x+6,$y+15,7,$label,true);
-        self::text($content,$x+6,$y+5,6,($enabled?'[X]':'[ ]').' Sim   '.($enabled?'[ ]':'[X]').' Nao');
+        self::text($content,$x+4,$y+15,6,self::shorten($label,18),true);
+        if($detail!=='')self::text($content,$x+$w-4,$y+15,6,self::shorten($detail,9),true,[.2,.2,.2],true);
+        self::text($content,$x+4,$y+5,6,($enabled?'[X]':'[ ]').' Sim   '.($enabled?'[ ]':'[X]').' Nao');
+    }
+
+    private static function metricCell(string &$content, float $x, float $y, float $w, float $h, string $label, string $value)
+    {
+        self::rect($content,$x,$y,$w,$h,true,[1,1,1]);
+        self::text($content,$x+4,$y+15,5,self::shorten($label,23),true);
+        self::text($content,$x+4,$y+5,7,self::shorten($value,16),true);
     }
 
     private static function fieldBox(string &$content, float $x, float $y, float $w, float $h, string $label, string $value, float $size, bool $highlight = false)
     { self::rect($content,$x,$y,$w,$h,true,$highlight?[.93,.97,.99]:[1,1,1]); self::text($content,$x+7,$y+$h-11,6,$label,true,[.32,.38,.39]); self::text($content,$x+7,$y+8,(int)$size,self::shorten($value,max(8,(int)($w/($size*.53)))),true); }
 
-    private static function image(string &$content, string $name, string $jpeg, float $x, float $y, float $w, float $h)
-    { $size=@getimagesizefromstring($jpeg);$sw=(int)($size[0]??1);$sh=(int)($size[1]??1);$scale=min($w/max(1,$sw),$h/max(1,$sh));$dw=$sw*$scale;$dh=$sh*$scale;$dx=$x+($w-$dw)/2;$dy=$y+($h-$dh)/2;$content.=sprintf("q\n%.2F 0 0 %.2F %.2F %.2F cm\n/%s Do\nQ\n",$dw,$dh,$dx,$dy,$name); }
+    private static function image(string &$content, string $name, array $image, float $x, float $y, float $w, float $h)
+    { $sw=(int)($image['width']??1);$sh=(int)($image['height']??1);$scale=min($w/max(1,$sw),$h/max(1,$sh));$dw=$sw*$scale;$dh=$sh*$scale;$dx=$x+($w-$dw)/2;$dy=$y+($h-$dh)/2;$content.=sprintf("q\n%.2F 0 0 %.2F %.2F %.2F cm\n/%s Do\nQ\n",$dw,$dh,$dx,$dy,$name); }
 
     private static function wrappedText(string &$content, float $x, float $y, int $size, string $value, int $columns, int $maxLines)
     { $words=preg_split('/\s+/u',trim($value))?:[];$lines=[];$line='';foreach($words as$word){$next=$line===''?$word:$line.' '.$word;if(strlen($next)>$columns){$lines[]=$line;$line=$word;}else$line=$next;}if($line!=='')$lines[]=$line;foreach(array_slice($lines,0,$maxLines)as$i=>$row)self::text($content,$x,$y-$i*11,$size,$row); }
@@ -161,7 +175,7 @@ final class ProductionDossierPdf
         $content .= sprintf("BT\n%.3F %.3F %.3F rg\n/%s %d Tf\n%.2F %.2F Td\n(%s) Tj\nET\n", $colour[0], $colour[1], $colour[2], $bold ? 'F2' : 'F1', $size, $x, $y, $safe);
     }
 
-    private static function document(string $content, string $jpeg, string $logo = ''): string
+    private static function document(string $content, array $jpeg, array $logo = []): string
     {
         $resources = '/Font << /F1 4 0 R /F2 5 0 R >>';
         $objects = [
@@ -173,8 +187,7 @@ final class ProductionDossierPdf
             "<< /Length " . strlen($content) . ">>\nstream\n{$content}\nendstream",
         ];
         $xObjects = [];
-        if ($jpeg !== '') { $size=@getimagesizefromstring($jpeg);$width=(int)($size[0]??1);$height=(int)($size[1]??1);$objects[]="<< /Type /XObject /Subtype /Image /Width {$width} /Height {$height} /ColorSpace /DeviceRGB /BitsPerComponent 8 /Filter /DCTDecode /Length ".strlen($jpeg).">>\nstream\n{$jpeg}\nendstream";$xObjects[]='/Artwork '.count($objects).' 0 R'; }
-        if ($logo !== '') { $size=@getimagesizefromstring($logo);$width=(int)($size[0]??1);$height=(int)($size[1]??1);$objects[]="<< /Type /XObject /Subtype /Image /Width {$width} /Height {$height} /ColorSpace /DeviceRGB /BitsPerComponent 8 /Filter /DCTDecode /Length ".strlen($logo).">>\nstream\n{$logo}\nendstream";$xObjects[]='/Logo '.count($objects).' 0 R'; }
+        foreach ([['Artwork',$jpeg],['Logo',$logo]] as $entry) if ($entry[1]) { $image=$entry[1];$data=$image['data'];$decode=$image['filter']==='FlateDecode'?' /DecodeParms << /Predictor 15 /Colors 3 /BitsPerComponent 8 /Columns '.$image['width'].' >>':'';$objects[]='<< /Type /XObject /Subtype /Image /Width '.$image['width'].' /Height '.$image['height'].' /ColorSpace /DeviceRGB /BitsPerComponent 8 /Filter /'.$image['filter'].$decode.' /Length '.strlen($data).">>\nstream\n{$data}\nendstream";$xObjects[]='/'.$entry[0].' '.count($objects).' 0 R'; }
         if ($xObjects) $resources .= ' /XObject << '.implode(' ',$xObjects).' >>';
         $objects[2] = '<< /Type /Page /Parent 2 0 R /MediaBox [0 0 595 842] /Resources << ' . $resources . ' >> /Contents 6 0 R >>';
         $pdf = "%PDF-1.4\n%\xE2\xE3\xCF\xD3\n"; $offsets = [0];
@@ -184,15 +197,31 @@ final class ProductionDossierPdf
         return $pdf . "trailer\n<< /Size {$count} /Root 1 0 R >>\nstartxref\n{$xref}\n%%EOF";
     }
 
-    private static function jpegFromDataUri(string $value): string
+    private static function imageFromDataUri(string $value): array
     {
-        if (!preg_match('#^data:image/[^;]+;base64,#', $value, $match)) return '';
+        if (preg_match('#^https?://#i', $value)) {
+            $remote = @file_get_contents($value);
+            if (!is_string($remote) || $remote === '') return [];
+            $value = 'data:image/' . (substr($remote, 0, 2) === "\xFF\xD8" ? 'jpeg' : 'png') . ';base64,' . base64_encode($remote);
+        }
+        if (!preg_match('#^data:image/[^;]+;base64,#', $value, $match)) return [];
         $decoded = base64_decode(substr($value, strlen($match[0])), true);
-        if (!is_string($decoded)) return '';
-        if (substr($decoded, 0, 2) === "\xFF\xD8") return $decoded;
-        if (!function_exists('imagecreatefromstring')) return '';
-        $image = @imagecreatefromstring($decoded); if (!$image) return '';
-        ob_start(); imagejpeg($image, null, 92); $jpeg = (string) ob_get_clean(); imagedestroy($image); return $jpeg;
+        if (!is_string($decoded)) return [];
+        $size=@getimagesizefromstring($decoded);
+        if (substr($decoded, 0, 2) === "\xFF\xD8") return ['data'=>$decoded,'width'=>(int)($size[0]??1),'height'=>(int)($size[1]??1),'filter'=>'DCTDecode'];
+        if (!function_exists('imagecreatefromstring')) return self::pngForPdf($decoded);
+        $image = @imagecreatefromstring($decoded); if (!$image) return [];
+        $width=imagesx($image);$height=imagesy($image);ob_start(); imagejpeg($image, null, 92); $jpeg = (string) ob_get_clean(); imagedestroy($image); return ['data'=>$jpeg,'width'=>$width,'height'=>$height,'filter'=>'DCTDecode'];
+    }
+
+    /** Embed ordinary RGB/RGBA PNG logos even on servers where GD is unavailable. */
+    private static function pngForPdf(string $png): array
+    {
+        if(substr($png,0,8)!=="\x89PNG\r\n\x1a\n")return[];$width=0;$height=0;$type=-1;$idat='';$offset=8;
+        while($offset+12<=strlen($png)){$length=unpack('N',substr($png,$offset,4))[1];$name=substr($png,$offset+4,4);$data=substr($png,$offset+8,$length);$offset+=12+$length;if($name==='IHDR'){$head=unpack('Nwidth/Nheight/Cdepth/Ctype/Ccompression/Cfilter/Cinterlace',$data);$width=$head['width'];$height=$head['height'];$type=$head['type'];if($head['depth']!==8||$head['interlace']!==0)return[];}elseif($name==='IDAT')$idat.=$data;elseif($name==='IEND')break;}
+        if($width<1||$height<1||!in_array($type,[2,6],true))return[];$raw=@gzuncompress($idat);if(!is_string($raw))return[];$channels=$type===6?4:3;$stride=$width*$channels;$previous=array_fill(0,$stride,0);$position=0;$pdf='';
+        for($row=0;$row<$height;$row++){$filter=ord($raw[$position++]);$bytes=[];for($i=0;$i<$stride;$i++){$byte=ord($raw[$position++]);$left=$i>=$channels?$bytes[$i-$channels]:0;$up=$previous[$i];$upperLeft=$i>=$channels?$previous[$i-$channels]:0;if($filter===1)$byte=($byte+$left)&255;elseif($filter===2)$byte=($byte+$up)&255;elseif($filter===3)$byte=($byte+(int)floor(($left+$up)/2))&255;elseif($filter===4){$p=$left+$up-$upperLeft;$pa=abs($p-$left);$pb=abs($p-$up);$pc=abs($p-$upperLeft);$byte=($byte+($pa<=$pb&&$pa<=$pc?$left:($pb<=$pc?$up:$upperLeft)))&255;}$bytes[]=$byte;}$previous=$bytes;$pdf.="\0";for($i=0;$i<$stride;$i+=$channels){if($channels===3)$pdf.=chr($bytes[$i]).chr($bytes[$i+1]).chr($bytes[$i+2]);else{$alpha=$bytes[$i+3];foreach([$bytes[$i],$bytes[$i+1],$bytes[$i+2]]as$colour)$pdf.=chr((int)round(($colour*$alpha+255*(255-$alpha))/255));}}}
+        return ['data'=>gzcompress($pdf,9),'width'=>$width,'height'=>$height,'filter'=>'FlateDecode'];
     }
 
     private static function orderColourRows(string $value): array
