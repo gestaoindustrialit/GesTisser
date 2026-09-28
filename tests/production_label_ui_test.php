@@ -2,6 +2,7 @@
 $dossier=(string)file_get_contents(__DIR__.'/../production_dossier.php');
 $label=(string)file_get_contents(__DIR__.'/../production_label.php');
 $shopfloor=(string)file_get_contents(__DIR__.'/../shopfloor.php');
+$header=(string)file_get_contents(__DIR__.'/../partials/header.php');
 $migrations=(string)file_get_contents(__DIR__.'/../erp_migrations.php');
 function production_label_check($condition,$message){if(!$condition)throw new RuntimeException($message);}
 production_label_check(strpos($dossier,'Etiqueta de rolo')!==false,'botão de etiqueta de rolo em falta');
@@ -16,6 +17,14 @@ production_label_check(strpos($label,'class="brand-fallback"')!==false,'etiqueta
 production_label_check(strpos($shopfloor,'aria-label="Etiquetas de acerto e reimpressão"')!==false,'ações de etiquetas no Shopfloor em falta');
 production_label_check(strpos($shopfloor,'production_label.php?id=<?= (int)$selectedOf[\'id\'] ?>&type=roll')!==false,'etiqueta de rolo no Shopfloor em falta');
 production_label_check(strpos($shopfloor,'production_label.php?id=<?= (int)$selectedOf[\'id\'] ?>&type=ink')!==false,'etiqueta de tinta no Shopfloor em falta');
+production_label_check(strpos($header,'data-bs-target="#productionLabelModal-roll"')!==false,'atalho de etiqueta de rolo no cabeçalho em falta');
+production_label_check(strpos($header,'data-bs-target="#productionLabelModal-ink"')!==false,'atalho de etiqueta de tinta no cabeçalho em falta');
+production_label_check(strpos($header,'btn btn-sm btn-warning')!==false,'atalho de etiqueta de rolo deve estar sempre preenchido');
+production_label_check(strpos($header,'btn btn-sm btn-info')!==false,'atalho de etiqueta de tinta deve estar sempre preenchido');
+production_label_check(strpos($shopfloor,'id="productionLabelModal-<?= h($labelType) ?>"')!==false,'popup de seleção da etiqueta no Shopfloor em falta');
+production_label_check(strpos($shopfloor,'action="production_label.php"')!==false,'popup não encaminha para a preparação da etiqueta');
+production_label_check(strpos($shopfloor,'$labelProductionOrders')!==false,'popup não disponibiliza OF fora do posto de trabalho');
+production_label_check(strpos($shopfloor,'as $labelType => [$labelTitle, $labelIcon]')===false,'popup usa destructuring incompatível com PHP 7.0');
 production_label_check(strpos($label,"['Utilizador','Produção','Chefias','RH']")!==false,'workers do Shopfloor sem acesso às etiquetas');
 production_label_check(strpos($migrations,'erp_production_label_history')!==false,'histórico de validações em falta');
 echo "production_label_ui_test: OK\n";

@@ -953,6 +953,14 @@ $ofSql .= ' ORDER BY o.due_date IS NULL, o.due_date, o.id DESC LIMIT 25';
 $ofStmt = $pdo->prepare($ofSql);
 $ofStmt->execute($ofParams);
 $productionOrders = $ofStmt ? $ofStmt->fetchAll(PDO::FETCH_ASSOC) : [];
+$labelOrdersStmt = $pdo->query(
+    'SELECT o.id, o.order_number, o.status, p.code AS product_code, p.description AS product_description
+     FROM erp_production_orders o
+     JOIN erp_products p ON p.id = o.product_id
+     ORDER BY CASE WHEN o.status IN ("Planeada", "Em curso") THEN 0 ELSE 1 END,
+              o.due_date IS NULL, o.due_date DESC, o.id DESC'
+);
+$labelProductionOrders = $labelOrdersStmt ? $labelOrdersStmt->fetchAll(PDO::FETCH_ASSOC) : [];
 $selectedOfId = (int) ($_GET['of_id'] ?? ($productionOrders[0]['id'] ?? 0));
 $selectedOf = null;
 foreach ($productionOrders as $ofRow) { if ((int)$ofRow['id'] === $selectedOfId) { $selectedOf = $ofRow; break; } }
@@ -975,6 +983,7 @@ if ($selectedOfId > 0) {
 
 $pageTitle = 'Shopfloor';
 $bodyClass = 'bg-light';
+$showProductionLabelShortcuts = true;
 require __DIR__ . '/partials/header.php';
 ?>
 
@@ -1019,6 +1028,48 @@ require __DIR__ . '/partials/header.php';
     <?php if ($flashError): ?>
         <div class="alert alert-danger mt-3 mb-3"><?= h($flashError) ?></div>
     <?php endif; ?>
+
+    <?php foreach (['roll' => ['Etiqueta de rolo', 'bi-upc-scan'], 'ink' => ['Etiqueta de tinta', 'bi-droplet-fill']] as $labelType => $labelDefinition): ?>
+        <?php $labelTitle = $labelDefinition[0]; $labelIcon = $labelDefinition[1]; ?>
+        <div class="modal fade" id="productionLabelModal-<?= h($labelType) ?>" tabindex="-1" aria-labelledby="productionLabelModalTitle-<?= h($labelType) ?>" aria-hidden="true">
+            <div class="modal-dialog modal-dialog-centered">
+                <div class="modal-content">
+                    <form method="get" action="production_label.php">
+                        <div class="modal-header">
+                            <div>
+                                <h2 class="modal-title fs-5" id="productionLabelModalTitle-<?= h($labelType) ?>">
+                                    <i class="bi <?= h($labelIcon) ?> me-1" aria-hidden="true"></i><?= h($labelTitle) ?>
+                                </h2>
+                                <p class="small text-secondary mb-0">Selecione a ordem de fabrico da etiqueta que pretende preparar e imprimir.</p>
+                            </div>
+                            <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Fechar"></button>
+                        </div>
+                        <div class="modal-body">
+                            <input type="hidden" name="type" value="<?= h($labelType) ?>">
+                            <?php if ($labelProductionOrders): ?>
+                                <label class="form-label" for="productionLabelOrder-<?= h($labelType) ?>">Ordem de fabrico</label>
+                                <select class="form-select" id="productionLabelOrder-<?= h($labelType) ?>" name="id" required>
+                                    <?php foreach ($labelProductionOrders as $labelOrder): ?>
+                                        <option value="<?= (int) $labelOrder['id'] ?>" <?= (int) $labelOrder['id'] === $selectedOfId ? 'selected' : '' ?>>
+                                            <?= h($labelOrder['order_number'] . ' · ' . $labelOrder['product_code'] . ' · ' . $labelOrder['product_description'] . ' · ' . $labelOrder['status']) ?>
+                                        </option>
+                                    <?php endforeach; ?>
+                                </select>
+                            <?php else: ?>
+                                <div class="alert alert-warning mb-0">Ainda não existem ordens de fabrico registadas.</div>
+                            <?php endif; ?>
+                        </div>
+                        <div class="modal-footer">
+                            <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancelar</button>
+                            <button type="submit" class="btn btn-primary" <?= $labelProductionOrders ? '' : 'disabled' ?>>
+                                <i class="bi bi-printer me-1" aria-hidden="true"></i>Preparar impressão
+                            </button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+    <?php endforeach; ?>
 
     <div class="modal fade" id="workCenterModal" tabindex="-1" aria-labelledby="workCenterModalLabel" aria-hidden="true" data-requires-selection="<?= $selectedWorkCenter ? '0' : '1' ?>">
         <div class="modal-dialog modal-dialog-centered modal-dialog-scrollable">
