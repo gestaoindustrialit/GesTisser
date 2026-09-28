@@ -32,8 +32,15 @@ function pd_barcode128_html($value){
 }
 function pd_logo_src($configuredPath){
     $configuredPath=trim((string)$configuredPath);if($configuredPath==='')return'';
-    if(preg_match('#^https?://#i',$configuredPath))return$configuredPath;
-    $absolutePath=__DIR__.'/'.ltrim($configuredPath,'/');if(!is_file($absolutePath))return'';
+    $urlPath=parse_url($configuredPath,PHP_URL_PATH);if(is_string($urlPath)&&$urlPath!=='')$urlPath=rawurldecode($urlPath);else$urlPath=$configuredPath;
+    $normalisedPath=str_replace('\\','/',$urlPath);$relativePath=ltrim($normalisedPath,'/');
+    $candidates=[__DIR__.'/'.$relativePath];
+    // A definição pode ter sido guardada como URL absoluta (por exemplo,
+    // /gestisser/assets/uploads/logo.png). Resolva-a localmente para que o
+    // gerador PDF não dependa de allow_url_fopen, DNS ou autenticação HTTP.
+    $assetsPosition=stripos($relativePath,'assets/');if($assetsPosition!==false)$candidates[]=__DIR__.'/'.substr($relativePath,$assetsPosition);
+    $applicationRoot=realpath(__DIR__);$absolutePath='';foreach(array_unique($candidates)as$candidate){$resolved=realpath($candidate);if($resolved!==false&&is_file($resolved)&&$applicationRoot!==false&&strpos(str_replace('\\','/',$resolved),rtrim(str_replace('\\','/',$applicationRoot),'/').'/')===0){$absolutePath=$resolved;break;}}
+    if($absolutePath==='')return preg_match('#^https?://#i',$configuredPath)?$configuredPath:'';
     $extension=strtolower((string)pathinfo($absolutePath,PATHINFO_EXTENSION));$mimeTypes=['png'=>'image/png','jpg'=>'image/jpeg','jpeg'=>'image/jpeg','webp'=>'image/webp','svg'=>'image/svg+xml'];$contents=file_get_contents($absolutePath);return$contents===false?'':'data:'.($mimeTypes[$extension]??'application/octet-stream').';base64,'.base64_encode($contents);
 }
 $documentNumberStmt=$pdo->prepare('SELECT document_number FROM erp_document_catalog WHERE code = ? AND is_active = 1 LIMIT 1');$documentNumberStmt->execute(['production_dossier']);$productionDossierDocumentNumber=trim((string)$documentNumberStmt->fetchColumn())?:'DOC-PRD-001';
