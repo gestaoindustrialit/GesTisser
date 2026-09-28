@@ -25,6 +25,13 @@ foreach (['QUANTIDADE BOA', 'DESPERDICIO', 'EFICIENCIA'] as $removedMetric) {
     if (strpos($pdf, $removedMetric) !== false) throw new RuntimeException('A métrica removida ainda aparece no PDF: ' . $removedMetric);
 }
 if (strpos($pdfSource, 'barcode128') === false) throw new RuntimeException('O fallback não inclui o código de barras da OF.');
+$pngPath=__DIR__.'/../docs/mapper-reference/ui/assets/logo-tisser-blue.png';
+$pngLogo='data:image/png;base64,'.base64_encode((string)file_get_contents($pngPath));
+$pngPdf=ProductionDossierPdf::render(['order'=>['order_number'=>'PNG-1'],'snapshot'=>[],'operations'=>[]],'','DOC-PNG-001',$pngLogo);
+if(strpos($pngPdf,'/Logo ')===false||(strpos($pngPdf,'/FlateDecode')===false&&strpos($pngPdf,'/DCTDecode')===false))throw new RuntimeException('O fallback PDF não incorporou o logótipo PNG sem depender de GD.');
+$pngMethod=(new ReflectionClass('ProductionDossierPdf'))->getMethod('pngForPdf');
+$embeddedPng=$pngMethod->invoke(null,(string)file_get_contents($pngPath));
+if(($embeddedPng['filter']??'')!=='FlateDecode'||empty($embeddedPng['data']))throw new RuntimeException('A incorporação nativa do logótipo PNG não funciona sem GD.');
 
 $dossier = (string) file_get_contents(__DIR__ . '/../production_dossier.php');
 $print = (string) file_get_contents(__DIR__ . '/../production_dossier_print.php');

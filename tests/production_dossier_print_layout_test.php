@@ -15,9 +15,14 @@ production_dossier_layout_check(strpos($controllerSource,"$"."productionOrderFro
 production_dossier_layout_check(strpos($controllerSource,"assets/uploads/'.\$basename")!==false,'O logótipo guardado nos dados da empresa não é recuperado após mudança de URL.');
 production_dossier_layout_check(strpos($printSource,'.operations tbody tr:first-child td{padding-top:3mm}')!==false,'A primeira operação não tem separação suficiente do cabeçalho.');
 production_dossier_layout_check(strpos($printSource,'<?=h($productionCompanyName)?>')!==false,'O cabeçalho não usa os dados da empresa.');
-production_dossier_layout_check(strpos((string)file_get_contents(__DIR__.'/../production_dossier_service.php'),'article_of_front_colors')!==false,'As cores de OF não têm fallback para snapshots antigos.');
+$serviceSource=(string)file_get_contents(__DIR__.'/../production_dossier_service.php');
+production_dossier_layout_check(strpos($serviceSource,'article_of_front_colors')!==false,'As cores de OF não têm fallback para snapshots antigos.');
+foreach (['proof_reference', 'pallet_quantity', 'pallet_weight', 'printer_roll_measure', 'of_front_colors', 'of_back_colors'] as $articleFallbackField) production_dossier_layout_check(strpos($serviceSource, "['proof_reference', 'pallet_quantity', 'pallet_weight', 'printer_roll_measure', 'of_front_colors', 'of_back_colors']")!==false&&strpos($serviceSource, "\$order['article_' . \$articleField]")!==false,'Fallback do artigo em falta: '.$articleFallbackField);
 production_dossier_layout_check(strpos($printSource,'.section-title{font-size:9pt;text-align:left')!==false,'Os títulos das secções não estão alinhados à esquerda.');
 production_dossier_layout_check(strpos($printSource,'Características do saco')!==false&&strpos($printSource,"'centered_gusset'=>'Fole centrado'")!==false,'As características Sim/Não do saco estão incompletas.');
+production_dossier_layout_check(strpos($printSource,"$"."key==='has_gusset'&&$"."enabled")!==false&&strpos($printSource,'$gussetLength')!==false,'A medida do fole não aparece junto ao fole ativo.');
+production_dossier_layout_check(strpos($printSource,'Sacos por palete')!==false&&strpos($printSource,'Peso teórico da palete')!==false,'Os dados teóricos da palete não aparecem na folha.');
+production_dossier_layout_check(strpos($pdfSource,"$"."snapshot['pallet_quantity']")!==false&&strpos($pdfSource,"$"."snapshot['pallet_weight']")!==false,'O fallback não apresenta os dados da palete.');
 production_dossier_layout_check(strpos($printSource,"$"."s['proof_reference']")!==false,'A referência de prova não aparece antes da impressão.');
 production_dossier_layout_check(strpos($printSource,'<th class="status">Estado</th>')===false&&strpos($printSource,"$"."op['status']")===false,'O estado ainda aparece na tabela de operações.');
 production_dossier_layout_check(strpos($pdfSource,"['SEQ.','OPERACAO','MAQUINA']")!==false&&strpos($pdfSource,"$"."operation['status']")===false,'O fallback ainda apresenta o estado das operações.');
