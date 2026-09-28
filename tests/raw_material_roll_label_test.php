@@ -1,0 +1,14 @@
+<?php
+require __DIR__.'/../app/Services/RawMaterialRollLabelService.php';
+$pdo=new PDO('sqlite::memory:');$pdo->setAttribute(PDO::ATTR_ERRMODE,PDO::ERRMODE_EXCEPTION);
+$pdo->exec('CREATE TABLE users(id INTEGER PRIMARY KEY,name TEXT); CREATE TABLE erp_raw_materials(id INTEGER PRIMARY KEY,code TEXT,description TEXT,roll_controlled INTEGER); CREATE TABLE erp_production_orders(id INTEGER PRIMARY KEY,order_number TEXT,status TEXT,due_date TEXT); CREATE TABLE erp_raw_material_roll_labels(id INTEGER PRIMARY KEY AUTOINCREMENT,raw_material_id INTEGER,entry_number TEXT,supplier_lot TEXT,metres REAL,weight_kg REAL,barcode TEXT UNIQUE,label_date TEXT,validated_by INTEGER,validated_at TEXT DEFAULT CURRENT_TIMESTAMP,updated_at TEXT DEFAULT CURRENT_TIMESTAMP); CREATE TABLE erp_raw_material_roll_consumptions(id INTEGER PRIMARY KEY AUTOINCREMENT,source_label_id INTEGER,resulting_label_id INTEGER,production_order_id INTEGER,consumed_metres REAL,consumed_weight_kg REAL,created_by INTEGER,created_at TEXT DEFAULT CURRENT_TIMESTAMP); INSERT INTO users VALUES(1,"Operador"); INSERT INTO erp_raw_materials VALUES(7,"RFBRLA476020","Ráfia branca laminada 47cm, 60+20gr/m2",1); INSERT INTO erp_production_orders VALUES(20,"OF-00020","Em curso","2026-09-30");');
+$service=new RawMaterialRollLabelService($pdo);
+$label=$service->save(7,['entry_number'=>'2026019','supplier_lot'=>'DA MAN0201','metres'=>3579,'weight_kg'=>269.20,'barcode'=>'2601250','label_date'=>'2026-08-20'],1);
+if((int)$label['raw_material_id']!==7||$label['article_code']!=='RFBRLA476020'||$label['entry_number']!=='2026019')throw new RuntimeException('A etiqueta não ficou associada à matéria-prima.');
+$matches=$service->search(7,'2601250');if(count($matches)!==1)throw new RuntimeException('A pesquisa direta do rolo falhou.');
+$result=$service->relabel((int)$label['id'],20,['entry_number'=>'2026019','supplier_lot'=>'DA MAN0201','metres'=>3000,'weight_kg'=>225,'barcode'=>'2601250-A','label_date'=>'2026-09-28'],1);
+if($result['barcode']!=='2601250-A'||(float)$result['metres']!==3000.0)throw new RuntimeException('A nova etiqueta não contém a quantidade restante.');
+$consumption=$pdo->query('SELECT * FROM erp_raw_material_roll_consumptions')->fetch(PDO::FETCH_ASSOC);if((int)$consumption['production_order_id']!==20||abs((float)$consumption['consumed_metres']-579)>.001)throw new RuntimeException('O consumo não ficou associado à OF.');
+$active=$service->search(7,'');if(count($active)!==1||$active[0]['barcode']!=='2601250-A')throw new RuntimeException('O rolo substituído continua disponível para novo consumo.');
+$invalid=false;try{$service->relabel((int)$label['id'],0,['metres'=>2000,'weight_kg'=>200],1);}catch(InvalidArgumentException $e){$invalid=true;}if(!$invalid)throw new RuntimeException('Foi aceite um consumo sem OF.');
+echo "raw_material_roll_label_test: OK\n";
