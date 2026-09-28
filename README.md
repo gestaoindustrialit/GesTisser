@@ -20,8 +20,8 @@ Aplicação de gestão de trabalho inspirada no ClickUp, desenvolvida em **PHP +
 
 ## Requisitos
 
-- PHP 8.1+
-- Extensão `pdo_sqlite` ativa
+- PHP 7.0+
+- Extensões `pdo_sqlite` e `zip` ativas
 
 ## Instalação
 
@@ -92,7 +92,7 @@ Todas as tentativas de entrega (sucesso/falha) ficam registadas em `reports_sent
 ## Migração para outro servidor (checklist rápida)
 
 1. Copiar os ficheiros do projeto e garantir permissões de escrita na pasta da aplicação (incluindo `database.sqlite` quando já existir).
-2. Confirmar PHP 8.1+ com `pdo_sqlite` ativo.
+2. Confirmar PHP 7.0+ com as extensões `pdo_sqlite` e `zip` ativas.
 3. Configurar as variáveis SMTP (`GESTISSER_SMTP_*`) no novo ambiente, se necessário.
 4. Recriar os cron jobs:
    - `* * * * * php /caminho/GesTisser/cron_hr_alerts.php >/dev/null 2>&1`
@@ -101,3 +101,15 @@ Todas as tentativas de entrega (sucesso/falha) ficam registadas em `reports_sent
    - `install.php` (apenas se for instalação nova),
    - `login.php`,
    - e envio de teste em `Alertas RH` com **Correr agora**.
+
+## Backups e recuperação
+
+Os administradores podem configurar a frequência, retenção e conteúdo em **Administração → Backups e recuperação**. O backup usa um snapshot consistente do SQLite, valida a integridade e pode incluir os ficheiros da solução. Para executar o agendamento:
+
+```bash
+* * * * * php /caminho/GesTisser/cron/backup_runner.php >/dev/null 2>&1
+```
+
+Em alternativa, execute `php cron/backup_runner.php --daemon` através de systemd, Supervisor ou outro gestor de processos. Este processo e a página `backup_recovery.php` são independentes do bootstrap da aplicação, permitindo criar e repor backups mesmo perante um erro fatal. Proteja a consola definindo `GESTISSER_RECOVERY_TOKEN` no ambiente ou gerando um token na área de administração.
+
+Antes de qualquer reposição é criada automaticamente uma cópia da base atual. A reposição parcial permite escolher tabelas e é transacional: se forem detetadas relações inválidas, nenhuma alteração é aplicada.
