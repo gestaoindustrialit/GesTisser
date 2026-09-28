@@ -12,7 +12,8 @@ production_dossier_layout_check(strpos($controllerSource,'function pd_barcode128
 production_dossier_layout_check(strpos($controllerSource,"execute(['production_dossier'])")!==false,'Código documental não é dinâmico.');
 production_dossier_layout_check(strpos($pdfSource,'barcode128')!==false,'Fallback sem Code 128.');
 production_dossier_layout_check(strpos($controllerSource,"$"."productionOrderFrontColors=pd_order_colors($"."s['of_front_colors']??'')")!==false,'Cores da OF em falta.');
-production_dossier_layout_check(strpos($controllerSource,"assets/uploads/'.\$basename")!==false,'O logótipo guardado nos dados da empresa não é recuperado após mudança de URL.');
+production_dossier_layout_check(strpos($controllerSource,"preg_match('#^https?://#i',\$configuredPath)")!==false&&strpos($controllerSource,"__DIR__.'/'.ltrim(\$configuredPath,'/')")!==false,'O carregamento do logótipo não replica o comportamento da ficha técnica.');
+production_dossier_layout_check(strpos($controllerSource,"app_setting(\$pdo,'logo_report_dark','')")!==false,'A folha não usa o logótipo de relatório configurado.');
 production_dossier_layout_check(strpos($printSource,'.operations tbody tr:first-child td{padding-top:3mm}')!==false,'A primeira operação não tem separação suficiente do cabeçalho.');
 production_dossier_layout_check(strpos($printSource,'<?=h($productionCompanyName)?>')!==false,'O cabeçalho não usa os dados da empresa.');
 $serviceSource=(string)file_get_contents(__DIR__.'/../production_dossier_service.php');

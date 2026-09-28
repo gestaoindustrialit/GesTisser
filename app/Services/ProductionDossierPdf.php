@@ -199,6 +199,11 @@ final class ProductionDossierPdf
 
     private static function imageFromDataUri(string $value): array
     {
+        if (preg_match('#^https?://#i', $value)) {
+            $remote = @file_get_contents($value);
+            if (!is_string($remote) || $remote === '') return [];
+            $value = 'data:image/' . (substr($remote, 0, 2) === "\xFF\xD8" ? 'jpeg' : 'png') . ';base64,' . base64_encode($remote);
+        }
         if (!preg_match('#^data:image/[^;]+;base64,#', $value, $match)) return [];
         $decoded = base64_decode(substr($value, strlen($match[0])), true);
         if (!is_string($decoded)) return [];
