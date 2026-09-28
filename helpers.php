@@ -167,6 +167,10 @@ function run_hr_alerts_inline_if_due(PDO $pdo, int $triggerUserId = 0)
         return;
     }
 
+    if (!app_config('cron_enabled', false)) {
+        return;
+    }
+
     $currentScript = basename((string) ($_SERVER['SCRIPT_NAME'] ?? ''));
     if ($currentScript === 'cron_hr_alerts.php') {
         return;
@@ -762,6 +766,10 @@ function taskforce_build_mail_payload(string $subject, string $textBody, $htmlBo
 function deliver_report(string $email, string $subject, string $body, $htmlBody = null, array $attachments = []): bool
 {
     taskforce_set_last_delivery_error('');
+    if (!app_config('external_services_enabled', false)) {
+        taskforce_set_last_delivery_error('Envio externo desativado neste ambiente.');
+        return false;
+    }
     if (!filter_var($email, FILTER_VALIDATE_EMAIL) || preg_match('/[\r\n]/', $email . $subject)) {
         taskforce_set_last_delivery_error('Destinatário ou assunto inválido.');
         taskforce_write_report_log([

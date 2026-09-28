@@ -6,6 +6,9 @@ class IntegrationClient
     private function credentials(int $id): array { $s=$this->pdo->prepare('SELECT key_name,value_encrypted FROM integration_credentials WHERE integration_id=?');$s->execute([$id]);$out=[];foreach($s as $r)$out[$r['key_name']]=IntegrationSecurity::decrypt($r['value_encrypted']);return $out; }
     public function request(array $integration, string $method='GET', string $endpoint='', $body=null, array $extra=[]): array
     {
+        if (function_exists('app_config') && !app_config('external_services_enabled', false)) {
+            throw new RuntimeException('Integrações externas desativadas neste ambiente.');
+        }
         $url=rtrim($integration['base_url'],'/').'/'.ltrim($endpoint,'/'); if(!IntegrationSecurity::safeUrl($url)) throw new RuntimeException('Destino bloqueado pela proteção SSRF.');
         $credentials=$this->credentials((int)$integration['id']); $headers=['Accept: application/json'];
         $s=$this->pdo->prepare('SELECT * FROM integration_headers WHERE integration_id=? AND kind="header"');$s->execute([$integration['id']]); foreach($s as $h)$headers[]=$h['key_name'].': '.($h['is_sensitive']?IntegrationSecurity::decrypt($h['value']):$h['value']);
