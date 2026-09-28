@@ -54,11 +54,17 @@ final class ProductionDossierPdf
         self::fieldBox($content,394,554,173,28,'DATA PREVISTA',$dueTime?date('d/m/Y',$dueTime):$dash,9);
 
         self::text($content,35,538,7,'CARACTERISTICAS DO SACO',true,[.32,.38,.39]);
-        $featureX=28; $featureWidth=539/5;
+        $featureX=28; $featureWidth=539/7;
         foreach ([['Microperfuracao','microperforation'],['Asa','has_handle'],['Furo','has_holes'],['Fole','has_gusset'],['Fole centrado','centered_gusset']] as $feature) {
-            self::featureCell($content,$featureX,506,$featureWidth,26,$feature[0],!empty($snapshot[$feature[1]]));
+            $detail = $feature[1] === 'has_gusset' && !empty($snapshot[$feature[1]]) ? $value($snapshot['gusset_length'] ?? '') : '';
+            self::featureCell($content,$featureX,506,$featureWidth,26,$feature[0],!empty($snapshot[$feature[1]]),$detail);
             $featureX += $featureWidth;
         }
+        self::metricCell($content,$featureX,506,$featureWidth,26,'SACOS / PALETE',$value($snapshot['pallet_quantity']??''));
+        $featureX += $featureWidth;
+        $palletWeight=$value($snapshot['pallet_weight']??'');
+        if($palletWeight!==$dash&&!preg_match('/\bkg\s*$/i',$palletWeight))$palletWeight.=' kg';
+        self::metricCell($content,$featureX,506,$featureWidth,26,'PESO TEORICO PALETE',$palletWeight);
 
         self::sectionBar($content,28,480,539,18,'MAQUETA DO ARTIGO / REFERENCIA VISUAL');
         self::rect($content,28,270,350,210,true,[1,1,1]);
@@ -107,11 +113,19 @@ final class ProductionDossierPdf
     private static function sectionBar(string &$content, float $x, float $y, float $w, float $h, string $title)
     { self::rect($content,$x,$y,$w,$h,true,[.93,.93,.93]); self::text($content,$x+7,$y+5,9,$title,true,[0,0,0]); }
 
-    private static function featureCell(string &$content, float $x, float $y, float $w, float $h, string $label, bool $enabled)
+    private static function featureCell(string &$content, float $x, float $y, float $w, float $h, string $label, bool $enabled, string $detail = '')
     {
         self::rect($content,$x,$y,$w,$h,true,[1,1,1]);
-        self::text($content,$x+6,$y+15,7,$label,true);
-        self::text($content,$x+6,$y+5,6,($enabled?'[X]':'[ ]').' Sim   '.($enabled?'[ ]':'[X]').' Nao');
+        self::text($content,$x+4,$y+15,6,self::shorten($label,18),true);
+        if($detail!=='')self::text($content,$x+$w-4,$y+15,6,self::shorten($detail,9),true,[.2,.2,.2],true);
+        self::text($content,$x+4,$y+5,6,($enabled?'[X]':'[ ]').' Sim   '.($enabled?'[ ]':'[X]').' Nao');
+    }
+
+    private static function metricCell(string &$content, float $x, float $y, float $w, float $h, string $label, string $value)
+    {
+        self::rect($content,$x,$y,$w,$h,true,[1,1,1]);
+        self::text($content,$x+4,$y+15,5,self::shorten($label,23),true);
+        self::text($content,$x+4,$y+5,7,self::shorten($value,16),true);
     }
 
     private static function fieldBox(string &$content, float $x, float $y, float $w, float $h, string $label, string $value, float $size, bool $highlight = false)
