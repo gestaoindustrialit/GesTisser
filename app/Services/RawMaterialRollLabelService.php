@@ -26,6 +26,18 @@ final class RawMaterialRollLabelService
         $stmt->execute([$materialId]);return $stmt->fetchAll(PDO::FETCH_ASSOC);
     }
 
+    public function search(int $materialId,string $term=''): array
+    {
+        $sql='SELECT id,entry_number,supplier_lot,metres,weight_kg,barcode,label_date FROM erp_raw_material_roll_labels l WHERE raw_material_id=? AND NOT EXISTS (SELECT 1 FROM erp_raw_material_roll_consumptions c WHERE c.source_label_id=l.id)';$params=[$materialId];$term=trim($term);
+        if($term!==''){$sql.=' AND (entry_number LIKE ? OR supplier_lot LIKE ? OR barcode LIKE ?)';$like='%'.$term.'%';$params[]=$like;$params[]=$like;$params[]=$like;}
+        $sql.=' ORDER BY label_date DESC,id DESC LIMIT 50';$stmt=$this->pdo->prepare($sql);$stmt->execute($params);return $stmt->fetchAll(PDO::FETCH_ASSOC);
+    }
+
+    public function productionOrders(): array
+    {
+        $stmt=$this->pdo->query('SELECT id,order_number,status FROM erp_production_orders WHERE status NOT IN ("Concluída","Cancelada") ORDER BY CASE WHEN status IN ("Planeada","Em curso") THEN 0 ELSE 1 END,due_date,id DESC');return $stmt->fetchAll(PDO::FETCH_ASSOC);
+    }
+
     public function save(int $materialId,array $values,int $userId,int $id=0): array
     {
         $this->material($materialId);
@@ -37,5 +49,15 @@ final class RawMaterialRollLabelService
         if($id>0){$current=$this->find($id);if(!$current||(int)$current['raw_material_id']!==$materialId)throw new RuntimeException('A etiqueta selecionada não pertence a esta matéria-prima.');$stmt=$this->pdo->prepare('UPDATE erp_raw_material_roll_labels SET entry_number=?,supplier_lot=?,metres=?,weight_kg=?,barcode=?,label_date=?,validated_by=?,validated_at=CURRENT_TIMESTAMP,updated_at=CURRENT_TIMESTAMP WHERE id=?');$stmt->execute([$entry,$lot,$metres,$weight,$barcode,$date,$userId,$id]);}
         else{$stmt=$this->pdo->prepare('INSERT INTO erp_raw_material_roll_labels(raw_material_id,entry_number,supplier_lot,metres,weight_kg,barcode,label_date,validated_by) VALUES (?,?,?,?,?,?,?,?)');$stmt->execute([$materialId,$entry,$lot,$metres,$weight,$barcode,$date,$userId]);$id=(int)$this->pdo->lastInsertId();}
         return $this->find($id)?:[];
+    }
+
+    public function relabel(int $sourceId,int $orderId,array $values,int $userId): array
+    {
+        $source=$this->find($sourceId);if(!$source)throw new RuntimeException('O rolo selecionado não existe.');if($orderId<1)throw new InvalidArgumentException('Selecione a OF onde a matéria-prima foi consumida.');
+        $check=$this->pdo->prepare('SELECT 1 FROM erp_production_orders WHERE id=?');$check->execute([$orderId]);if(!$check->fetchColumn())throw new InvalidArgumentException('A OF selecionada não existe.');
+        $remainingMetres=(float)($values['metres']??0);$remainingWeight=(float)($values['weight_kg']??0);if($remainingMetres>(float)$source['metres']||$remainingWeight>(float)$source['weight_kg'])throw new InvalidArgumentException('A quantidade restante não pode exceder a quantidade do rolo selecionado.');
+        $consumedMetres=(float)$source['metres']-$remainingMetres;$consumedWeight=(float)$source['weight_kg']-$remainingWeight;if($consumedMetres<=0&&$consumedWeight<=0)throw new InvalidArgumentException('Reduza os metros ou o peso para registar o consumo.');
+        $ownsTransaction=!$this->pdo->inTransaction();if($ownsTransaction)$this->pdo->beginTransaction();
+        try{$used=$this->pdo->prepare('SELECT 1 FROM erp_raw_material_roll_consumptions WHERE source_label_id=?');$used->execute([$sourceId]);if($used->fetchColumn())throw new RuntimeException('Este rolo já foi consumido e substituído por uma nova etiqueta.');$result=$this->save((int)$source['raw_material_id'],$values,$userId);$stmt=$this->pdo->prepare('INSERT INTO erp_raw_material_roll_consumptions(source_label_id,resulting_label_id,production_order_id,consumed_metres,consumed_weight_kg,created_by) VALUES (?,?,?,?,?,?)');$stmt->execute([$sourceId,(int)$result['id'],$orderId,$consumedMetres,$consumedWeight,$userId]);if($ownsTransaction)$this->pdo->commit();return $result;}catch(Throwable $e){if($ownsTransaction&&$this->pdo->inTransaction())$this->pdo->rollBack();throw $e;}
     }
 }
