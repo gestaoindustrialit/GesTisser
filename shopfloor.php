@@ -953,6 +953,10 @@ $ofSql .= ' ORDER BY o.due_date IS NULL, o.due_date, o.id DESC LIMIT 25';
 $ofStmt = $pdo->prepare($ofSql);
 $ofStmt->execute($ofParams);
 $productionOrders = $ofStmt ? $ofStmt->fetchAll(PDO::FETCH_ASSOC) : [];
+$labelMaterialsStmt=$pdo->query('SELECT id,code,description,roll_controlled,ink_type_id FROM erp_raw_materials WHERE status="Ativo" AND (roll_controlled=1 OR ink_type_id IS NOT NULL) ORDER BY code');
+$labelRawMaterials=$labelMaterialsStmt?$labelMaterialsStmt->fetchAll(PDO::FETCH_ASSOC):[];
+$labelRollMaterials=array_values(array_filter($labelRawMaterials,function($row){return !empty($row['roll_controlled']);}));
+$labelInkMaterials=array_values(array_filter($labelRawMaterials,function($row){return !empty($row['ink_type_id']);}));
 $selectedOfId = (int) ($_GET['of_id'] ?? ($productionOrders[0]['id'] ?? 0));
 $selectedOf = null;
 foreach ($productionOrders as $ofRow) { if ((int)$ofRow['id'] === $selectedOfId) { $selectedOf = $ofRow; break; } }
@@ -975,6 +979,7 @@ if ($selectedOfId > 0) {
 
 $pageTitle = 'Shopfloor';
 $bodyClass = 'bg-light';
+$showProductionLabelShortcuts = true;
 require __DIR__ . '/partials/header.php';
 ?>
 
@@ -1019,6 +1024,45 @@ require __DIR__ . '/partials/header.php';
     <?php if ($flashError): ?>
         <div class="alert alert-danger mt-3 mb-3"><?= h($flashError) ?></div>
     <?php endif; ?>
+
+    <?php foreach (['roll'=>['title'=>'Etiqueta de rolo','icon'=>'bi-upc-scan','action'=>'raw_material_roll_label.php','materials'=>$labelRollMaterials], 'ink'=>['title'=>'Etiqueta de tinta','icon'=>'bi-droplet-fill','action'=>'raw_material_ink_label.php','materials'=>$labelInkMaterials]] as $labelType => $labelDefinition): ?>
+        <?php $labelTitle=$labelDefinition['title'];$labelIcon=$labelDefinition['icon'];$labelMaterials=$labelDefinition['materials']; ?>
+        <div class="modal fade" id="productionLabelModal-<?= h($labelType) ?>" tabindex="-1" aria-labelledby="productionLabelModalTitle-<?= h($labelType) ?>" aria-hidden="true">
+            <div class="modal-dialog modal-dialog-centered">
+                <div class="modal-content">
+                    <form method="get" action="<?= h($labelDefinition['action']) ?>">
+                        <div class="modal-header">
+                            <div>
+                                <h2 class="modal-title fs-5" id="productionLabelModalTitle-<?= h($labelType) ?>">
+                                    <i class="bi <?= h($labelIcon) ?> me-1" aria-hidden="true"></i><?= h($labelTitle) ?>
+                                </h2>
+                                <p class="small text-secondary mb-0">Selecione a matéria-prima da etiqueta que pretende preparar e imprimir.</p>
+                            </div>
+                            <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Fechar"></button>
+                        </div>
+                        <div class="modal-body">
+                            <?php if ($labelMaterials): ?>
+                                <label class="form-label" for="productionLabelOrder-<?= h($labelType) ?>">Matéria-prima</label>
+                                <select class="form-select" id="productionLabelOrder-<?= h($labelType) ?>" name="raw_material_id" required>
+                                    <?php foreach ($labelMaterials as $labelMaterial): ?>
+                                        <option value="<?= (int)$labelMaterial['id'] ?>"><?= h($labelMaterial['code'].' · '.$labelMaterial['description']) ?></option>
+                                    <?php endforeach; ?>
+                                </select>
+                            <?php else: ?>
+                                <div class="alert alert-warning mb-0">Ainda não existem matérias-primas elegíveis registadas.</div>
+                            <?php endif; ?>
+                        </div>
+                        <div class="modal-footer">
+                            <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancelar</button>
+                            <button type="submit" class="btn btn-primary" <?= $labelMaterials ? '' : 'disabled' ?>>
+                                <i class="bi bi-printer me-1" aria-hidden="true"></i>Preparar impressão
+                            </button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+    <?php endforeach; ?>
 
     <div class="modal fade" id="workCenterModal" tabindex="-1" aria-labelledby="workCenterModalLabel" aria-hidden="true" data-requires-selection="<?= $selectedWorkCenter ? '0' : '1' ?>">
         <div class="modal-dialog modal-dialog-centered modal-dialog-scrollable">
@@ -1088,12 +1132,8 @@ require __DIR__ . '/partials/header.php';
             <div class="alert alert-info d-flex flex-wrap justify-content-between align-items-center gap-3">
                 <div class="small"><strong><?= h($selectedOf['order_number']) ?></strong> — Quantidade planeada: <?= h((string)$selectedOf['planned_quantity']) ?> · Estado: <?= h($selectedOf['status']) ?></div>
                 <div class="d-flex flex-wrap gap-2" aria-label="Etiquetas de acerto e reimpressão">
-                    <a class="btn btn-warning btn-sm fw-semibold" href="production_label.php?id=<?= (int)$selectedOf['id'] ?>&type=roll">
-                        <i class="bi bi-upc-scan me-1" aria-hidden="true"></i>Etiqueta de rolo
-                    </a>
-                    <a class="btn btn-info btn-sm fw-semibold" href="production_label.php?id=<?= (int)$selectedOf['id'] ?>&type=ink">
-                        <i class="bi bi-droplet-fill me-1" aria-hidden="true"></i>Etiqueta de tinta
-                    </a>
+                    <button type="button" class="btn btn-warning btn-sm fw-semibold" data-bs-toggle="modal" data-bs-target="#productionLabelModal-roll"><i class="bi bi-upc-scan me-1" aria-hidden="true"></i>Etiqueta de rolo</button>
+                    <button type="button" class="btn btn-info btn-sm fw-semibold" data-bs-toggle="modal" data-bs-target="#productionLabelModal-ink"><i class="bi bi-droplet-fill me-1" aria-hidden="true"></i>Etiqueta de tinta</button>
                 </div>
             </div>
             <h3 class="h6">Documentos obrigatórios</h3>

@@ -1,0 +1,207 @@
+<!doctype html>
+<html lang="pt-PT">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="Apresentação executiva dos módulos e fluxos disponíveis no GesTisser.">
+  <title>GesTisser — Visão executiva da solução</title>
+  <style>
+    :root {
+      --ink: #172321; --muted: #687774; --paper: #f6f7f2; --white: #fff;
+      --forest: #0b4d3c; --forest-2: #176957; --mint: #cce9da; --lime: #d9ed75;
+      --blue: #b8dfe6; --peach: #f6d5bd; --lavender: #d9d5f2; --line: #dfe4dd;
+      --shadow: 0 18px 54px rgba(20, 43, 36, .09); --radius: 24px;
+    }
+    * { box-sizing: border-box; }
+    html { scroll-behavior: smooth; }
+    body { margin: 0; color: var(--ink); background: var(--paper); font: 16px/1.55 Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; }
+    button, a { font: inherit; }
+    a { color: inherit; }
+    .shell { width: min(1180px, calc(100% - 40px)); margin-inline: auto; }
+    .topbar { position: sticky; top: 0; z-index: 20; backdrop-filter: blur(18px); background: rgba(246,247,242,.86); border-bottom: 1px solid rgba(11,77,60,.1); }
+    .topbar-inner { min-height: 72px; display: flex; align-items: center; justify-content: space-between; gap: 24px; }
+    .brand { display: flex; align-items: center; gap: 11px; text-decoration: none; font-weight: 800; letter-spacing: -.03em; }
+    .brand-mark { width: 38px; height: 38px; display: grid; place-items: center; border-radius: 12px; color: white; background: var(--forest); }
+    .brand-mark svg { width: 22px; }
+    .nav { display: flex; gap: 26px; color: #40504d; font-size: 14px; }
+    .nav a { text-decoration: none; }
+    .nav a:hover { color: var(--forest); }
+    .print-btn { border: 0; color: white; background: var(--forest); border-radius: 999px; padding: 10px 17px; cursor: pointer; font-weight: 700; }
+    .hero { padding: 76px 0 42px; overflow: hidden; }
+    .hero-grid { display: grid; grid-template-columns: 1.15fr .85fr; align-items: center; gap: 64px; }
+    .eyebrow { display: inline-flex; align-items: center; gap: 8px; border: 1px solid #cdd8d2; border-radius: 999px; background: rgba(255,255,255,.6); padding: 7px 12px; color: var(--forest); text-transform: uppercase; letter-spacing: .12em; font-size: 11px; font-weight: 800; }
+    .eyebrow::before { content: ""; width: 7px; height: 7px; border-radius: 50%; background: #2aa478; box-shadow: 0 0 0 4px #dcefe7; }
+    h1 { margin: 25px 0 22px; max-width: 740px; font: 800 clamp(48px, 6.2vw, 82px)/.98 Georgia, "Times New Roman", serif; letter-spacing: -.055em; }
+    h1 em { color: var(--forest-2); font-style: normal; }
+    .lead { max-width: 660px; margin: 0; color: #53625f; font-size: clamp(18px, 2vw, 22px); }
+    .hero-actions { display: flex; gap: 12px; margin-top: 32px; }
+    .btn { display: inline-flex; align-items: center; gap: 8px; border-radius: 999px; padding: 12px 19px; text-decoration: none; font-weight: 750; }
+    .btn-primary { color: white; background: var(--forest); }
+    .btn-secondary { border: 1px solid #cad4cf; background: white; }
+    .orbit { position: relative; aspect-ratio: 1; max-width: 470px; margin-inline: auto; border-radius: 50%; border: 1px solid #d4ddd7; background: radial-gradient(circle, white 0 29%, transparent 30%), conic-gradient(from 25deg, var(--mint), #f4f1d5, var(--blue), var(--lavender), var(--peach), var(--mint)); box-shadow: inset 0 0 0 28px rgba(255,255,255,.62), var(--shadow); }
+    .orbit-core { position: absolute; inset: 34%; display: grid; place-items: center; border-radius: 50%; color: white; background: var(--forest); font: 800 20px/1 Georgia, serif; text-align: center; }
+    .orbit-label { position: absolute; padding: 8px 12px; border-radius: 999px; background: white; box-shadow: 0 8px 24px rgba(20,43,36,.12); font-size: 12px; font-weight: 800; }
+    .orbit-label:nth-of-type(2) { top: 9%; left: 40%; } .orbit-label:nth-of-type(3) { top: 28%; right: -2%; }
+    .orbit-label:nth-of-type(4) { bottom: 16%; right: 8%; } .orbit-label:nth-of-type(5) { bottom: 8%; left: 23%; }
+    .orbit-label:nth-of-type(6) { top: 40%; left: -3%; }
+    .stats { display: grid; grid-template-columns: repeat(4, 1fr); gap: 14px; padding: 30px 0 86px; }
+    .stat { padding: 22px; border: 1px solid var(--line); border-radius: 20px; background: rgba(255,255,255,.7); }
+    .stat strong { display: block; color: var(--forest); font: 800 34px/1 Georgia, serif; }
+    .stat span { display: block; margin-top: 7px; color: var(--muted); font-size: 13px; }
+    section { padding: 82px 0; }
+    .section-kicker { color: var(--forest-2); text-transform: uppercase; letter-spacing: .15em; font-size: 11px; font-weight: 850; }
+    .section-head { display: flex; justify-content: space-between; align-items: end; gap: 40px; margin-bottom: 36px; }
+    h2 { margin: 10px 0 0; max-width: 720px; font: 800 clamp(36px, 4.5vw, 58px)/1.02 Georgia, serif; letter-spacing: -.045em; }
+    .section-intro { max-width: 430px; margin: 0; color: var(--muted); }
+    .modules-wrap { background: var(--ink); color: white; }
+    .modules-wrap .section-kicker { color: #9ad6bf; } .modules-wrap .section-intro { color: #acbbb7; }
+    .filters { display: flex; flex-wrap: wrap; gap: 8px; margin: 0 0 24px; }
+    .filter { padding: 8px 13px; border: 1px solid #52615d; border-radius: 999px; color: #c8d1ce; background: transparent; cursor: pointer; font-size: 13px; }
+    .filter.active { border-color: var(--lime); color: var(--ink); background: var(--lime); font-weight: 800; }
+    .module-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; }
+    .module { min-height: 330px; display: flex; flex-direction: column; padding: 26px; border: 1px solid #394744; border-radius: var(--radius); background: #202e2b; transition: transform .25s, border-color .25s; }
+    .module:hover { transform: translateY(-5px); border-color: #779089; }
+    .module[hidden] { display: none; }
+    .module-icon { width: 47px; height: 47px; display: grid; place-items: center; border-radius: 15px; color: var(--ink); background: var(--accent, var(--mint)); font-weight: 900; }
+    .module-index { float: right; color: #72817d; font: 700 12px/1 monospace; }
+    .module h3 { margin: 24px 0 10px; font: 750 23px/1.1 Georgia, serif; }
+    .module p { margin: 0 0 18px; color: #abb8b4; font-size: 14px; }
+    .tags { display: flex; flex-wrap: wrap; gap: 7px; margin-top: auto; }
+    .tag { padding: 6px 9px; border-radius: 8px; color: #d5deda; background: #2c3a37; font-size: 11px; }
+    .journeys { background: #e8efe9; }
+    .journey-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 18px; }
+    .journey { padding: 28px; border-radius: var(--radius); background: white; box-shadow: var(--shadow); }
+    .journey-num { width: 36px; height: 36px; display: grid; place-items: center; border-radius: 50%; background: var(--forest); color: white; font: 800 14px/1 monospace; }
+    .journey h3 { margin: 20px 0 4px; font: 800 24px/1.15 Georgia, serif; }
+    .journey-sub { color: var(--muted); font-size: 13px; }
+    .steps { margin: 24px 0 0; padding: 0; list-style: none; }
+    .steps li { position: relative; padding: 0 0 22px 28px; font-size: 14px; }
+    .steps li::before { content: ""; position: absolute; left: 3px; top: 7px; width: 8px; height: 8px; border-radius: 50%; background: var(--forest-2); }
+    .steps li:not(:last-child)::after { content: ""; position: absolute; left: 6px; top: 18px; bottom: 5px; width: 1px; background: #cbd8d0; }
+    .value-grid { display: grid; grid-template-columns: .8fr 1.2fr; gap: 18px; }
+    .value-main { padding: 38px; border-radius: var(--radius); color: white; background: var(--forest); }
+    .value-main .big { margin: 34px 0 10px; font: 800 55px/1 Georgia, serif; }
+    .value-main p { color: #c1dad2; }
+    .value-list { display: grid; grid-template-columns: 1fr 1fr; gap: 18px; }
+    .value { padding: 25px; border: 1px solid var(--line); border-radius: var(--radius); background: white; }
+    .value b { display: block; margin-bottom: 8px; font-family: Georgia, serif; font-size: 20px; }
+    .value span { color: var(--muted); font-size: 13px; }
+    .architecture { background: #f0e8dd; }
+    .arch { display: grid; grid-template-columns: 1fr auto 1fr auto 1fr; align-items: stretch; gap: 12px; }
+    .arch-card { padding: 24px; border: 1px solid rgba(94,78,58,.15); border-radius: 20px; background: rgba(255,255,255,.75); }
+    .arch-card small { color: #846a50; text-transform: uppercase; letter-spacing: .12em; font-weight: 800; }
+    .arch-card h3 { margin: 10px 0; font: 800 22px/1.1 Georgia, serif; }
+    .arch-card p { margin: 0; color: #73695f; font-size: 13px; }
+    .arrow { display: grid; place-items: center; color: #8f7b66; font-size: 24px; }
+    .guardrails { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
+    .panel { padding: 32px; border-radius: var(--radius); background: white; border: 1px solid var(--line); }
+    .panel h3 { margin: 0 0 20px; font: 800 25px/1.1 Georgia, serif; }
+    .check-list { list-style: none; padding: 0; margin: 0; }
+    .check-list li { display: flex; gap: 12px; padding: 11px 0; border-top: 1px solid #edf0ec; font-size: 14px; }
+    .check-list li::before { content: "✓"; flex: 0 0 24px; width: 24px; height: 24px; display: grid; place-items: center; border-radius: 50%; color: var(--forest); background: var(--mint); font-weight: 900; }
+    .attention li::before { content: "!"; color: #7a471e; background: var(--peach); }
+    footer { padding: 48px 0; color: white; background: var(--forest); }
+    .footer-inner { display: flex; justify-content: space-between; align-items: center; gap: 32px; }
+    footer h2 { font-size: 38px; margin: 0; }
+    footer p { margin: 8px 0 0; color: #bcd3cc; }
+    .asof { white-space: nowrap; color: #bcd3cc; font-size: 13px; }
+    @media (max-width: 900px) { .nav { display:none; } .hero-grid, .value-grid { grid-template-columns: 1fr; } .orbit { width: min(90vw,420px); margin-top: 25px; } .stats, .module-grid { grid-template-columns: 1fr 1fr; } .journey-grid { grid-template-columns: 1fr; } .arch { grid-template-columns: 1fr; } .arrow { transform: rotate(90deg); } }
+    @media (max-width: 600px) { .shell { width: min(100% - 24px,1180px); } .print-btn { display:none; } .hero { padding-top: 48px; } h1 { font-size: 48px; } .stats, .module-grid, .value-list, .guardrails { grid-template-columns: 1fr; } .section-head, .footer-inner { align-items: start; flex-direction: column; } section { padding: 62px 0; } }
+    @media print { .topbar, .hero-actions, .filters { display: none !important; } body { background: white; } section, .hero { padding: 35px 0; break-inside: avoid; } .module-grid { grid-template-columns: repeat(3,1fr); } .module { min-height: 0; break-inside: avoid; } .modules-wrap { print-color-adjust: exact; -webkit-print-color-adjust: exact; } }
+  </style>
+</head>
+<body>
+  <header class="topbar">
+    <div class="shell topbar-inner">
+      <a class="brand" href="#inicio"><span class="brand-mark" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none"><path d="M4 7.5 12 3l8 4.5v9L12 21l-8-4.5v-9Z" stroke="currentColor" stroke-width="2"/><path d="m4 7.5 8 4.5 8-4.5M12 12v9" stroke="currentColor" stroke-width="2"/></svg></span>GesTisser</a>
+      <nav class="nav" aria-label="Navegação principal"><a href="#modulos">Módulos</a><a href="#fluxos">Fluxos</a><a href="#valor">Valor</a><a href="#arquitetura">Arquitetura</a><a href="#governacao">Governação</a></nav>
+      <button class="print-btn" type="button" onclick="window.print()">Exportar / imprimir</button>
+    </div>
+  </header>
+
+  <main id="inicio">
+    <section class="hero">
+      <div class="shell hero-grid">
+        <div>
+          <span class="eyebrow">Visão executiva · solução atual</span>
+          <h1>Uma operação inteira, <em>ligada de ponta a ponta.</em></h1>
+          <p class="lead">O GesTisser centraliza pessoas, clientes, materiais e produção numa única plataforma — da oportunidade comercial ao custo real da ordem de fabrico.</p>
+          <div class="hero-actions"><a class="btn btn-primary" href="#modulos">Explorar os módulos ↓</a><a class="btn btn-secondary" href="#fluxos">Ver os fluxos críticos</a></div>
+        </div>
+        <div class="orbit" aria-label="Ecossistema GesTisser">
+          <div class="orbit-core">uma só<br>plataforma</div><span class="orbit-label">CRM</span><span class="orbit-label">ERP</span><span class="orbit-label">Produção</span><span class="orbit-label">RH</span><span class="orbit-label">Dados</span>
+        </div>
+      </div>
+    </section>
+
+    <div class="shell stats" aria-label="Resumo da cobertura funcional">
+      <div class="stat"><strong>10</strong><span>domínios funcionais integrados</span></div>
+      <div class="stat"><strong>3</strong><span>fluxos ponta a ponta prioritários</span></div>
+      <div class="stat"><strong>360º</strong><span>visão da operação industrial</span></div>
+      <div class="stat"><strong>1</strong><span>fonte operacional partilhada</span></div>
+    </div>
+
+    <section class="modules-wrap" id="modulos">
+      <div class="shell">
+        <div class="section-head"><div><span class="section-kicker">Mapa funcional</span><h2>Tudo o que já existe, organizado por módulo.</h2></div><p class="section-intro">Uma leitura clara da cobertura atual. Use os filtros para adaptar a narrativa a cada audiência.</p></div>
+        <div class="filters" role="group" aria-label="Filtrar módulos">
+          <button class="filter active" data-filter="all">Todos</button><button class="filter" data-filter="gestao">Gestão</button><button class="filter" data-filter="pessoas">Pessoas</button><button class="filter" data-filter="operacao">Operação</button><button class="filter" data-filter="dados">Dados &amp; sistemas</button>
+        </div>
+        <div class="module-grid">
+          <article class="module" data-category="gestao" style="--accent:var(--lime)"><div><span class="module-icon">01</span><span class="module-index">BASE</span></div><h3>Acesso &amp; administração</h3><p>A base segura para operar e governar toda a solução.</p><div class="tags"><span class="tag">Utilizadores</span><span class="tag">Perfis e permissões</span><span class="tag">PIN shopfloor</span><span class="tag">CSRF e rate limiting</span><span class="tag">Auditoria</span><span class="tag">Branding</span></div></article>
+          <article class="module" data-category="gestao" style="--accent:var(--blue)"><div><span class="module-icon">02</span><span class="module-index">WORK</span></div><h3>Colaboração &amp; pedidos</h3><p>Trabalho coordenado entre equipas, projetos e serviços internos.</p><div class="tags"><span class="tag">Projetos</span><span class="tag">Tarefas e Kanban</span><span class="tag">Checklists</span><span class="tag">Recorrências</span><span class="tag">Formulários</span><span class="tag">Relatório diário</span></div></article>
+          <article class="module" data-category="pessoas" style="--accent:var(--peach)"><div><span class="module-icon">03</span><span class="module-index">PEOPLE</span></div><h3>Recursos Humanos</h3><p>Da estrutura organizacional à avaliação e experiência diária.</p><div class="tags"><span class="tag">Organograma</span><span class="tag">Horários</span><span class="tag">Ponto e pausas</span><span class="tag">Férias e ausências</span><span class="tag">Competências</span><span class="tag">Avaliações e alertas</span></div></article>
+          <article class="module" data-category="pessoas" style="--accent:var(--lavender)"><div><span class="module-icon">04</span><span class="module-index">PAY</span></div><h3>Payroll</h3><p>Preparação mensal consistente, auditável e pronta a exportar.</p><div class="tags"><span class="tag">Assiduidade</span><span class="tag">Noturno</span><span class="tag">Horas extra</span><span class="tag">Variáveis</span><span class="tag">Avisos</span><span class="tag">XLSX em 3 folhas</span></div></article>
+          <article class="module" data-category="gestao" style="--accent:var(--mint)"><div><span class="module-icon">05</span><span class="module-index">SALES</span></div><h3>CRM</h3><p>Relações comerciais acompanhadas do primeiro contacto ao resultado.</p><div class="tags"><span class="tag">Leads</span><span class="tag">Pipeline</span><span class="tag">Clientes e contactos</span><span class="tag">Agenda</span><span class="tag">Atividades</span><span class="tag">Valor ponderado</span></div></article>
+          <article class="module" data-category="operacao" style="--accent:var(--blue)"><div><span class="module-icon">06</span><span class="module-index">MASTER</span></div><h3>ERP &amp; dados mestres</h3><p>Uma estrutura comum para todas as entidades industriais.</p><div class="tags"><span class="tag">Clientes</span><span class="tag">Fornecedores</span><span class="tag">Artigos e BOM</span><span class="tag">Matérias-primas</span><span class="tag">Máquinas</span><span class="tag">Documentos</span></div></article>
+          <article class="module" data-category="operacao" style="--accent:var(--lime)"><div><span class="module-icon">07</span><span class="module-index">SUPPLY</span></div><h3>Compras &amp; stock</h3><p>Rastreabilidade física e financeira desde a encomenda.</p><div class="tags"><span class="tag">Compras</span><span class="tag">Importação PDF</span><span class="tag">Receções parciais</span><span class="tag">Armazéns</span><span class="tag">Transferências</span><span class="tag">Reservas e inventário</span></div></article>
+          <article class="module" data-category="operacao" style="--accent:var(--peach)"><div><span class="module-icon">08</span><span class="module-index">MAKE</span></div><h3>Produção &amp; shopfloor</h3><p>Planeamento, execução e fecho industrial no mesmo fio digital.</p><div class="tags"><span class="tag">Gamas versionadas</span><span class="tag">Capacidade</span><span class="tag">OF</span><span class="tag">Execução</span><span class="tag">Consumos e qualidade</span><span class="tag">Custos e etiquetas</span></div></article>
+          <article class="module" data-category="dados" style="--accent:var(--lavender)"><div><span class="module-icon">09</span><span class="module-index">INSIGHT</span></div><h3>Business Intelligence</h3><p>Indicadores industriais para transformar registos em decisão.</p><div class="tags"><span class="tag">Produção</span><span class="tag">Eficiência</span><span class="tag">Prazos</span><span class="tag">Paragens</span><span class="tag">Setup</span><span class="tag">Desperdício e alertas</span></div></article>
+          <article class="module" data-category="dados" style="--accent:var(--mint)"><div><span class="module-icon">10</span><span class="module-index">CONNECT</span></div><h3>Integrações</h3><p>Ligação controlada a sistemas externos, com segurança e histórico.</p><div class="tags"><span class="tag">API genérica</span><span class="tag">TOConline</span><span class="tag">OAuth2</span><span class="tag">Mapeamentos</span><span class="tag">Agendamento</span><span class="tag">Simulação e logs</span></div></article>
+        </div>
+      </div>
+    </section>
+
+    <section class="journeys" id="fluxos">
+      <div class="shell"><div class="section-head"><div><span class="section-kicker">Fluxos integrados</span><h2>A plataforma ganha valor nas ligações.</h2></div><p class="section-intro">Três jornadas críticas já atravessam vários módulos sem perder contexto nem histórico.</p></div>
+        <div class="journey-grid">
+          <article class="journey"><span class="journey-num">01</span><h3>Do artigo à produção</h3><span class="journey-sub">Engenharia → Produção → Controlo</span><ol class="steps"><li>Artigo, ficha técnica e documentos</li><li>Gama, operações e materiais</li><li>OF com snapshot e reservas</li><li>Execução, tempos e consumos</li><li>Custos, dossier e fecho auditado</li></ol></article>
+          <article class="journey"><span class="journey-num">02</span><h3>Da presença ao payroll</h3><span class="journey-sub">Colaborador → RH → Processamento</span><ol class="steps"><li>Horário, ponto e pausas</li><li>Ausências, férias e aprovações</li><li>Correção e validação diária</li><li>Banco de horas e agregação mensal</li><li>Avisos, fecho e exportação XLSX</li></ol></article>
+          <article class="journey"><span class="journey-num">03</span><h3>Do lead à oportunidade</h3><span class="journey-sub">Prospecção → Relação → Pipeline</span><ol class="steps"><li>Lead, origem e responsável</li><li>Chamadas, reuniões e tarefas</li><li>Atividade e lembretes</li><li>Fase e probabilidade comercial</li><li>Pipeline total e ponderado</li></ol></article>
+        </div>
+      </div>
+    </section>
+
+    <section id="valor"><div class="shell"><div class="section-head"><div><span class="section-kicker">Valor para a organização</span><h2>Menos ilhas. Mais controlo. Melhor decisão.</h2></div></div>
+      <div class="value-grid"><div class="value-main"><span class="section-kicker" style="color:#a9d7c8">Proposta central</span><div class="big">Uma só linha de verdade.</div><p>Dados operacionais, comerciais e humanos partilhados entre quem planeia, quem executa e quem decide.</p></div>
+        <div class="value-list"><div class="value"><b>Visibilidade</b><span>Estado da operação, prioridades e exceções num contexto comum.</span></div><div class="value"><b>Rastreabilidade</b><span>Snapshots, movimentos, logs e overrides preservam o histórico.</span></div><div class="value"><b>Disciplina operacional</b><span>Checklists, validações e bloqueios orientam processos consistentes.</span></div><div class="value"><b>Decisão informada</b><span>Custos, prazos, eficiência e desperdício transformados em indicadores.</span></div></div>
+      </div></div>
+    </section>
+
+    <section class="architecture" id="arquitetura"><div class="shell"><div class="section-head"><div><span class="section-kicker">Arquitetura da solução</span><h2>Simples de operar. Preparada para integrar.</h2></div><p class="section-intro">Aplicação web interna com uma base técnica pragmática e controlos transversais.</p></div>
+      <div class="arch"><div class="arch-card"><small>Experiência</small><h3>Web &amp; Shopfloor</h3><p>Interface responsiva para gestão e portal simplificado por PIN para o contexto operacional.</p></div><div class="arrow">→</div><div class="arch-card"><small>Aplicação</small><h3>PHP + serviços</h3><p>Regras por domínio, validações, importações, relatórios e automatismos por cron.</p></div><div class="arrow">→</div><div class="arch-card"><small>Dados &amp; ecossistema</small><h3>SQLite + APIs</h3><p>Base central, uploads e conectores configuráveis para API genérica e TOConline.</p></div></div>
+    </div></section>
+
+    <section id="governacao"><div class="shell"><div class="section-head"><div><span class="section-kicker">Governação e adoção</span><h2>Uma base sólida, com decisões a fechar.</h2></div><p class="section-intro">A solução distingue capacidades disponíveis de regras que exigem validação empresarial.</p></div>
+      <div class="guardrails"><div class="panel"><h3>Controlos já presentes</h3><ul class="check-list"><li>Perfis, permissões e segregação por área</li><li>Proteção de sessões, CSRF, uploads e endpoints</li><li>Auditoria em processos críticos e overrides justificados</li><li>Snapshots técnicos para preservar o histórico da OF</li><li>Simulação obrigatória antes de integrações de escrita</li></ul></div><div class="panel"><h3>Pontos a parametrizar</h3><ul class="check-list attention"><li>Calendários, horários e regras de assiduidade</li><li>Códigos e regras empresariais de payroll</li><li>Taxas, desperdícios e critérios de fecho industrial</li><li>Fases comerciais, probabilidades e visibilidade</li><li>Limiares de BI, ownership e qualidade do dado</li></ul></div></div>
+    </div></section>
+  </main>
+
+  <footer><div class="shell footer-inner"><div><h2>GesTisser</h2><p>Pessoas, processos e produção no mesmo sistema.</p></div><div class="asof">Visão funcional · setembro de 2026</div></div></footer>
+  <script>
+    (function () {
+      var buttons = document.querySelectorAll('.filter');
+      var cards = document.querySelectorAll('.module');
+      buttons.forEach(function (button) {
+        button.addEventListener('click', function () {
+          buttons.forEach(function (item) { item.classList.remove('active'); });
+          button.classList.add('active');
+          cards.forEach(function (card) {
+            card.hidden = button.dataset.filter !== 'all' && card.dataset.category !== button.dataset.filter;
+          });
+        });
+      });
+    }());
+  </script>
+</body>
+</html>
