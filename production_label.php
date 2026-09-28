@@ -10,7 +10,7 @@ $canUseProductionLabels=(int)($user['is_admin']??0)===1||in_array($profile,['Uti
 if(!$canUseProductionLabels){http_response_code(403);exit('Sem acesso às etiquetas de produção.');}
 $workCenterPrinter=null;$deviceWorkCenterId=(int)($_SESSION['shopfloor_work_center_id']??0);
 if($deviceWorkCenterId>0){$printerStmt=$pdo->prepare('SELECT wc.code AS work_center_code,wc.name AS work_center_name,p.name AS printer_name,p.network_uri AS printer_uri FROM erp_work_centers wc LEFT JOIN erp_printers p ON p.id=wc.default_printer_id AND p.is_active=1 WHERE wc.id=? LIMIT 1');$printerStmt->execute([$deviceWorkCenterId]);$workCenterPrinter=$printerStmt->fetch(PDO::FETCH_ASSOC)?:null;}
-$orderId=filter_input(INPUT_GET,'id',FILTER_VALIDATE_INT)?:0;$type=(string)($_GET['type']??'roll');if(!in_array($type,['roll','ink'],true)){http_response_code(400);exit('Tipo de etiqueta inválido.');}
+$orderId=filter_input(INPUT_GET,'id',FILTER_VALIDATE_INT)?:0;$type=(string)($_GET['type']??'');if(in_array($type,['roll','ink'],true)){redirect('erp.php?page=raw_materials');}http_response_code(400);exit('Tipo de etiqueta inválido.');
 $dossierService=new ProductionDossierService($pdo);try{$d=$dossierService->dossier($orderId);}catch(Throwable $e){http_response_code(404);exit(h($e->getMessage()));}
 $labelService=new ProductionLabelService($pdo);$o=$d['order'];$snapshot=$d['snapshot'];$inks=(array)($snapshot['_colors']??[]);$flashError='';$existingLabels=$labelService->listForOrder($orderId,$type);
 function production_label_value($value):string{return is_scalar($value)?trim((string)$value):'';}
