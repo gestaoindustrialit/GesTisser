@@ -5,6 +5,8 @@ Aplicação de gestão de trabalho inspirada no ClickUp, desenvolvida em **PHP +
 ## Funcionalidades
 
 > Consulte a [referência completa das funcionalidades atuais e regras de cálculo](docs/FUNCIONALIDADES_ATUAIS.md), com resumo executivo, fórmulas, parâmetros e limitações a validar com a empresa.
+>
+> Para uma apresentação visual à administração, abra [a visão executiva da solução](apresentacao_solucao.html) diretamente no browser. A página é responsiva, permite filtrar os módulos e está preparada para impressão ou exportação para PDF.
 
 - Autenticação (registo/login/logout)
 - Gestão de Equipas e Projetos
