@@ -295,6 +295,16 @@ header('Content-Type: text/html; charset=UTF-8');
                 </div>
             <?php endif; ?>
             <div class="gt-top-actions">
+                <?php if (!empty($showProductionLabelShortcuts)): ?>
+                    <div class="btn-group" role="group" aria-label="Imprimir etiquetas de produção">
+                        <button type="button" class="btn btn-sm btn-outline-warning fw-semibold" data-bs-toggle="modal" data-bs-target="#productionLabelModal-roll">
+                            <i class="bi bi-upc-scan" aria-hidden="true"></i><span class="d-none d-xl-inline"> Etiqueta de rolo</span>
+                        </button>
+                        <button type="button" class="btn btn-sm btn-outline-info fw-semibold" data-bs-toggle="modal" data-bs-target="#productionLabelModal-ink">
+                            <i class="bi bi-droplet-fill" aria-hidden="true"></i><span class="d-none d-xl-inline"> Etiqueta de tinta</span>
+                        </button>
+                    </div>
+                <?php endif; ?>
                 <?php if ($showCrmMenu): ?>
                     <a class="btn btn-sm btn-outline-secondary position-relative" href="crm.php?view=day" aria-label="<?= $navbarCrmReminderCount ?> lembretes CRM">
                         <i class="bi bi-bell"></i><span class="d-none d-md-inline"> CRM</span>
