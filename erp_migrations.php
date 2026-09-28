@@ -340,6 +340,10 @@ function gt_erp_run_phase1_migrations(PDO $pdo)
             'CREATE TABLE IF NOT EXISTS erp_production_label_history (id INTEGER PRIMARY KEY AUTOINCREMENT, production_label_id INTEGER NOT NULL, values_json TEXT NOT NULL, validated_by INTEGER NOT NULL, validated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP, FOREIGN KEY(production_label_id) REFERENCES erp_production_labels(id) ON DELETE CASCADE, FOREIGN KEY(validated_by) REFERENCES users(id) ON DELETE RESTRICT)'
         ];
         foreach ($dossierSql as $statement) { $pdo->exec($statement); }
+        /* Roll labels identify received raw material. They deliberately have no
+           production-order or finished-product foreign key. */
+        $pdo->exec('CREATE TABLE IF NOT EXISTS erp_raw_material_roll_labels (id INTEGER PRIMARY KEY AUTOINCREMENT, raw_material_id INTEGER NOT NULL, entry_number TEXT NOT NULL, supplier_lot TEXT NOT NULL, metres REAL NOT NULL, weight_kg REAL NOT NULL, barcode TEXT NOT NULL UNIQUE, label_date TEXT NOT NULL, validated_by INTEGER NOT NULL, validated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP, updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP, FOREIGN KEY(raw_material_id) REFERENCES erp_raw_materials(id) ON DELETE RESTRICT, FOREIGN KEY(validated_by) REFERENCES users(id) ON DELETE RESTRICT)');
+        $pdo->exec('CREATE INDEX IF NOT EXISTS idx_erp_raw_material_roll_labels_material ON erp_raw_material_roll_labels(raw_material_id,label_date,entry_number)');
         foreach (['validated_at'=>'DATETIME','updated_at'=>'DATETIME'] as $column=>$definition) {
             if (!gt_erp_migration_column_exists($pdo,'erp_production_labels',$column)) $pdo->exec('ALTER TABLE erp_production_labels ADD COLUMN '.$column.' '.$definition);
         }

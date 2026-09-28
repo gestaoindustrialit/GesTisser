@@ -1029,7 +1029,7 @@ require __DIR__ . '/partials/header.php';
         <div class="alert alert-danger mt-3 mb-3"><?= h($flashError) ?></div>
     <?php endif; ?>
 
-    <?php foreach (['roll' => ['Etiqueta de rolo', 'bi-upc-scan'], 'ink' => ['Etiqueta de tinta', 'bi-droplet-fill']] as $labelType => $labelDefinition): ?>
+    <?php foreach (['ink' => ['Etiqueta de tinta', 'bi-droplet-fill']] as $labelType => $labelDefinition): ?>
         <?php $labelTitle = $labelDefinition[0]; $labelIcon = $labelDefinition[1]; ?>
         <div class="modal fade" id="productionLabelModal-<?= h($labelType) ?>" tabindex="-1" aria-labelledby="productionLabelModalTitle-<?= h($labelType) ?>" aria-hidden="true">
             <div class="modal-dialog modal-dialog-centered">
@@ -1139,9 +1139,6 @@ require __DIR__ . '/partials/header.php';
             <div class="alert alert-info d-flex flex-wrap justify-content-between align-items-center gap-3">
                 <div class="small"><strong><?= h($selectedOf['order_number']) ?></strong> — Quantidade planeada: <?= h((string)$selectedOf['planned_quantity']) ?> · Estado: <?= h($selectedOf['status']) ?></div>
                 <div class="d-flex flex-wrap gap-2" aria-label="Etiquetas de acerto e reimpressão">
-                    <a class="btn btn-warning btn-sm fw-semibold" href="production_label.php?id=<?= (int)$selectedOf['id'] ?>&type=roll">
-                        <i class="bi bi-upc-scan me-1" aria-hidden="true"></i>Etiqueta de rolo
-                    </a>
                     <a class="btn btn-info btn-sm fw-semibold" href="production_label.php?id=<?= (int)$selectedOf['id'] ?>&type=ink">
                         <i class="bi bi-droplet-fill me-1" aria-hidden="true"></i>Etiqueta de tinta
                     </a>
