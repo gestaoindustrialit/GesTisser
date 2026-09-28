@@ -22,7 +22,7 @@ function installer_uuid()
     return substr($hex,0,8).'-'.substr($hex,8,4).'-'.substr($hex,12,4).'-'.substr($hex,16,4).'-'.substr($hex,20);
 }
 
-$databasePath = getenv('GESTISSER_DB_PATH') ?: (__DIR__ . '/database.sqlite');
+$databasePath = __DIR__ . '/database.sqlite';
 $service = new CopyActivationService(__DIR__, $databasePath, __DIR__ . '/storage');
 $unlockRequested = getenv('GESTISSER_INSTALLER_UNLOCK') === '1';
 if ($service->isLocked() && !$unlockRequested) {
@@ -37,7 +37,8 @@ if (empty($_SESSION['installer_csrf'])) {
 }
 $error = null;
 $result = null;
-$diagnosis = $service->diagnose();
+$productionDatabasePath = trim((string) ($_POST['production_database_path'] ?? '')) ?: null;
+$diagnosis = $service->diagnose($productionDatabasePath);
 
 if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST') {
     try {
@@ -46,8 +47,8 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST') {
         }
         $action = (string) ($_POST['action'] ?? 'diagnose');
         if ($action === 'activate') {
-            $result = $service->activate((string) ($_POST['environment'] ?? ''), trim((string) ($_POST['production_database_path'] ?? '')) ?: null);
-            $diagnosis = $service->diagnose();
+            $result = $service->activate((string) ($_POST['environment'] ?? ''), $productionDatabasePath);
+            $diagnosis = $service->diagnose($productionDatabasePath);
         } elseif ($action === 'new') {
             if (!in_array($diagnosis['state'], array('new','empty'), true)) {
                 throw new RuntimeException('A instalação nova está bloqueada porque a localização contém dados. Indique GESTISSER_DB_PATH para uma base nova e vazia.');
@@ -78,11 +79,12 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST') {
             file_put_contents(__DIR__.'/storage/installation.json',json_encode($config,JSON_PRETTY_PRINT|JSON_UNESCAPED_SLASHES),LOCK_EX);
             file_put_contents($service->lockPath(),json_encode(array('installation_uuid'=>$config['installation_uuid'],'locked_at'=>gmdate('c'))),LOCK_EX);
             $result = array('backup'=>null,'migrations'=>array('esquema inicial'),'config'=>$config);
-            $diagnosis = $service->diagnose();
+            $diagnosis = $service->diagnose($productionDatabasePath);
         }
     } catch (Throwable $exception) {
         error_log('[GesTisser installer] ' . $exception->getMessage());
         $error = $exception->getMessage();
+        $diagnosis = $service->diagnose($productionDatabasePath);
     }
 }
 
@@ -91,13 +93,23 @@ $stateLabels = array('new'=>'Instalação nova, sem base de dados','empty'=>'Bas
 <!doctype html><html lang="pt"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="robots" content="noindex,nofollow"><title>Instalação segura — GesTISSER</title>
 <style>body{font-family:system-ui,sans-serif;background:#f4f6f8;color:#17202a;margin:0}.wrap{max-width:1000px;margin:2rem auto;padding:0 1rem}.card{background:white;border:1px solid #dfe4ea;border-radius:12px;padding:1.4rem;margin-bottom:1rem;box-shadow:0 3px 12px #0001}.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(210px,1fr));gap:.8rem}.metric{background:#f7f9fb;padding:.8rem;border-radius:8px}.ok{color:#18733c}.bad{color:#a51d2d}.alert{padding:1rem;border-radius:8px;background:#fff3cd;margin:1rem 0}.danger{background:#f8d7da}.success{background:#d1e7dd}.test{background:#ffc107;text-align:center;font-weight:800;padding:.7rem}label{display:block;font-weight:650;margin:.7rem 0 .25rem}input,select{box-sizing:border-box;width:100%;padding:.7rem;border:1px solid #aab2bd;border-radius:6px}button{padding:.75rem 1rem;border:0;border-radius:6px;background:#175cd3;color:white;font-weight:700;cursor:pointer}.secondary{background:#59636e}.disabled{opacity:.45;pointer-events:none}code{word-break:break-all}ul{line-height:1.55}.actions{display:flex;gap:.7rem;flex-wrap:wrap;margin-top:1rem}</style></head><body>
 <?php if (($result['config']['environment'] ?? '') === 'test'): ?><div class="test">AMBIENTE DE TESTE</div><?php endif; ?>
-<div class="wrap"><h1>Instalação segura do GesTISSER</h1><p>Diagnóstico sem alterações à base. Nenhuma migração é executada antes de confirmação e backup validado.</p>
+<div class="wrap"><h1>Instalação segura do GesTISSER</h1><div class="card"><strong>Base que será alterada:</strong><br><code><?= installer_h($diagnosis['active_path']) ?></code></div><p>Diagnóstico sem alterações aos dados. Nenhuma migração é executada antes de confirmação e backup validado.</p>
 <?php if ($error): ?><div class="alert danger"><strong>Operação abortada.</strong> <?= installer_h($error) ?></div><?php endif; ?>
+<?php if ($productionDatabasePath !== null || $error): ?><div class="card"><h2>Diagnóstico dos caminhos e lock</h2><dl>
+<dt>Base ativa desta instalação:</dt><dd><code><?= installer_h($diagnosis['active_path']) ?></code></dd>
+<dt>Base de produção indicada:</dt><dd><code><?= installer_h($diagnosis['production_path'] ?: 'Não indicada') ?></code></dd>
+<dt>Mesmo ficheiro:</dt><dd><strong><?= $diagnosis['same_as_production'] ? 'SIM' : 'NÃO' ?></strong></dd>
+<dt>Base teste existe:</dt><dd><strong><?= $diagnosis['exists'] ? 'SIM' : 'NÃO' ?></strong></dd>
+<dt>Base teste gravável:</dt><dd><strong><?= $diagnosis['writable'] && $diagnosis['directory_writable'] ? 'SIM' : 'NÃO' ?></strong></dd>
+<dt>Base produção existe:</dt><dd><strong><?= $diagnosis['production_exists'] ? 'SIM' : 'NÃO' ?></strong></dd>
+<dt>Integridade SQLite:</dt><dd><strong><?= $diagnosis['integrity'] === 'ok' && !$diagnosis['foreign_keys'] ? 'OK' : 'ERRO' ?></strong></dd>
+<dt>Lock SQLite real:</dt><dd><strong><?= $diagnosis['real_lock'] ? 'SIM' : 'NÃO' ?></strong></dd>
+</dl></div><?php endif; ?>
 <?php if ($result): ?><div class="card success"><h2>Ativação concluída</h2><ul><li>Ambiente: <strong><?= installer_h($result['config']['environment']) ?></strong></li><li>Base: <code><?= installer_h($databasePath) ?></code></li><li>Backup: <code><?= installer_h($result['backup']['path'] ?? 'não aplicável à instalação nova') ?></code></li><li>Migrações: <?= installer_h($result['migrations'] ? implode(', ',$result['migrations']) : 'nenhuma em falta') ?></li><li>Integrações externas: <?= !empty($result['config']['external_services_enabled']) ? 'permitidas pelo ambiente (continuam dependentes da configuração)' : 'desativadas' ?></li></ul><p><a href="login.php">Iniciar sessão</a>. Restrinja ou remova o acesso web a <code>install.php</code>.</p></div><?php else: ?>
 <div class="card"><h2>Passo 1 — Diagnóstico</h2><p><strong><?= installer_h($stateLabels[$diagnosis['state']] ?? $diagnosis['state']) ?></strong></p><div class="grid">
 <div class="metric">Base encontrada<br><strong><?= $diagnosis['exists']?'Sim':'Não' ?></strong></div><div class="metric">Tamanho<br><strong><?= number_format($diagnosis['size']/1024,1,',','.') ?> KiB</strong></div><div class="metric">Última alteração<br><strong><?= installer_h($diagnosis['modified_at'] ?: '—') ?></strong></div><div class="metric">Versão do esquema<br><strong><?= (int)$diagnosis['schema_version'] ?> / <?= CopyActivationService::SCHEMA_VERSION ?></strong></div><div class="metric">Tabelas<br><strong><?= (int)$diagnosis['table_count'] ?></strong></div><div class="metric">Integridade / FKs<br><strong class="<?= $diagnosis['integrity']==='ok'&&!$diagnosis['foreign_keys']?'ok':'bad' ?>"><?= installer_h($diagnosis['integrity']) ?> / <?= count($diagnosis['foreign_keys']) ?> erros</strong></div><div class="metric">Administradores válidos<br><strong><?= (int)$diagnosis['administrators'] ?></strong></div><div class="metric">Ambiente detetado<br><strong><?= installer_h($diagnosis['environment']) ?></strong></div></div>
 <?php if ($diagnosis['errors'] || $diagnosis['missing_tables'] || $diagnosis['missing_columns']): ?><div class="alert danger">A ativação não é permitida. <?= installer_h(implode(' ',array_merge($diagnosis['errors'], $diagnosis['missing_tables'] ? array('Tabelas essenciais em falta: '.implode(', ',$diagnosis['missing_tables']).'.') : array(), $diagnosis['missing_columns'] ? array('Colunas mínimas em falta: '.implode(', ',$diagnosis['missing_columns']).'.') : array()))) ?></div><?php endif; ?></div>
 <div class="card"><h2>Passo 2 — Escolha</h2><form method="post"><input type="hidden" name="csrf" value="<?= installer_h($_SESSION['installer_csrf']) ?>">
-<?php if ($diagnosis['state']==='existing' && $diagnosis['compatible']): ?><h3>Ativar uma cópia existente do GesTISSER</h3><p>Mantém utilizadores, passwords, permissões, clientes, fornecedores, artigos, OFs, movimentos e saldos de stock. Aplica apenas migrações em falta, sem dados de demonstração, recriação de tabelas, importações históricas, emails ou ativação automática de integrações.</p><label>Ambiente obrigatório</label><select name="environment" required><option value="test">Teste</option><option value="development">Desenvolvimento</option><option value="production">Produção</option></select><label>Caminho conhecido da base de produção (obrigatório para confirmar separação quando aplicável)</label><input name="production_database_path" placeholder="/caminho/seguro/database.sqlite"><div class="alert">Será criado e validado um backup SHA-256 antes da migração. Migrações em falta: <strong><?= installer_h($diagnosis['pending_migrations']?implode(', ',$diagnosis['pending_migrations']):'nenhuma') ?></strong>.</div><button name="action" value="activate">Continuar: backup e ativação</button>
+<?php if ($diagnosis['state']==='existing' && $diagnosis['compatible']): ?><h3>Ativar uma cópia existente do GesTISSER</h3><p>Mantém utilizadores, passwords, permissões, clientes, fornecedores, artigos, OFs, movimentos e saldos de stock. Aplica apenas migrações em falta, sem dados de demonstração, recriação de tabelas, importações históricas, emails ou ativação automática de integrações.</p><label>Ambiente obrigatório</label><select name="environment" required><option value="test">Teste</option><option value="development">Desenvolvimento</option><option value="production">Produção</option></select><label>Caminho conhecido da base de produção (apenas para confirmar que não é o mesmo ficheiro)</label><input name="production_database_path" value="<?= installer_h($productionDatabasePath ?: '') ?>" placeholder="/gestisser/database.sqlite"><div class="alert">Será criado e validado um backup SHA-256 antes da migração. Migrações em falta: <strong><?= installer_h($diagnosis['pending_migrations']?implode(', ',$diagnosis['pending_migrations']):'nenhuma') ?></strong>.</div><button name="action" value="activate">Continuar: backup e ativação</button>
 <?php else: ?><h3>Instalação nova</h3><p class="<?= in_array($diagnosis['state'],array('new','empty'),true)?'':'bad' ?>">Só é permitida numa localização inexistente ou SQLite vazia. Uma base preenchida nunca é apagada ou recriada.</p><label>Ambiente</label><select name="environment"><option value="production">Produção</option><option value="test">Teste</option><option value="development">Desenvolvimento</option></select><label>Nome do primeiro administrador</label><input name="name"><label>Email</label><input type="email" name="email"><label>Password (mínimo 10 caracteres)</label><input type="password" name="password"><button class="<?= in_array($diagnosis['state'],array('new','empty'),true)?'':'disabled' ?>" name="action" value="new">Instalação nova</button><?php endif; ?>
 <div class="actions"><button class="secondary" name="action" value="diagnose">Apenas diagnosticar</button><a href="login.php">Cancelar</a></div></form></div><?php endif; ?></div></body></html>

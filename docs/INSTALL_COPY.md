@@ -10,14 +10,16 @@ O instalador atual faz primeiro um diagnóstico isolado e sem carregar o bootstr
 
 1. Copiar `database.sqlite` para a localização definitiva da nova instalação. Não usar a localização montada pela produção.
 2. Garantir escrita no ficheiro, no diretório que o contém e em `storage/`.
-3. Se a base estiver noutro local, definir `GESTISSER_DB_PATH` antes de abrir `install.php`.
-4. Abrir `install.php` e rever tamanho, data, versão, tabelas, integridade, chaves estrangeiras e existência de administradores. O diagnóstico não mostra dados pessoais ou comerciais.
-5. Escolher **Ativar uma cópia existente do GesTISSER** e o ambiente. Para Teste, indicar o caminho conhecido da produção quando disponível.
+3. O instalador altera exclusivamente o `database.sqlite` da sua própria pasta (`__DIR__/database.sqlite`) e mostra esse caminho real no topo. O campo da produção nunca seleciona a base ativa.
+4. Abrir `install.php` e rever tamanho, data, versão, tabelas, integridade, chaves estrangeiras e existência de administradores. O diagnóstico não mostra dados pessoais ou comerciais nem escreve na base.
+5. Escolher **Ativar uma cópia existente do GesTISSER** e o ambiente. Para Teste, indicar o caminho conhecido da produção quando disponível; esse valor é usado apenas para comparar os caminhos normalizados.
 6. Confirmar o backup e as migrações em falta. A ativação só prossegue depois de uma cópia com SHA-256 idêntico ao original.
 7. Guardar o caminho do backup mostrado na conclusão e iniciar sessão com uma conta já existente.
 8. Confirmar externamente que o servidor não tem crontab antigo a apontar para esta cópia. O bloqueio da aplicação é uma segunda linha de defesa, não substitui a remoção de agendamentos no sistema operativo.
 
 Em Teste, a configuração fora da base usa sessão, uploads e logs próprios, envia `noindex`, apresenta uma faixa visível e bloqueia emails, cron e clientes de integrações. As integrações e os seus fluxos são também desativados na cópia.
+
+O bloco de diagnóstico distingue ficheiro inexistente, falta de escrita, falha de integridade, coincidência com produção e um lock SQLite de escrita real. Uma ligação que apenas abriu ou está a ler a base não é considerada um lock impeditivo.
 
 ## Rollback
 
