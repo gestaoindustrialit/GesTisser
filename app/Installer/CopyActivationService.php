@@ -36,8 +36,12 @@ class CopyActivationService
         return is_file($this->lockPath());
     }
 
-    public function diagnose()
+    public function diagnose($productionDatabasePath = null)
     {
+        $activePath = $this->normalizePath($this->databasePath);
+        $productionPath = $productionDatabasePath !== null && trim((string) $productionDatabasePath) !== ''
+            ? $this->normalizePath((string) $productionDatabasePath)
+            : null;
         $result = array(
             'state' => 'new', 'valid' => false, 'compatible' => false,
             'exists' => is_file($this->databasePath), 'path' => $this->databasePath,
@@ -48,6 +52,10 @@ class CopyActivationService
             'missing_tables' => array(), 'missing_columns' => array(),
             'pending_migrations' => array(), 'errors' => array(),
             'readable' => false, 'writable' => false, 'directory_writable' => is_writable(dirname($this->databasePath)),
+            'active_path' => $activePath, 'production_path' => $productionPath,
+            'production_exists' => $productionPath !== null && is_file($productionPath),
+            'same_as_production' => $productionPath !== null && is_file($activePath) && is_file($productionPath) && $activePath === $productionPath,
+            'real_lock' => false, 'lock_error' => null,
         );
         if (!$result['exists'] || filesize($this->databasePath) === 0) {
             $result['state'] = $result['exists'] ? 'empty' : 'new';
@@ -110,6 +118,7 @@ class CopyActivationService
             $result['valid'] = $recognized && $result['integrity'] === 'ok' && !$result['foreign_keys'] && $result['users'] > 0;
             $result['compatible'] = $result['valid'] && !$result['errors'];
             $result['state'] = $result['compatible'] ? 'existing' : 'invalid';
+            $pdo = null;
         } catch (Throwable $exception) {
             $result['state'] = 'invalid';
             $result['errors'][] = 'O ficheiro não é uma base SQLite GesTISSER válida.';
@@ -117,6 +126,18 @@ class CopyActivationService
         if (!$result['writable'] || !$result['directory_writable']) {
             $result['compatible'] = false;
             $result['errors'][] = 'A base e o respetivo diretório têm de permitir leitura e escrita.';
+        }
+        if ($result['exists'] && $result['integrity'] === 'ok') {
+            $lock = $this->probeRealLock();
+            $result['real_lock'] = $lock['locked'];
+            $result['lock_error'] = $lock['error'];
+            if ($result['real_lock']) {
+                $result['compatible'] = false;
+                $result['errors'][] = 'Foi detetado um lock SQLite de escrita real.';
+            } elseif ($result['lock_error'] !== null) {
+                $result['compatible'] = false;
+                $result['errors'][] = $result['lock_error'];
+            }
         }
         return $result;
     }
@@ -141,10 +162,14 @@ class CopyActivationService
     public function activate($environment, $productionDatabasePath = null)
     {
         if (!in_array($environment, array('production', 'test', 'development'), true)) { throw new InvalidArgumentException('Ambiente inválido.'); }
-        $diagnosis = $this->diagnose();
-        if (!$diagnosis['compatible']) { throw new RuntimeException('A base não passou o diagnóstico de segurança.'); }
-        if ($environment === 'test') { $this->assertSeparatedFromProduction($productionDatabasePath); }
-        $this->assertNotInUse();
+        $diagnosis = $this->diagnose($productionDatabasePath);
+        if (!$diagnosis['exists']) { throw new RuntimeException('A base ativa desta instalação não foi encontrada.'); }
+        if (!$diagnosis['writable'] || !$diagnosis['directory_writable']) { throw new RuntimeException('A base ativa ou o respetivo diretório não tem permissões de escrita.'); }
+        if ($diagnosis['integrity'] !== 'ok' || $diagnosis['foreign_keys']) { throw new RuntimeException('A verificação de integridade SQLite falhou.'); }
+        if ($environment === 'test' && $diagnosis['same_as_production']) { throw new RuntimeException('A base ativa desta instalação é o mesmo ficheiro que a base de produção indicada.'); }
+        if ($diagnosis['real_lock']) { throw new RuntimeException('Foi detetado um lock SQLite de escrita real na base ativa.'); }
+        if ($diagnosis['lock_error'] !== null) { throw new RuntimeException($diagnosis['lock_error']); }
+        if (!$diagnosis['compatible']) { throw new RuntimeException('A estrutura da base não é compatível com esta versão do GesTISSER.'); }
         $before = $this->snapshot();
         $backup = $this->createVerifiedBackup();
         $pdo = $this->connect(false);
@@ -174,12 +199,8 @@ class CopyActivationService
         }
         $after = $this->snapshot();
         $this->assertPreserved($before, $after);
-        $post = $this->diagnose();
+        $post = $this->diagnose($productionDatabasePath);
         if ($post['integrity'] !== 'ok' || $post['foreign_keys']) { throw new RuntimeException('A validação posterior à migração falhou. O backup foi mantido.'); }
-        if ($environment === 'test' && $productionDatabasePath && is_file($productionDatabasePath)
-            && hash_file('sha256', $productionDatabasePath) === hash_file('sha256', $this->databasePath)) {
-            throw new RuntimeException('A impressão digital da base de teste ainda coincide com a produção. O backup foi mantido.');
-        }
         $config = array(
             'installation_uuid' => $this->uuid(), 'environment' => $environment,
             'database_path' => $this->databasePath, 'database_fingerprint' => hash_file('sha256', $this->databasePath),
@@ -262,24 +283,34 @@ class CopyActivationService
         if ($update->rowCount() === 0) { $insert = $pdo->prepare('INSERT INTO app_settings(setting_key,setting_value) VALUES (?,?)'); try { $insert->execute(array($key,$value)); } catch (PDOException $e) { $update->execute(array($value,$key)); } }
     }
 
-    private function assertSeparatedFromProduction($productionPath)
+    private function normalizePath($path)
     {
-        $productionPath = $productionPath ?: getenv('GESTISSER_PRODUCTION_DB_PATH');
-        if (!$productionPath) { return; }
-        $candidate = realpath($this->databasePath) ?: $this->databasePath; $production = realpath($productionPath) ?: $productionPath;
-        if ($candidate === $production) { throw new RuntimeException('A base de teste coincide com a base de produção configurada.'); }
+        $path = trim((string) $path);
+        $resolved = realpath($path);
+        if ($resolved !== false) { return $resolved; }
+        if ($path !== '' && $path[0] !== DIRECTORY_SEPARATOR) { $path = $this->root . DIRECTORY_SEPARATOR . $path; }
+        return rtrim(dirname($path), DIRECTORY_SEPARATOR) . DIRECTORY_SEPARATOR . basename($path);
     }
 
-    private function assertNotInUse()
+    private function probeRealLock()
     {
-        $pdo = $this->connect(false);
+        $pdo = null;
         try {
-            $pdo->exec('PRAGMA locking_mode = EXCLUSIVE');
-            $pdo->exec('BEGIN EXCLUSIVE');
+            $pdo = $this->connect(false);
+            $pdo->setAttribute(PDO::ATTR_TIMEOUT, 0);
+            $pdo->exec('PRAGMA busy_timeout = 0');
+            // BEGIN IMMEDIATE only tests whether another connection currently
+            // owns the SQLite write lock. It does not write schema or data.
+            $pdo->exec('BEGIN IMMEDIATE');
             $pdo->rollBack();
+            return array('locked' => false, 'error' => null);
         } catch (Throwable $exception) {
-            if ($pdo->inTransaction()) { $pdo->rollBack(); }
-            throw new RuntimeException('A base está em uso por outro processo ou caminho conhecido. A ativação foi cancelada.');
+            if ($pdo instanceof PDO && $pdo->inTransaction()) { $pdo->rollBack(); }
+            $message = strtolower($exception->getMessage());
+            if (strpos($message, 'database is locked') !== false || strpos($message, 'database table is locked') !== false || (int) $exception->getCode() === 5) {
+                return array('locked' => true, 'error' => null);
+            }
+            return array('locked' => false, 'error' => 'Não foi possível testar o lock SQLite da base ativa.');
         }
     }
 
