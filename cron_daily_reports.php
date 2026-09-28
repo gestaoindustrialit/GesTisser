@@ -1,6 +1,11 @@
 <?php
 require_once __DIR__ . '/helpers.php';
 
+if (!app_config('cron_enabled', false) || !app_config('external_services_enabled', false)) {
+    echo "Relatórios externos desativados neste ambiente.\n";
+    exit(0);
+}
+
 $projects = $pdo->query(
     'SELECT p.id, p.name, t.name AS team_name,
             COALESCE(leader.email, fallback.email) AS receiver_email

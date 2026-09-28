@@ -3,6 +3,11 @@ declare(strict_types=1);
 
 require_once __DIR__ . '/helpers.php';
 
+if (!app_config('cron_enabled', false) || !app_config('external_services_enabled', false)) {
+    echo "Alertas externos desativados neste ambiente.\n";
+    return;
+}
+
 function normalize_cron_schedule_frequency(string $value): string
 {
     return in_array($value, ['weekly', 'monthly'], true) ? $value : 'weekly';
