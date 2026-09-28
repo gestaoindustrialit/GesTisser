@@ -1021,7 +1021,8 @@ require __DIR__ . '/partials/header.php';
         <div class="alert alert-danger mt-3 mb-3"><?= h($flashError) ?></div>
     <?php endif; ?>
 
-    <?php foreach (['roll' => ['Etiqueta de rolo', 'bi-upc-scan'], 'ink' => ['Etiqueta de tinta', 'bi-droplet-fill']] as $labelType => [$labelTitle, $labelIcon]): ?>
+    <?php foreach (['roll' => ['Etiqueta de rolo', 'bi-upc-scan'], 'ink' => ['Etiqueta de tinta', 'bi-droplet-fill']] as $labelType => $labelDefinition): ?>
+        <?php $labelTitle = $labelDefinition[0]; $labelIcon = $labelDefinition[1]; ?>
         <div class="modal fade" id="productionLabelModal-<?= h($labelType) ?>" tabindex="-1" aria-labelledby="productionLabelModalTitle-<?= h($labelType) ?>" aria-hidden="true">
             <div class="modal-dialog modal-dialog-centered">
                 <div class="modal-content">
