@@ -9,6 +9,11 @@ if (PHP_SAPI !== 'cli') {
     exit('Execução permitida apenas por linha de comandos.');
 }
 
+if (!app_config('cron_enabled', false) || !app_config('external_services_enabled', false)) {
+    echo "Alertas externos desativados neste ambiente.\n";
+    exit(0);
+}
+
 gt_erp_run_phase1_migrations($pdo);
 $sql = 'SELECT rm.id,rm.code,rm.description,rm.alert_email,rm.min_stock,rm.reorder_point,
         COALESCE(SUM(sb.physical_qty-sb.reserved_qty-sb.blocked_qty),0) available_qty

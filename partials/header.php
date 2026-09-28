@@ -9,6 +9,9 @@ if (is_file($bootstrapPath)) {
     }
     require_once $helpersPath;
 }
+if (app_config('env') === 'test' && !headers_sent()) {
+    header('X-Robots-Tag: noindex, nofollow, noarchive');
+}
 $user = current_user($pdo);
 $navbarLogo = app_setting($pdo, 'logo_navbar_light');
 $showHrMenu = $user && ((int) ($user['is_admin'] ?? 0) === 1 || (string) ($user['access_profile'] ?? '') === 'RH');
@@ -131,8 +134,12 @@ header('Content-Type: text/html; charset=UTF-8');
     <link href="assets/styles.css?v=<?= h((string) (@filemtime(dirname(__DIR__) . '/assets/styles.css') ?: '1')) ?>" rel="stylesheet">
     <link href="assets/searchable-select.css?v=<?= h((string) (@filemtime(dirname(__DIR__) . '/assets/searchable-select.css') ?: '1')) ?>" rel="stylesheet">
     <link href="assets/mapper-theme.css?v=<?= h((string) (@filemtime(dirname(__DIR__) . '/assets/mapper-theme.css') ?: '1')) ?>" rel="stylesheet">
+    <?php if (app_config('env') === 'test'): ?><meta name="robots" content="noindex,nofollow,noarchive"><?php endif; ?>
 </head>
 <body class="<?= h($resolvedBodyClass) ?>">
+<?php if (app_config('env') === 'test'): ?>
+<div class="alert alert-warning rounded-0 text-center fw-bold mb-0 py-2" role="status">AMBIENTE DE TESTE — emails, tarefas automáticas e integrações externas desativados</div>
+<?php endif; ?>
 <?php if ($user): ?>
 <div class="gt-app-shell<?= $isPinLogin ? ' gt-pin-session' : '' ?>">
     <?php if (!$isPinLogin): ?>
