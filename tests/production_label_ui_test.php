@@ -12,8 +12,10 @@ production_label_check(strpos($dossier,'production_label.php')===false,'o dossie
 production_label_check(strpos($shopfloor,'production_label.php?id=')===false,'o Shopfloor ainda envia etiquetas com uma OF');
 foreach(['roll','ink'] as$type){
  production_label_check(strpos($header,'data-bs-target="#productionLabelModal-'.$type.'"')!==false,'atalho de '.$type.' em falta no cabeçalho');
+ production_label_check(substr_count($header,'data-bs-target="#productionLabelModal-'.$type.'"')===1,'atalho de '.$type.' duplicado no cabeçalho');
  production_label_check(strpos($shopfloor,'id="productionLabelModal-<?= h($labelType) ?>"')!==false,'seletor de matéria-prima em falta');
 }
+production_label_check(strpos($header,'aria-label="Etiquetas de matérias-primas"')!==false,'grupo único de atalhos em falta');
 production_label_check(strpos($shopfloor,"'action'=>'raw_material_roll_label.php'")!==false&&strpos($shopfloor,"'action'=>'raw_material_ink_label.php'")!==false,'os botões não abrem as etiquetas de matéria-prima');
 production_label_check(strpos($shopfloor,'name="raw_material_id"')!==false,'o popup não envia a matéria-prima');
 production_label_check(strpos($label,"in_array(\$type,['roll','ink'],true)")!==false,'as rotas antigas não são redirecionadas');
