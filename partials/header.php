@@ -296,9 +296,6 @@ header('Content-Type: text/html; charset=UTF-8');
             <?php endif; ?>
             <?php if (!empty($showProductionLabelShortcuts)): ?>
                 <div class="btn-group me-auto" role="group" aria-label="Imprimir etiquetas de produção">
-                        <button type="button" class="btn btn-sm btn-warning fw-semibold" data-bs-toggle="modal" data-bs-target="#productionLabelModal-roll">
-                            <i class="bi bi-upc-scan" aria-hidden="true"></i><span class="d-none d-xl-inline"> Etiqueta de rolo</span>
-                        </button>
                         <button type="button" class="btn btn-sm btn-info fw-semibold" data-bs-toggle="modal" data-bs-target="#productionLabelModal-ink">
                             <i class="bi bi-droplet-fill" aria-hidden="true"></i><span class="d-none d-xl-inline"> Etiqueta de tinta</span>
                         </button>
@@ -307,9 +304,6 @@ header('Content-Type: text/html; charset=UTF-8');
             <div class="gt-top-actions">
                 <?php if (!empty($showProductionLabelShortcuts)): ?>
                     <div class="btn-group" role="group" aria-label="Imprimir etiquetas de produção">
-                        <button type="button" class="btn btn-sm btn-outline-warning fw-semibold" data-bs-toggle="modal" data-bs-target="#productionLabelModal-roll">
-                            <i class="bi bi-upc-scan" aria-hidden="true"></i><span class="d-none d-xl-inline"> Etiqueta de rolo</span>
-                        </button>
                         <button type="button" class="btn btn-sm btn-outline-info fw-semibold" data-bs-toggle="modal" data-bs-target="#productionLabelModal-ink">
                             <i class="bi bi-droplet-fill" aria-hidden="true"></i><span class="d-none d-xl-inline"> Etiqueta de tinta</span>
                         </button>
