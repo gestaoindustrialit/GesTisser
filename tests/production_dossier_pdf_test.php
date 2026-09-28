@@ -32,11 +32,17 @@ if(strpos($pngPdf,'/Logo ')===false||(strpos($pngPdf,'/FlateDecode')===false&&st
 $pngMethod=(new ReflectionClass('ProductionDossierPdf'))->getMethod('pngForPdf');
 $embeddedPng=$pngMethod->invoke(null,(string)file_get_contents($pngPath));
 if(($embeddedPng['filter']??'')!=='FlateDecode'||empty($embeddedPng['data']))throw new RuntimeException('A incorporação nativa do logótipo PNG não funciona sem GD.');
+$pngChunk=function($name,$data){return pack('N',strlen($data)).$name.$data.pack('N',crc32($name.$data));};
+$indexedPng="\x89PNG\r\n\x1a\n".$pngChunk('IHDR',pack('NNCCCCC',2,1,8,3,0,0,0)).$pngChunk('PLTE',"\x00\x00\x00\x00\x66\x99").$pngChunk('tRNS',"\xFF\x80").$pngChunk('IDAT',gzcompress("\x00\x00\x01")).$pngChunk('IEND','');
+$embeddedIndexedPng=$pngMethod->invoke(null,$indexedPng);
+if(($embeddedIndexedPng['filter']??'')!=='FlateDecode'||($embeddedIndexedPng['width']??0)!==2||empty($embeddedIndexedPng['data']))throw new RuntimeException('O fallback PDF não incorpora logótipos PNG com paleta de cores.');
 
 $dossier = (string) file_get_contents(__DIR__ . '/../production_dossier.php');
 $print = (string) file_get_contents(__DIR__ . '/../production_dossier_print.php');
 $sheet = (string) file_get_contents(__DIR__ . '/../erp_technical_sheet.php');
-if (strpos($dossier, 'ProductionDossierPdf::render($d,$mainDocumentThumbnail,$productionDossierDocumentNumber,$productionCompanyLogo,$productionCompanyName)') === false) throw new RuntimeException('Fallback PDF não está ligado aos dados visuais da empresa.');
+if (strpos($dossier, 'ProductionDossierPdf::render($d,$mainDocumentThumbnail,$productionDossierDocumentNumber,$productionCompanyPdfLogo,$productionCompanyName)') === false) throw new RuntimeException('Fallback PDF não está ligado ao logótipo raster da empresa.');
+if (strpos($dossier, "stripos(\$relativePath,'assets/')") === false || strpos($dossier, "realpath(\$candidate)") === false) throw new RuntimeException('O logótipo configurado por URL não é resolvido localmente para o PDF.');
+if (strpos($dossier, "app_setting(\$pdo,'logo_navbar_light','')") === false || strpos($dossier, "pd_logo_src('docs/mapper-reference/ui/assets/logo-tisser-blue.png',true)") === false) throw new RuntimeException('O fallback PDF não tem um logótipo raster alternativo para SVG/WebP.');
 if (strpos($pdfSource, "157, 811, 16, 'FOLHA DE ACOMPANHAMENTO'") === false) throw new RuntimeException('O título do fallback pode sobrepor-se ao logótipo.');
 if (strpos($pdfSource, 'self::text($content,$x+7,$y+5,9,$title') === false) throw new RuntimeException('Os títulos do fallback não estão alinhados à esquerda.');
 foreach (['CARACTERISTICAS DO SACO', 'proof_reference', "['SEQ.','OPERACAO','MAQUINA']"] as $requiredPrintField) {

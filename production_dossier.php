@@ -30,14 +30,26 @@ function pd_barcode128_html($value){
     $html='<span class="barcode-bars" role="img" aria-label="Código de barras Code 128 '.h($clean).'">';foreach($codes as$code){foreach(str_split($patterns[$code])as$i=>$width)$html.='<i class="'.($i%2===0?'bar':'gap').'" style="width:'.((int)$width).'px"></i>';}$html.='</span>';
     return$html.'<span class="barcode-text">'.h($clean).'</span>';
 }
-function pd_logo_src($configuredPath){
+function pd_logo_src($configuredPath,$rasterOnly=false){
     $configuredPath=trim((string)$configuredPath);if($configuredPath==='')return'';
-    if(preg_match('#^https?://#i',$configuredPath))return$configuredPath;
-    $absolutePath=__DIR__.'/'.ltrim($configuredPath,'/');if(!is_file($absolutePath))return'';
-    $extension=strtolower((string)pathinfo($absolutePath,PATHINFO_EXTENSION));$mimeTypes=['png'=>'image/png','jpg'=>'image/jpeg','jpeg'=>'image/jpeg','webp'=>'image/webp','svg'=>'image/svg+xml'];$contents=file_get_contents($absolutePath);return$contents===false?'':'data:'.($mimeTypes[$extension]??'application/octet-stream').';base64,'.base64_encode($contents);
+    $urlPath=parse_url($configuredPath,PHP_URL_PATH);if(is_string($urlPath)&&$urlPath!=='')$urlPath=rawurldecode($urlPath);else$urlPath=$configuredPath;
+    $normalisedPath=str_replace('\\','/',$urlPath);$relativePath=ltrim($normalisedPath,'/');
+    $candidates=[__DIR__.'/'.$relativePath];
+    // A definição pode ter sido guardada como URL absoluta (por exemplo,
+    // /gestisser/assets/uploads/logo.png). Resolva-a localmente para que o
+    // gerador PDF não dependa de allow_url_fopen, DNS ou autenticação HTTP.
+    $assetsPosition=stripos($relativePath,'assets/');if($assetsPosition!==false)$candidates[]=__DIR__.'/'.substr($relativePath,$assetsPosition);
+    $applicationRoot=realpath(__DIR__);$absolutePath='';foreach(array_unique($candidates)as$candidate){$resolved=realpath($candidate);if($resolved!==false&&is_file($resolved)&&$applicationRoot!==false&&strpos(str_replace('\\','/',$resolved),rtrim(str_replace('\\','/',$applicationRoot),'/').'/')===0){$absolutePath=$resolved;break;}}
+    if($absolutePath==='')return !$rasterOnly&&preg_match('#^https?://#i',$configuredPath)?$configuredPath:'';
+    $extension=strtolower((string)pathinfo($absolutePath,PATHINFO_EXTENSION));
+    // O gerador PDF nativo só consegue incorporar JPEG/PNG. SVG e WebP
+    // continuam disponíveis para o HTML/mPDF, mas não devem impedir o uso de
+    // um logótipo raster alternativo no fallback sem mPDF.
+    if($rasterOnly&&!in_array($extension,['png','jpg','jpeg'],true))return'';
+    $mimeTypes=['png'=>'image/png','jpg'=>'image/jpeg','jpeg'=>'image/jpeg','webp'=>'image/webp','svg'=>'image/svg+xml'];$contents=file_get_contents($absolutePath);return$contents===false?'':'data:'.($mimeTypes[$extension]??'application/octet-stream').';base64,'.base64_encode($contents);
 }
 $documentNumberStmt=$pdo->prepare('SELECT document_number FROM erp_document_catalog WHERE code = ? AND is_active = 1 LIMIT 1');$documentNumberStmt->execute(['production_dossier']);$productionDossierDocumentNumber=trim((string)$documentNumberStmt->fetchColumn())?:'DOC-PRD-001';
-$productionCompanyName=trim((string)app_setting($pdo,'company_name','TISSER'))?:'TISSER';$productionCompanyAddress=trim((string)app_setting($pdo,'company_address',''));$productionCompanyLogo=pd_logo_src((string)app_setting($pdo,'logo_report_dark',''));$productionCompanyContacts=array_filter([trim((string)app_setting($pdo,'company_phone','')),trim((string)app_setting($pdo,'company_email',''))]);
+$productionCompanyName=trim((string)app_setting($pdo,'company_name','TISSER'))?:'TISSER';$productionCompanyAddress=trim((string)app_setting($pdo,'company_address',''));$configuredReportLogo=(string)app_setting($pdo,'logo_report_dark','');$productionCompanyLogo=pd_logo_src($configuredReportLogo);$productionCompanyPdfLogo=pd_logo_src($configuredReportLogo,true);if($productionCompanyPdfLogo==='')$productionCompanyPdfLogo=pd_logo_src((string)app_setting($pdo,'logo_navbar_light',''),true);if($productionCompanyPdfLogo==='')$productionCompanyPdfLogo=pd_logo_src('docs/mapper-reference/ui/assets/logo-tisser-blue.png',true);$productionCompanyContacts=array_filter([trim((string)app_setting($pdo,'company_phone','')),trim((string)app_setting($pdo,'company_email',''))]);
 $productionOrderFrontColors=pd_order_colors($s['of_front_colors']??'');$productionOrderBackColors=pd_order_colors($s['of_back_colors']??'');$cr=(array)($d['closeReport']??[]);
 $statusClass=['Planeada'=>'primary','Libertada'=>'info','Em produção'=>'warning','Suspensa'=>'secondary','Fechada'=>'success','Cancelada'=>'danger'][$o['status']]??'light';
 $mainDocument=ArticleDocument::mainArtwork((array)($s['_documents']??[]));
@@ -50,7 +62,7 @@ if(($_GET['format']??'')==='pdf'){
         try{ob_start();include __DIR__.'/production_dossier_print.php';$html=(string)ob_get_clean();$pdf=new Mpdf\Mpdf(['format'=>'A4','margin_left'=>0,'margin_right'=>0,'margin_top'=>0,'margin_bottom'=>0]);$pdf->WriteHTML($html);$pdfOutput=$pdf->Output($filename,'S');}
         catch(Throwable $e){while(ob_get_level()>$pdfBufferLevel)ob_end_clean();error_log('Falha ao gerar PDF mPDF da OF '.$id.': '.$e->getMessage());}
     }
-    if($pdfOutput==='')$pdfOutput=ProductionDossierPdf::render($d,$mainDocumentThumbnail,$productionDossierDocumentNumber,$productionCompanyLogo,$productionCompanyName);
+    if($pdfOutput==='')$pdfOutput=ProductionDossierPdf::render($d,$mainDocumentThumbnail,$productionDossierDocumentNumber,$productionCompanyPdfLogo,$productionCompanyName);
     header('Content-Type: application/pdf');header('Content-Disposition: inline; filename="'.$filename.'"');header('Content-Length: '.strlen($pdfOutput));echo $pdfOutput;exit;
 }
 $pageTitle='Dossier de Produção · OF '.$o['order_number'];require __DIR__.'/partials/header.php';
