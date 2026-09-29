@@ -20,6 +20,8 @@ production_dossier_layout_check(strpos($controllerSource,"$"."productionOrderFro
 production_dossier_layout_check(strpos($controllerSource,"$"."productionCompanyLogo=pd_logo_src((string)app_setting(\$pdo,'logo_report_dark',''))")!==false,'A folha não replica o carregamento do logótipo da ficha técnica.');
 production_dossier_layout_check(strpos($controllerSource,"include __DIR__.'/production_dossier_print.php'")!==false,'A impressão não usa diretamente o template HTML.');
 production_dossier_layout_check(strpos($printSource,'.operations tbody tr:first-child td{padding-top:3mm}')!==false,'A primeira operação não tem separação suficiente do cabeçalho.');
+production_dossier_layout_check(strpos($printSource,'.notes{min-height:9mm;padding:1.5mm 2.5mm;white-space:normal')!==false,'A área de observações não foi reduzida para libertar espaço para as operações.');
+production_dossier_layout_check(strpos($pdfSource,'array_slice($operations,0,6)')!==false,'O fallback não lista as seis operações do routing.');
 production_dossier_layout_check(strpos($printSource,'<?=h($productionCompanyName)?>')!==false,'O cabeçalho não usa os dados da empresa.');
 $serviceSource=(string)file_get_contents(__DIR__.'/../production_dossier_service.php');
 production_dossier_layout_check(strpos($serviceSource,'article_of_front_colors')!==false,'As cores de OF não têm fallback para snapshots antigos.');
