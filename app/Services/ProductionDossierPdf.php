@@ -87,7 +87,7 @@ final class ProductionDossierPdf
         self::sectionBar($content,28,244,539,18,'REGISTO DE PRODUCAO');
         self::tableHeader($content,28,224,[48,270,221],['SEQ.','OPERACAO','MAQUINA']);
         $rowY=200;
-        foreach (array_slice($operations,0,4) as $operation) {
+        foreach (array_slice($operations,0,6) as $operation) {
             self::tableRow($content,28,$rowY,[48,270,221],[(string)($operation['sequence_no']??$dash),self::shorten($value($operation['name']??''),42),self::shorten($value($operation['machine_name']??''),34)]);
             $rowY-=20;
         }
@@ -95,8 +95,8 @@ final class ProductionDossierPdf
 
         $notesTop = min(190, $rowY - 8);
         self::sectionBar($content,28,$notesTop,539,18,'OBSERVACOES');
-        self::rect($content,28,$notesTop-48,539,48,true,[1,1,1]);
-        self::wrappedText($content,36,$notesTop-18,8,$value($order['notes']??$snapshot['_order']['notes']??''),86,3);
+        self::rect($content,28,$notesTop-28,539,28,true,[1,1,1]);
+        self::wrappedText($content,36,$notesTop-17,8,$value($order['notes']??$snapshot['_order']['notes']??''),86,2);
         self::line($content,28,35,567,35,.45,[.55,.55,.55]);
         self::text($content,28,22,6,'Documento: '.$documentNumber.'  |  OF: '.$orderNo.'  |  Gerado pelo GesTisser',false,[.35,.4,.4]);
         self::text($content,567,22,7,'TISSER',true,[.2,.25,.25],true);
