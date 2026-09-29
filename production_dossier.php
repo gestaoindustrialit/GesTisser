@@ -48,8 +48,21 @@ function pd_logo_src(string $configuredPath): string
     $contents = file_get_contents($absolutePath);
     return $contents === false ? '' : 'data:' . ($mimeTypes[$extension] ?? 'application/octet-stream') . ';base64,' . base64_encode($contents);
 }
+function pd_pdf_logo_src(string $configuredPath, string $resolvedLogo): string
+{
+    if (!preg_match('#^https?://#i', $configuredPath)) {
+        return $resolvedLogo;
+    }
+    $urlPath = rawurldecode((string) parse_url($configuredPath, PHP_URL_PATH));
+    $assetsPosition = stripos($urlPath, '/assets/');
+    if ($assetsPosition === false) {
+        return $resolvedLogo;
+    }
+    $localLogo = pd_logo_src(ltrim(substr($urlPath, $assetsPosition + 1), '/'));
+    return $localLogo !== '' ? $localLogo : $resolvedLogo;
+}
 $documentNumberStmt=$pdo->prepare('SELECT document_number FROM erp_document_catalog WHERE code = ? AND is_active = 1 LIMIT 1');$documentNumberStmt->execute(['production_dossier']);$productionDossierDocumentNumber=trim((string)$documentNumberStmt->fetchColumn())?:'DOC-PRD-001';
-$productionCompanyName=trim((string)app_setting($pdo,'company_name','TISSER'))?:'TISSER';$productionCompanyAddress=trim((string)app_setting($pdo,'company_address',''));$productionCompanyLogo=pd_logo_src((string)app_setting($pdo,'logo_report_dark',''));$productionCompanyContacts=array_filter([trim((string)app_setting($pdo,'company_phone','')),trim((string)app_setting($pdo,'company_email',''))]);
+$productionCompanyName=trim((string)app_setting($pdo,'company_name','TISSER'))?:'TISSER';$productionCompanyAddress=trim((string)app_setting($pdo,'company_address',''));$configuredReportLogo=(string)app_setting($pdo,'logo_report_dark','');$productionCompanyLogo=pd_logo_src($configuredReportLogo);$productionCompanyPdfLogo=pd_pdf_logo_src($configuredReportLogo,$productionCompanyLogo);$productionCompanyContacts=array_filter([trim((string)app_setting($pdo,'company_phone','')),trim((string)app_setting($pdo,'company_email',''))]);
 $productionOrderFrontColors=pd_order_colors($s['of_front_colors']??'');$productionOrderBackColors=pd_order_colors($s['of_back_colors']??'');$cr=(array)($d['closeReport']??[]);
 $statusClass=['Planeada'=>'primary','Libertada'=>'info','Em produção'=>'warning','Suspensa'=>'secondary','Fechada'=>'success','Cancelada'=>'danger'][$o['status']]??'light';
 $mainDocument=ArticleDocument::mainArtwork((array)($s['_documents']??[]));

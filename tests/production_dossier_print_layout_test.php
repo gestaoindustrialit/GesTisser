@@ -12,7 +12,7 @@ production_dossier_layout_check(strpos($controllerSource,'function pd_barcode128
 production_dossier_layout_check(strpos($controllerSource,"execute(['production_dossier'])")!==false,'Código documental não é dinâmico.');
 production_dossier_layout_check(strpos($pdfSource,'barcode128')!==false,'Fallback sem Code 128.');
 production_dossier_layout_check(strpos($controllerSource,"$"."productionOrderFrontColors=pd_order_colors($"."s['of_front_colors']??'')")!==false,'Cores da OF em falta.');
-production_dossier_layout_check(strpos($controllerSource,"pd_logo_src((string)app_setting(\$pdo,'logo_report_dark',''))")!==false,'A folha não converte o logótipo de relatório configurado com a mesma lógica da ficha técnica.');
+production_dossier_layout_check(strpos($controllerSource,"$"."configuredReportLogo=(string)app_setting(\$pdo,'logo_report_dark','')")!==false,'A folha não converte o logótipo de relatório configurado com a mesma lógica da ficha técnica.');
 production_dossier_layout_check(strpos($printSource,'.operations tbody tr:first-child td{padding-top:3mm}')!==false,'A primeira operação não tem separação suficiente do cabeçalho.');
 production_dossier_layout_check(strpos($printSource,'.notes{min-height:9mm;padding:1.5mm 2.5mm;white-space:normal')!==false,'A área de observações não foi reduzida para libertar espaço para as operações.');
 production_dossier_layout_check(strpos($pdfSource,'array_slice($operations,0,6)')!==false,'O fallback não lista as seis operações do routing.');
