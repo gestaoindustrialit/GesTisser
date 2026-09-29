@@ -3,6 +3,7 @@ declare(strict_types=1);
 
 $shopfloor = (string) file_get_contents(__DIR__ . '/../shopfloor.php');
 $header = (string) file_get_contents(__DIR__ . '/../partials/header.php');
+$styles = (string) file_get_contents(__DIR__ . '/../assets/styles.css');
 
 function operation_flow_check(bool $condition, string $message): void
 {
@@ -30,5 +31,6 @@ operation_flow_check(strpos($shopfloor, 'shopfloor_operation_can_run_at_work_cen
 operation_flow_check(strpos($shopfloor, 'shopfloor-operation-grid') !== false, 'As operações não são apresentadas numa grelha de cards responsiva.');
 operation_flow_check(strpos($shopfloor, 'shopfloor-operation-card') !== false, 'Falta o card individual de operação para tablet.');
 operation_flow_check(strpos($shopfloor, '<table class="table table-sm shopfloor-table"') === false, 'As operações continuam a ser apresentadas em tabela.');
+operation_flow_check(strpos($styles, '.shopfloor-operation-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }') !== false, 'A grelha de operações não apresenta três cards por linha em tablet horizontal.');
 
 echo "Fluxo de operações do Shopfloor validado.\n";
