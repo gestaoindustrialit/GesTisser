@@ -1,6 +1,7 @@
 <?php
 require_once __DIR__ . '/helpers.php';
 require_once __DIR__ . '/app/Services/ShopfloorAttachment.php';
+require_once __DIR__ . '/app/Services/ArticleDocument.php';
 require_once __DIR__ . '/app/Services/OperationChecklistService.php';
 $validatedHourBankCalculatorPath = __DIR__ . '/app/Services/ValidatedHourBankCalculator.php';
 if (is_file($validatedHourBankCalculatorPath)) {
@@ -973,7 +974,7 @@ $displayedHourBankAbsMinutes = abs($displayedHourBankMinutes);
 $formattedHourBank = sprintf('%s%02dh%02dm', $displayedHourBankMinutes < 0 ? '-' : '', intdiv($displayedHourBankAbsMinutes, 60), $displayedHourBankAbsMinutes % 60);
 
 
-$ofSql = 'SELECT o.id, o.order_number, o.planned_quantity, o.status, p.code AS product_code, p.description AS product_description FROM erp_production_orders o JOIN erp_products p ON p.id = o.product_id WHERE o.status IN ("Planeada", "Em curso")';
+$ofSql = 'SELECT o.id, o.order_number, o.product_id, o.planned_quantity, o.status, p.code AS product_code, p.description AS product_description FROM erp_production_orders o JOIN erp_products p ON p.id = o.product_id WHERE o.status IN ("Planeada", "Em curso")';
 $ofParams = [];
 if ($selectedWorkCenterId > 0) {
     $ofSql .= ' AND EXISTS (SELECT 1 FROM erp_production_order_operations center_op WHERE center_op.production_order_id = o.id AND (center_op.work_center_id = ? OR (? > 0 AND EXISTS (SELECT 1 FROM json_each(CASE WHEN json_valid(center_op.allowed_machine_ids_json) THEN center_op.allowed_machine_ids_json ELSE "[]" END) allowed_machine WHERE CAST(allowed_machine.value AS INTEGER) = ?))))';
@@ -993,10 +994,16 @@ $selectedOfId = (int) ($_GET['of_id'] ?? ($productionOrders[0]['id'] ?? 0));
 $selectedOf = null;
 foreach ($productionOrders as $ofRow) { if ((int)$ofRow['id'] === $selectedOfId) { $selectedOf = $ofRow; break; } }
 $ofDocuments = $ofOperations = [];
+$articleArtwork = null;
 if ($selectedOfId > 0) {
     $docsStmt = $pdo->prepare('SELECT d.*, EXISTS(SELECT 1 FROM erp_production_order_document_acknowledgements a WHERE a.document_id=d.id AND a.user_id=?) AS acknowledged FROM erp_production_order_documents d WHERE d.production_order_id=? ORDER BY d.id');
     $docsStmt->execute([$userId, $selectedOfId]);
     $ofDocuments = $docsStmt->fetchAll(PDO::FETCH_ASSOC);
+    if ($selectedOf) {
+        $artworkStmt = $pdo->prepare('SELECT id, document_type, title, file_url FROM erp_product_documents WHERE entity_type="finished_product" AND entity_id=? AND status="Ativo" ORDER BY id');
+        $artworkStmt->execute([(int) $selectedOf['product_id']]);
+        $articleArtwork = ArticleDocument::mainArtwork($artworkStmt->fetchAll(PDO::FETCH_ASSOC));
+    }
     $opsSql = 'SELECT opo.*, COALESCE(opo.operation_code,op.code) code,COALESCE(opo.operation_name,op.name) name, op.standard_minutes, (SELECT id FROM erp_operation_time_entries te WHERE te.production_order_operation_id=opo.id AND te.user_id=? AND te.ended_at IS NULL LIMIT 1) AS open_entry_id, (SELECT status FROM erp_operation_time_entries te WHERE te.production_order_operation_id=opo.id AND te.user_id=? AND te.ended_at IS NULL LIMIT 1) AS open_entry_status, (SELECT CAST(MAX(0, (julianday(CASE WHEN te.status="paused" THEN te.paused_at ELSE CURRENT_TIMESTAMP END)-julianday(te.started_at))*86400-te.pause_seconds) AS INTEGER) FROM erp_operation_time_entries te WHERE te.production_order_operation_id=opo.id AND te.user_id=? AND te.ended_at IS NULL LIMIT 1) AS open_elapsed_seconds, (SELECT COALESCE(SUM((julianday(CASE WHEN te.ended_at IS NOT NULL THEN te.ended_at WHEN te.status="paused" THEN te.paused_at ELSE CURRENT_TIMESTAMP END)-julianday(te.started_at))*1440)-SUM(te.pause_seconds)/60,0) FROM erp_operation_time_entries te WHERE te.production_order_operation_id=opo.id) actual_minutes FROM erp_production_order_operations opo JOIN erp_operations op ON op.id=opo.operation_id WHERE opo.production_order_id=?';
     $opsParams = [$userId, $userId, $userId, $selectedOfId];
     $opsSql .= ' ORDER BY opo.sequence_no, opo.id';
@@ -1155,13 +1162,15 @@ require __DIR__ . '/partials/header.php';
                 <a href="erp.php" class="btn btn-outline-primary btn-sm">ERP / relatórios</a>
             <?php endif; ?>
         </div>
-        <form method="get" class="row g-2 align-items-end mb-3"><div class="col-md-8"><label class="form-label">Ordem de fabrico</label><select name="of_id" class="form-select" onchange="this.form.submit()"><?php foreach ($productionOrders as $of): ?><option value="<?= (int)$of['id'] ?>" <?= (int)$of['id']===$selectedOfId?'selected':'' ?>><?= h($of['order_number'].' · '.$of['product_code'].' · '.$of['product_description']) ?></option><?php endforeach; ?></select></div><div class="col-md-4"><button class="btn btn-primary w-100">Abrir OF</button></div></form>
+        <form method="get" class="row g-2 align-items-end mb-3" data-of-picker-form><div class="col-md-8"><label class="form-label" for="shopfloorOfSearch">Ordem de fabrico</label><input type="search" id="shopfloorOfSearch" class="form-control shopfloor-of-search" list="shopfloorOfOptions" autocomplete="off" enterkeyhint="search" inputmode="search" data-of-search value="<?= $selectedOf ? h($selectedOf['order_number'].' · '.$selectedOf['product_code'].' · '.$selectedOf['product_description']) : '' ?>" placeholder="Pesquisar por código, nome ou referência..."><input type="hidden" name="of_id" data-of-id value="<?= (int)$selectedOfId ?>"><datalist id="shopfloorOfOptions"><?php foreach ($productionOrders as $of): ?><option data-id="<?= (int)$of['id'] ?>" value="<?= h($of['order_number'].' · '.$of['product_code'].' · '.$of['product_description']) ?>"></option><?php endforeach; ?></datalist></div><div class="col-md-4"><button class="btn btn-primary w-100">Abrir OF</button></div></form>
         <?php if ($selectedOf): ?>
             <div class="alert alert-info d-flex flex-wrap justify-content-between align-items-center gap-3">
                 <div class="small"><strong><?= h($selectedOf['order_number']) ?></strong> — Quantidade planeada: <?= h((string)$selectedOf['planned_quantity']) ?> · Estado: <?= h($selectedOf['status']) ?></div>
                 <div class="d-flex flex-wrap gap-2" aria-label="Etiquetas de acerto e reimpressão">
                     <button type="button" class="btn btn-warning btn-sm fw-semibold" data-bs-toggle="modal" data-bs-target="#productionLabelModal-roll"><i class="bi bi-upc-scan me-1" aria-hidden="true"></i>Etiqueta de rolo</button>
                     <button type="button" class="btn btn-info btn-sm fw-semibold" data-bs-toggle="modal" data-bs-target="#productionLabelModal-ink"><i class="bi bi-droplet-fill me-1" aria-hidden="true"></i>Etiqueta de tinta</button>
+                    <button type="button" class="btn btn-dark btn-sm fw-semibold" data-bs-toggle="modal" data-bs-target="#shopfloorCalculatorModal"><i class="bi bi-calculator me-1" aria-hidden="true"></i>Calculadora</button>
+                    <?php if ($articleArtwork): ?><button type="button" class="btn btn-outline-primary btn-sm fw-semibold" data-bs-toggle="modal" data-bs-target="#articleArtworkModal"><i class="bi bi-image me-1" aria-hidden="true"></i>Previsualizar maquete</button><?php else: ?><button type="button" class="btn btn-outline-secondary btn-sm" disabled title="Este artigo não tem uma maquete definida"><i class="bi bi-image me-1" aria-hidden="true"></i>Sem maquete</button><?php endif; ?>
                 </div>
             </div>
             <h3 class="h6">Documentos obrigatórios</h3>
@@ -1784,6 +1793,32 @@ require __DIR__ . '/partials/header.php';
 
 </section>
 
+<?php if ($articleArtwork): ?>
+<div class="modal fade shopfloor-artwork-modal" id="articleArtworkModal" tabindex="-1" aria-labelledby="articleArtworkModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-fullscreen-lg-down modal-xl modal-dialog-centered">
+        <div class="modal-content">
+            <div class="modal-header"><div><h2 class="modal-title fs-5" id="articleArtworkModalLabel">Maquete do artigo</h2><p class="small text-secondary mb-0"><?= h((string) ($selectedOf['product_code'] ?? '')) ?> · <?= h((string) ($articleArtwork['title'] ?? 'Maquete de produção')) ?></p></div><button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Fechar"></button></div>
+            <div class="modal-body text-center bg-light"><img src="<?= h(ArticleDocument::thumbnailUrl((int) $articleArtwork['id'])) ?>" class="shopfloor-artwork-preview" alt="Maquete do artigo <?= h((string) ($selectedOf['product_code'] ?? '')) ?>"></div>
+            <div class="modal-footer"><button type="button" class="btn btn-outline-secondary btn-lg" data-bs-dismiss="modal">Fechar</button><a href="<?= h(ArticleDocument::url((int) $articleArtwork['id'])) ?>" target="_blank" rel="noopener" class="btn btn-primary btn-lg"><i class="bi bi-arrows-fullscreen me-1"></i>Abrir original</a></div>
+        </div>
+    </div>
+</div>
+<?php endif; ?>
+
+<div class="modal fade" id="shopfloorCalculatorModal" tabindex="-1" aria-labelledby="shopfloorCalculatorLabel" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered shopfloor-calculator-dialog">
+        <div class="modal-content shopfloor-calculator">
+            <div class="modal-header"><h2 class="modal-title fs-5" id="shopfloorCalculatorLabel"><i class="bi bi-calculator me-2"></i>Calculadora</h2><button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Fechar"></button></div>
+            <div class="modal-body">
+                <div class="shopfloor-calculator-screen" aria-live="polite"><div data-calculator-expression>&nbsp;</div><output data-calculator-display>0</output></div>
+                <div class="shopfloor-calculator-keys" aria-label="Teclado da calculadora">
+                    <?php foreach ([['C','clear','utility'],['⌫','backspace','utility'],['÷','/','operator'],['×','*','operator'],['7','7',''],['8','8',''],['9','9',''],['−','-','operator'],['4','4',''],['5','5',''],['6','6',''],['+','+','operator'],['1','1',''],['2','2',''],['3','3',''],['=','=','equals'],['0','0','zero'],[',','.',''],['±','sign','utility']] as $calculatorKey): ?><button type="button" class="btn <?= $calculatorKey[2] === 'equals' ? 'btn-primary' : ($calculatorKey[2] === 'operator' ? 'btn-warning' : 'btn-light') ?> <?= $calculatorKey[2] === 'zero' ? 'is-zero' : '' ?>" data-calculator-key="<?= h($calculatorKey[1]) ?>"><?= h($calculatorKey[0]) ?></button><?php endforeach; ?>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
 <div class="modal fade" id="justificationLightbox" tabindex="-1" aria-hidden="true">
     <div class="modal-dialog modal-dialog-centered modal-xl">
         <div class="modal-content bg-dark border-0">
@@ -1811,6 +1846,56 @@ require __DIR__ . '/partials/header.php';
 </div>
 
 <script>
+(() => {
+    const form = document.querySelector('[data-of-picker-form]');
+    const search = form?.querySelector('[data-of-search]');
+    const idInput = form?.querySelector('[data-of-id]');
+    const options = Array.from(document.querySelectorAll('#shopfloorOfOptions option'));
+    if (!form || !search || !idInput) return;
+    const selectOrder = () => {
+        const match = options.find((option) => option.value === search.value);
+        idInput.value = match?.dataset.id || '';
+        return Boolean(match);
+    };
+    search.addEventListener('pointerdown', () => window.setTimeout(() => search.focus(), 0));
+    search.addEventListener('focus', () => search.select());
+    search.addEventListener('input', selectOrder);
+    search.addEventListener('change', () => { if (selectOrder()) form.requestSubmit(); });
+    form.addEventListener('submit', (event) => { if (!selectOrder()) { event.preventDefault(); search.focus(); search.setCustomValidity('Selecione uma ordem de fabrico da lista.'); search.reportValidity(); } else { search.setCustomValidity(''); } });
+})();
+
+(() => {
+    const modal = document.getElementById('shopfloorCalculatorModal');
+    if (!modal) return;
+    const display = modal.querySelector('[data-calculator-display]');
+    const expression = modal.querySelector('[data-calculator-expression]');
+    let current = '0'; let stored = null; let operator = null; let replace = false;
+    const format = (value) => String(value).replace('.', ',');
+    const render = () => { display.textContent = format(current); expression.textContent = stored === null ? '\u00a0' : `${format(stored)} ${operator === '*' ? '×' : operator === '/' ? '÷' : operator}`; };
+    const calculate = () => {
+        if (stored === null || !operator) return;
+        const left = Number(stored); const right = Number(current); let result;
+        if (operator === '+') result = left + right;
+        if (operator === '-') result = left - right;
+        if (operator === '*') result = left * right;
+        if (operator === '/') result = right === 0 ? NaN : left / right;
+        current = Number.isFinite(result) ? String(Number(result.toPrecision(12))) : 'Erro'; stored = null; operator = null; replace = true;
+    };
+    const press = (key) => {
+        if (/^\d$/.test(key)) { current = replace || current === '0' || current === 'Erro' ? key : current + key; replace = false; }
+        else if (key === '.') { if (replace || current === 'Erro') { current = '0.'; replace = false; } else if (!current.includes('.')) current += '.'; }
+        else if (['+','-','*','/'].includes(key)) { if (stored !== null && !replace) calculate(); stored = current; operator = key; replace = true; }
+        else if (key === '=') calculate();
+        else if (key === 'clear') { current = '0'; stored = null; operator = null; replace = false; }
+        else if (key === 'backspace') { current = replace || current === 'Erro' || current.length === 1 ? '0' : current.slice(0, -1); replace = false; }
+        else if (key === 'sign' && current !== '0' && current !== 'Erro') current = current.startsWith('-') ? current.slice(1) : '-' + current;
+        render();
+    };
+    modal.querySelectorAll('[data-calculator-key]').forEach((button) => button.addEventListener('click', () => press(button.dataset.calculatorKey)));
+    modal.addEventListener('shown.bs.modal', () => modal.querySelector('[data-calculator-key="7"]')?.focus());
+    render();
+})();
+
 document.querySelectorAll('[data-auto-show-checklist]').forEach((modalElement) => {
     if (typeof bootstrap !== 'undefined') {
         bootstrap.Modal.getOrCreateInstance(modalElement, { backdrop: 'static', keyboard: false }).show();
