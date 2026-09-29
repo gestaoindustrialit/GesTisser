@@ -266,6 +266,38 @@ function apply_hour_bank_adjustment(PDO $pdo, int $targetUserId, string $adjustm
     $logStmt->execute([$targetUserId, $deltaMinutes, $reason, $adminUserId, $adjustmentType, $actionDate]);
 }
 
+function update_hour_bank_adjustment(PDO $pdo, int $logId, int $targetUserId, string $adjustmentType, int $signedSeconds, string $reason, string $actionDate, int $adminUserId): bool
+{
+    $logStmt = $pdo->prepare('SELECT delta_minutes FROM hr_hour_bank_logs WHERE id = ? AND user_id = ? LIMIT 1');
+    $logStmt->execute([$logId, $targetUserId]);
+    $previousDelta = $logStmt->fetchColumn();
+    if ($previousDelta === false) {
+        return false;
+    }
+
+    $newDelta = (int) round($signedSeconds / 60);
+    $balanceDifference = ($newDelta - (int) $previousDelta) / 60;
+
+    $pdo->beginTransaction();
+    try {
+        $balanceStmt = $pdo->prepare('UPDATE shopfloor_hour_banks SET balance_hours = balance_hours + ?, notes = ?, updated_by = ?, updated_at = CURRENT_TIMESTAMP WHERE user_id = ?');
+        $balanceStmt->execute([$balanceDifference, $reason, $adminUserId, $targetUserId]);
+        if ($balanceStmt->rowCount() === 0) {
+            $insertStmt = $pdo->prepare('INSERT INTO shopfloor_hour_banks(user_id, balance_hours, notes, updated_by, updated_at) VALUES (?, ?, ?, ?, CURRENT_TIMESTAMP)');
+            $insertStmt->execute([$targetUserId, $newDelta / 60, $reason, $adminUserId]);
+        }
+
+        $updateLogStmt = $pdo->prepare('UPDATE hr_hour_bank_logs SET delta_minutes = ?, reason = ?, action_type = ?, action_date = ? WHERE id = ? AND user_id = ?');
+        $updateLogStmt->execute([$newDelta, $reason, $adjustmentType, $actionDate, $logId, $targetUserId]);
+        $pdo->commit();
+    } catch (Throwable $exception) {
+        $pdo->rollBack();
+        throw $exception;
+    }
+
+    return true;
+}
+
 function output_excel_template()
 {
     $content = <<<XML
@@ -353,6 +385,35 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             log_app_event($pdo, $userId, 'hr.hour_bank.adjust', 'Ajuste individual de banco de horas realizado.', ['target_user_id' => $targetUserId, 'adjustment_type' => $adjustmentType, 'delta_hms' => format_seconds_hms($signedSeconds), 'action_date' => $actionDate]);
 
             $flashSuccess = 'Saldo ajustado com sucesso.';
+            $selectedUserId = $targetUserId;
+        }
+    } elseif ($action === 'edit_adjustment') {
+        $targetUserId = (int) ($_POST['user_id'] ?? 0);
+        $logId = (int) ($_POST['log_id'] ?? 0);
+        $adjustmentType = trim((string) ($_POST['adjustment_type'] ?? ''));
+        $deltaHms = trim((string) ($_POST['delta_hms'] ?? ''));
+        $reason = trim((string) ($_POST['reason'] ?? ''));
+        $actionDate = trim((string) ($_POST['action_date'] ?? ''));
+        $durationSeconds = parse_hms_to_seconds($deltaHms);
+
+        if ($targetUserId <= 0 || !isset($userOptionsById[$targetUserId]) || $logId <= 0) {
+            $flashError = 'O ajuste selecionado não é válido.';
+        } elseif (!in_array($adjustmentType, ['credito', 'debito'], true)) {
+            $flashError = 'Selecione se o ajuste é crédito ou débito.';
+        } elseif ($durationSeconds === null || $durationSeconds === 0) {
+            $flashError = 'Indique o ajuste no formato hh:mm.';
+        } elseif ($reason === '') {
+            $flashError = 'Indique o motivo do ajuste.';
+        } elseif ($actionDate === '' || !DateTimeImmutable::createFromFormat('Y-m-d', $actionDate)) {
+            $flashError = 'Indique uma data válida para o ajuste.';
+        } else {
+            $signedSeconds = $adjustmentType === 'debito' ? -abs($durationSeconds) : abs($durationSeconds);
+            if (update_hour_bank_adjustment($pdo, $logId, $targetUserId, $adjustmentType, $signedSeconds, $reason, $actionDate, $userId)) {
+                log_app_event($pdo, $userId, 'hr.hour_bank.edit', 'Ajuste do banco de horas editado.', ['target_user_id' => $targetUserId, 'log_id' => $logId, 'adjustment_type' => $adjustmentType, 'delta_hms' => format_seconds_hms($signedSeconds), 'action_date' => $actionDate]);
+                $flashSuccess = 'Ajuste atualizado com sucesso.';
+            } else {
+                $flashError = 'O ajuste selecionado não foi encontrado.';
+            }
             $selectedUserId = $targetUserId;
         }
     } elseif ($action === 'bulk_adjust_balance') {
@@ -443,7 +504,7 @@ $balanceStmt->execute([$selectedUserId]);
 $balanceHours = (float) ($balanceStmt->fetchColumn() ?: 0);
 $balanceMinutes = (int) round($balanceHours * 60);
 
-$historyStmt = $pdo->prepare('SELECT l.created_at, l.action_date, l.action_type, l.delta_minutes, l.reason, u.name AS admin_name FROM hr_hour_bank_logs l LEFT JOIN users u ON u.id = l.created_by WHERE l.user_id = ? ORDER BY l.created_at DESC LIMIT 30');
+$historyStmt = $pdo->prepare('SELECT l.id, l.created_at, l.action_date, l.action_type, l.delta_minutes, l.reason, u.name AS admin_name FROM hr_hour_bank_logs l LEFT JOIN users u ON u.id = l.created_by WHERE l.user_id = ? ORDER BY l.created_at DESC LIMIT 30');
 $historyStmt->execute([$selectedUserId]);
 $history = $historyStmt->fetchAll(PDO::FETCH_ASSOC);
 
@@ -582,9 +643,28 @@ require __DIR__ . '/partials/header.php';
     <div class="card-body">
         <h2 class="h5">Histórico<?= $selectedUser ? ' · ' . h((string) $selectedUser['name']) : '' ?></h2>
         <div class="table-responsive">
-            <table class="table table-sm align-middle mb-0"><thead><tr><th>Quando</th><th>Data da ação</th><th>Tipo</th><th>Delta</th><th>Motivo</th><th>Admin</th></tr></thead><tbody>
-            <?php if (!$history): ?><tr><td colspan="6" class="text-muted">Sem ajustes registados.</td></tr><?php endif; ?>
-            <?php foreach ($history as $row): ?><tr><td><?= h((string) $row['created_at']) ?></td><td><?= h((string) ($row['action_date'] ?? '—')) ?></td><td><?= h((string) ($row['action_type'] ?? '—')) ?></td><td><?= h(format_seconds_hms(((int) $row['delta_minutes']) * 60)) ?></td><td><?= h((string) $row['reason']) ?></td><td><?= h((string) ($row['admin_name'] ?? '—')) ?></td></tr><?php endforeach; ?>
+            <table class="table table-sm align-middle mb-0"><thead><tr><th>Quando</th><th>Data da ação</th><th>Tipo</th><th>Delta</th><th>Motivo</th><th>Admin</th><th class="text-end">Ações</th></tr></thead><tbody>
+            <?php if (!$history): ?><tr><td colspan="7" class="text-muted">Sem ajustes registados.</td></tr><?php endif; ?>
+            <?php foreach ($history as $row): ?>
+                <tr>
+                    <td><?= h((string) $row['created_at']) ?></td><td><?= h((string) ($row['action_date'] ?? '—')) ?></td><td><?= h((string) ($row['action_type'] ?? '—')) ?></td><td><?= h(format_seconds_hms(((int) $row['delta_minutes']) * 60)) ?></td><td><?= h((string) $row['reason']) ?></td><td><?= h((string) ($row['admin_name'] ?? '—')) ?></td>
+                    <td class="text-end"><button class="btn btn-sm btn-outline-primary" type="button" data-bs-toggle="collapse" data-bs-target="#edit-adjustment-<?= (int) $row['id'] ?>" aria-expanded="false"><i class="bi bi-pencil"></i> Editar</button></td>
+                </tr>
+                <tr class="collapse" id="edit-adjustment-<?= (int) $row['id'] ?>">
+                    <td colspan="7" class="bg-light p-3">
+                        <form method="post" class="row g-2 align-items-end">
+                            <input type="hidden" name="action" value="edit_adjustment">
+                            <input type="hidden" name="user_id" value="<?= (int) $selectedUserId ?>">
+                            <input type="hidden" name="log_id" value="<?= (int) $row['id'] ?>">
+                            <div class="col-md-2"><label class="form-label">Tipo</label><select class="form-select form-select-sm" name="adjustment_type" required><option value="credito" <?= $row['action_type'] === 'credito' ? 'selected' : '' ?>>Crédito</option><option value="debito" <?= $row['action_type'] === 'debito' ? 'selected' : '' ?>>Débito</option></select></div>
+                            <div class="col-md-2"><label class="form-label">Ajuste (hh:mm)</label><input class="form-control form-control-sm" name="delta_hms" value="<?= h(ltrim(format_seconds_hms(abs((int) $row['delta_minutes']) * 60), '-')) ?>" required></div>
+                            <div class="col-md-2"><label class="form-label">Data da ação</label><input class="form-control form-control-sm" type="date" name="action_date" value="<?= h((string) $row['action_date']) ?>" required></div>
+                            <div class="col-md-4"><label class="form-label">Motivo</label><input class="form-control form-control-sm" name="reason" value="<?= h((string) $row['reason']) ?>" required></div>
+                            <div class="col-md-2 d-grid"><button class="btn btn-sm btn-primary">Guardar alterações</button></div>
+                        </form>
+                    </td>
+                </tr>
+            <?php endforeach; ?>
             </tbody></table>
         </div>
     </div>
