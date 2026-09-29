@@ -16,10 +16,29 @@ if ($rememberedEmail !== '' && filter_var($rememberedEmail, FILTER_VALIDATE_EMAI
     $rememberedEmail = '';
 }
 $email = trim((string) ($_POST['email'] ?? $rememberedEmail));
+$directPinLogin = isset($_GET['mode']) && (string) $_GET['mode'] === 'pin';
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && (string) ($_POST['pin_entry'] ?? '') === '1') {
+    $directPinLogin = true;
+}
+
+// Shared Shopfloor terminals return directly to the keypad when an operator
+// changes user. Use an active PIN-enabled account only as the login gateway;
+// the PIN itself still identifies the actual employee below.
+if ($directPinLogin && $email === '') {
+    $pinGatewayStmt = $pdo->query(
+        'SELECT email FROM users
+         WHERE is_active = 1
+           AND (TRIM(COALESCE(pin_code_hash, "")) <> ""
+                OR TRIM(COALESCE(pin_code, "")) <> "")
+         ORDER BY pin_only_login DESC, id ASC
+         LIMIT 1'
+    );
+    $email = trim((string) ($pinGatewayStmt->fetchColumn() ?: ''));
+}
 $rememberLogin = $_SERVER['REQUEST_METHOD'] === 'POST'
     ? isset($_POST['remember_login'])
     : $rememberedEmail !== '';
-$loginMode = 'identify';
+$loginMode = $directPinLogin ? 'pin' : 'identify';
 $pendingUser = null;
 $requestIp = (string) ($_SERVER['REMOTE_ADDR'] ?? '0.0.0.0');
 
@@ -73,7 +92,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             safe_log_app_event($pdo, null, 'auth.login_failed', 'Tentativa de login falhada (email não encontrado ou inativo).', ['email' => $email]);
             $error = 'Credenciais inválidas.';
         } else {
-            $loginMode = (int) ($pendingUser['pin_only_login'] ?? 0) === 1 ? 'pin' : 'password';
+            $loginMode = $directPinLogin || (int) ($pendingUser['pin_only_login'] ?? 0) === 1 ? 'pin' : 'password';
 
             if ($action === 'login_password') {
                 $password = trim((string) ($_POST['password'] ?? ''));
@@ -226,6 +245,7 @@ require __DIR__ . '/partials/header.php';
                     <form method="post" class="vstack gap-3" id="pinLoginForm">
                         <?= csrf_input() ?>
                         <input type="hidden" name="action" value="login_pin">
+                        <?php if ($directPinLogin): ?><input type="hidden" name="pin_entry" value="1"><?php endif; ?>
                         <input type="hidden" name="email" value="<?= h((string) $email) ?>">
                         <?php if ($rememberLogin): ?><input type="hidden" name="remember_login" value="1"><?php endif; ?>
                         <input type="password" class="form-control form-control-lg text-center" name="pin" id="pinInput" inputmode="numeric" pattern="\d{6}" maxlength="6" placeholder="PIN de 6 dígitos" readonly required>
