@@ -68,6 +68,29 @@ if (!isset($workCentersById[$selectedWorkCenterId])) {
     unset($_SESSION['shopfloor_work_center_id']);
 }
 $selectedWorkCenter = $selectedWorkCenterId > 0 ? $workCentersById[$selectedWorkCenterId] : null;
+$selectedWorkCenterMachineId = (int) ($selectedWorkCenter['machine_id'] ?? 0);
+
+if (!function_exists('shopfloor_operation_can_run_at_work_center')) {
+    /**
+     * An operation belongs at a workstation either through its assigned work
+     * center or through one of its compatible (alternative) machines.
+     */
+    function shopfloor_operation_can_run_at_work_center(array $operation, int $workCenterId, int $workCenterMachineId): bool
+    {
+        if ($workCenterId <= 0) {
+            return false;
+        }
+        if ((int) ($operation['work_center_id'] ?? 0) === $workCenterId) {
+            return true;
+        }
+        if ($workCenterMachineId <= 0) {
+            return false;
+        }
+        $allowedMachineIds = json_decode((string) ($operation['allowed_machine_ids_json'] ?? '[]'), true);
+        return is_array($allowedMachineIds)
+            && in_array($workCenterMachineId, array_map('intval', $allowedMachineIds), true);
+    }
+}
 $sessionLoginAt = trim((string) ($_SESSION['login_at'] ?? ''));
 $todayLocalDate = date('Y-m-d');
 $latestClockEntryTodayStmt = $pdo->prepare('SELECT entry_type FROM shopfloor_time_entries WHERE user_id = ? AND date(occurred_at) = ? ORDER BY occurred_at DESC LIMIT 1');
@@ -198,7 +221,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $poOperationId = (int) ($_POST['po_operation_id'] ?? 0);
         if (!gt_erp_user_can($pdo, $user ?: [], 'erp.shopfloor.execute')) { $flashError = 'Sem permissão para executar operações no Shopfloor.'; }
         $operationStmt=$pdo->prepare('SELECT opo.*,te.id open_entry FROM erp_production_order_operations opo LEFT JOIN erp_operation_time_entries te ON te.production_order_operation_id=opo.id AND te.ended_at IS NULL WHERE opo.id=?');$operationStmt->execute([$poOperationId]);$operation=$operationStmt->fetch(PDO::FETCH_ASSOC);
-        $machineId=(int)($_POST['machine_id']??($operation['primary_machine_id']??0));$allowed=json_decode((string)($operation['allowed_machine_ids_json']??'[]'),true)?:[];
+        $canRunAtSelectedWorkCenter = $operation && shopfloor_operation_can_run_at_work_center($operation, $selectedWorkCenterId, $selectedWorkCenterMachineId);
+        $machineId=(int)($_POST['machine_id']??0);
+        if (!$machineId) {
+            $machineId = $selectedWorkCenterMachineId > 0 && in_array($selectedWorkCenterMachineId, array_map('intval', json_decode((string)($operation['allowed_machine_ids_json']??'[]'), true) ?: []), true)
+                ? $selectedWorkCenterMachineId
+                : (int)($operation['primary_machine_id']??0);
+        }
+        $allowed=json_decode((string)($operation['allowed_machine_ids_json']??'[]'),true)?:[];
         $blockedStmt=$pdo->prepare('SELECT COUNT(*) FROM erp_routing_step_dependencies d JOIN erp_production_order_operations predecessor ON predecessor.routing_step_id=d.predecessor_step_id WHERE d.routing_step_id=? AND predecessor.production_order_id=? AND predecessor.status<>"Concluída"');$blockedStmt->execute([(int)($operation['routing_step_id']??0),(int)($operation['production_order_id']??0)]);
         $pendingDocsStmt = $pdo->prepare('SELECT COUNT(*) FROM erp_production_order_documents d JOIN erp_production_order_operations opo ON opo.production_order_id = d.production_order_id WHERE opo.id = ? AND d.is_required = 1 AND NOT EXISTS (SELECT 1 FROM erp_production_order_document_acknowledgements a WHERE a.document_id = d.id AND a.user_id = ?)');
         $pendingDocsStmt->execute([$poOperationId, $userId]);
@@ -212,8 +242,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $flashError = 'Etapa da OF inválida.';
         } elseif ($selectedWorkCenterId <= 0) {
             $flashError = 'Selecione primeiro o centro de trabalho deste dispositivo.';
-        } elseif ((int) ($operation['work_center_id'] ?? 0) !== $selectedWorkCenterId) {
-            $flashError = 'Esta operação não pertence ao centro de trabalho selecionado.';
+        } elseif (!$canRunAtSelectedWorkCenter) {
+            $flashError = 'Esta operação só pode ser acompanhada neste centro de trabalho; não pode ser arrancada aqui.';
         } elseif ($machineId && !in_array($machineId,array_map('intval',$allowed),true)) {
             $flashError = 'A máquina selecionada não está autorizada para esta operação.';
         } elseif ((int)$blockedStmt->fetchColumn()>0 && empty($operation['parallel_allowed'])) {
@@ -946,8 +976,10 @@ $formattedHourBank = sprintf('%s%02dh%02dm', $displayedHourBankMinutes < 0 ? '-'
 $ofSql = 'SELECT o.id, o.order_number, o.planned_quantity, o.status, p.code AS product_code, p.description AS product_description FROM erp_production_orders o JOIN erp_products p ON p.id = o.product_id WHERE o.status IN ("Planeada", "Em curso")';
 $ofParams = [];
 if ($selectedWorkCenterId > 0) {
-    $ofSql .= ' AND EXISTS (SELECT 1 FROM erp_production_order_operations center_op WHERE center_op.production_order_id = o.id AND center_op.work_center_id = ?)';
+    $ofSql .= ' AND EXISTS (SELECT 1 FROM erp_production_order_operations center_op WHERE center_op.production_order_id = o.id AND (center_op.work_center_id = ? OR (? > 0 AND EXISTS (SELECT 1 FROM json_each(CASE WHEN json_valid(center_op.allowed_machine_ids_json) THEN center_op.allowed_machine_ids_json ELSE "[]" END) allowed_machine WHERE CAST(allowed_machine.value AS INTEGER) = ?))))';
     $ofParams[] = $selectedWorkCenterId;
+    $ofParams[] = $selectedWorkCenterMachineId;
+    $ofParams[] = $selectedWorkCenterMachineId;
 }
 $ofSql .= ' ORDER BY o.due_date IS NULL, o.due_date, o.id DESC LIMIT 25';
 $ofStmt = $pdo->prepare($ofSql);
@@ -967,10 +999,6 @@ if ($selectedOfId > 0) {
     $ofDocuments = $docsStmt->fetchAll(PDO::FETCH_ASSOC);
     $opsSql = 'SELECT opo.*, COALESCE(opo.operation_code,op.code) code,COALESCE(opo.operation_name,op.name) name, op.standard_minutes, (SELECT id FROM erp_operation_time_entries te WHERE te.production_order_operation_id=opo.id AND te.user_id=? AND te.ended_at IS NULL LIMIT 1) AS open_entry_id, (SELECT status FROM erp_operation_time_entries te WHERE te.production_order_operation_id=opo.id AND te.user_id=? AND te.ended_at IS NULL LIMIT 1) AS open_entry_status, (SELECT CAST(MAX(0, (julianday(CASE WHEN te.status="paused" THEN te.paused_at ELSE CURRENT_TIMESTAMP END)-julianday(te.started_at))*86400-te.pause_seconds) AS INTEGER) FROM erp_operation_time_entries te WHERE te.production_order_operation_id=opo.id AND te.user_id=? AND te.ended_at IS NULL LIMIT 1) AS open_elapsed_seconds, (SELECT COALESCE(SUM((julianday(CASE WHEN te.ended_at IS NOT NULL THEN te.ended_at WHEN te.status="paused" THEN te.paused_at ELSE CURRENT_TIMESTAMP END)-julianday(te.started_at))*1440)-SUM(te.pause_seconds)/60,0) FROM erp_operation_time_entries te WHERE te.production_order_operation_id=opo.id) actual_minutes FROM erp_production_order_operations opo JOIN erp_operations op ON op.id=opo.operation_id WHERE opo.production_order_id=?';
     $opsParams = [$userId, $userId, $userId, $selectedOfId];
-    if ($selectedWorkCenterId > 0) {
-        $opsSql .= ' AND opo.work_center_id=?';
-        $opsParams[] = $selectedWorkCenterId;
-    }
     $opsSql .= ' ORDER BY opo.sequence_no, opo.id';
     $opsStmt = $pdo->prepare($opsSql);
     $opsStmt->execute($opsParams);
@@ -1139,16 +1167,29 @@ require __DIR__ . '/partials/header.php';
             <h3 class="h6">Documentos obrigatórios</h3>
             <div class="list-group mb-3"><?php if (!$ofDocuments): ?><div class="list-group-item text-secondary">Sem documentos anexados.</div><?php endif; foreach ($ofDocuments as $doc): ?><div class="list-group-item d-flex justify-content-between gap-2"><div><strong><?= h($doc['title']) ?></strong><?php if (!empty($doc['document_url'])): ?> · <a target="_blank" href="<?= h($doc['document_url']) ?>">visualizar</a><?php endif; ?><div class="small text-secondary"><?= nl2br(h((string)$doc['body'])) ?></div></div><form method="post"><input type="hidden" name="action" value="ack_of_document"><input type="hidden" name="document_id" value="<?= (int)$doc['id'] ?>"><button class="btn btn-sm <?= (int)$doc['acknowledged']===1?'btn-success':'btn-outline-success' ?>"><?= (int)$doc['acknowledged']===1?'Confirmado':'Tomei conhecimento' ?></button></form></div><?php endforeach; ?></div>
             <h3 class="h6">Operações</h3>
-            <div class="table-responsive"><table class="table table-sm shopfloor-table"><thead><tr><th>Seq.</th><th>Operação</th><th>Estado</th><th>Previsto / real</th><th>Ação</th></tr></thead><tbody>
+            <div class="shopfloor-operation-grid">
             <?php foreach ($ofOperations as $op):
                 $isOpen = (int) ($op['open_entry_id'] ?? 0) > 0;
                 $isPaused = $isOpen && (string) ($op['open_entry_status'] ?? '') === 'paused';
                 $checklistPhase = $isOpen ? 'end' : 'start';
                 $showChecklist = $operationChecklistService->isRequired($op, $userId, $checklistPhase);
                 $operationChecklistItems = $showChecklist ? $operationChecklistService->items((int) $op['checklist_template_id']) : [];
+                $canRunHere = shopfloor_operation_can_run_at_work_center($op, $selectedWorkCenterId, $selectedWorkCenterMachineId);
             ?>
-                <tr><td><?= (int)$op['sequence_no'] ?></td><td><?= h($op['code'].' - '.$op['name']) ?></td><td><?= h($op['status']) ?><?= $isPaused ? ' · Pausada' : '' ?><div class="small text-secondary"><?= nl2br(h((string)($op['instructions']??''))) ?></div></td><td><?= h(number_format((float)($op['planned_minutes']??0),1,',','.')) ?> / <?= h(number_format((float)($op['actual_minutes']??0),1,',','.')) ?> min<?php if ($isOpen): ?><div class="fw-bold mt-1 <?= $isPaused ? 'text-warning' : 'text-success' ?>" data-production-timer data-elapsed-seconds="<?= (int) ($op['open_elapsed_seconds'] ?? 0) ?>" data-running="<?= $isPaused ? '0' : '1' ?>">00:00:00</div><?php endif; ?></td><td style="min-width:22rem">
-                <form method="post" class="row g-2">
+                <article class="shopfloor-operation-card <?= $isOpen ? 'is-active' : '' ?> <?= !$canRunHere ? 'is-monitor-only' : '' ?>">
+                    <div class="shopfloor-operation-card-header">
+                        <div class="d-flex align-items-start gap-3 min-w-0">
+                            <span class="shopfloor-operation-sequence" aria-label="Sequência <?= (int)$op['sequence_no'] ?>"><?= (int)$op['sequence_no'] ?></span>
+                            <div class="min-w-0"><h4><?= h($op['code'].' - '.$op['name']) ?></h4><div class="small text-secondary"><?= nl2br(h((string)($op['instructions']??''))) ?></div></div>
+                        </div>
+                        <span class="shopfloor-operation-status <?= $isOpen ? ($isPaused ? 'is-paused' : 'is-running') : '' ?>"><?= h($op['status']) ?><?= $isPaused ? ' · Pausada' : '' ?></span>
+                    </div>
+                    <div class="shopfloor-operation-metrics">
+                        <div><span>Previsto</span><strong><?= h(number_format((float)($op['planned_minutes']??0),1,',','.')) ?> min</strong></div>
+                        <div><span>Real</span><strong><?= h(number_format((float)($op['actual_minutes']??0),1,',','.')) ?> min</strong></div>
+                        <?php if ($isOpen): ?><div class="shopfloor-operation-timer"><span>Tempo atual</span><strong class="<?= $isPaused ? 'text-warning' : 'text-success' ?>" data-production-timer data-elapsed-seconds="<?= (int) ($op['open_elapsed_seconds'] ?? 0) ?>" data-running="<?= $isPaused ? '0' : '1' ?>">00:00:00</strong></div><?php endif; ?>
+                    </div>
+                <form method="post" class="row g-2 shopfloor-operation-actions">
                     <input type="hidden" name="action" value="<?= $isOpen ? 'stop_of_operation' : 'start_of_operation' ?>">
                     <?php if ($isOpen): ?><input type="hidden" name="entry_id" value="<?= (int)$op['open_entry_id'] ?>"><?php else: ?><input type="hidden" name="po_operation_id" value="<?= (int)$op['id'] ?>"><?php endif; ?>
                     <?php if ($showChecklist && $isOpen): ?><div class="col-12 border rounded bg-light p-2"><div class="fw-semibold mb-2"><?= ($op['checklist_timing'] ?? '') === 'first' ? 'Checklist · primeira execução nesta OF' : 'Checklist · fim' ?></div>
@@ -1163,10 +1204,11 @@ require __DIR__ . '/partials/header.php';
                         <div class="col-6 col-xl"><input class="form-control form-control-sm" type="number" min="0" step="0.001" name="quantity_good" placeholder="Qtd. OK" inputmode="decimal" data-productivity-quantity></div><div class="col-6 col-xl"><input class="form-control form-control-sm" type="number" min="0" step="0.001" name="quantity_rejected" placeholder="Refugo" inputmode="decimal"></div><div class="col-6 col-xl"><input class="form-control form-control-sm" name="waste_reason" placeholder="Motivo refugo"></div><div class="col-6 col-xl"><select class="form-select form-select-sm" name="quality_result"><option value="">Qualidade…</option><option value="pass">Conforme</option><option value="fail">Não conforme</option><option value="na">N/A</option></select></div>
                         <div class="col-12"><div class="shopfloor-productivity" data-productivity data-planned-quantity="<?= h((string) ($selectedOf['planned_quantity'] ?? 0)) ?>" data-planned-minutes="<?= h((string) ($op['planned_minutes'] ?? 0)) ?>" data-elapsed-seconds="<?= (int) ($op['open_elapsed_seconds'] ?? 0) ?>" data-running="<?= $isPaused ? '0' : '1' ?>"><div class="d-flex justify-content-between gap-2"><strong>Produtividade</strong><strong data-productivity-value>—</strong></div><div class="progress" role="progressbar" aria-label="Produtividade prevista face à real" aria-valuemin="0" aria-valuemax="100"><div class="progress-bar" data-productivity-bar></div></div><small data-productivity-detail>Introduza a quantidade produzida para calcular.</small></div></div>
                     <?php endif; ?>
-                    <div class="col-12"><button class="btn <?= $isOpen ? 'btn-danger' : 'btn-success' ?> btn-sm w-100"><?= $isOpen ? 'Concluir operação' : 'Arrancar' ?></button></div>
-                </form></td></tr>
-                <?php if ($isOpen): ?><tr><td colspan="4"></td><td><form method="post"><input type="hidden" name="action" value="<?= $isPaused ? 'resume_operation' : 'pause_operation' ?>"><input type="hidden" name="entry_id" value="<?= (int) $op['open_entry_id'] ?>"><button class="btn btn-outline-<?= $isPaused ? 'success' : 'warning' ?> btn-sm w-100"><?= $isPaused ? 'Retomar produção' : 'Pausar produção' ?></button></form></td></tr><?php endif; ?>
-            <?php endforeach; ?></tbody></table></div>
+                    <div class="col-12"><button class="btn <?= !$canRunHere ? 'btn-outline-secondary' : ($isOpen ? 'btn-danger' : 'btn-success') ?> w-100" <?= !$canRunHere ? 'type="button" disabled title="Operação disponível apenas para acompanhamento neste posto"' : '' ?>><?= !$canRunHere ? 'Apenas acompanhamento' : ($isOpen ? 'Concluir operação' : 'Arrancar') ?></button></div>
+                </form>
+                <?php if ($isOpen && $canRunHere): ?><form method="post" class="mt-2"><input type="hidden" name="action" value="<?= $isPaused ? 'resume_operation' : 'pause_operation' ?>"><input type="hidden" name="entry_id" value="<?= (int) $op['open_entry_id'] ?>"><button class="btn btn-outline-<?= $isPaused ? 'success' : 'warning' ?> w-100"><?= $isPaused ? 'Retomar produção' : 'Pausar produção' ?></button></form><?php endif; ?>
+                </article>
+            <?php endforeach; ?></div>
             <?php foreach ($ofOperations as $op):
                 $isOpen = (int) ($op['open_entry_id'] ?? 0) > 0;
                 $showStartChecklist = $isOpen && $operationChecklistService->isRequired($op, $userId, 'start');
