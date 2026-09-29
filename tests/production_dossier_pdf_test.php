@@ -52,7 +52,8 @@ foreach (['CARACTERISTICAS DO SACO', 'proof_reference', "['SEQ.','OPERACAO','MAQ
     if (strpos($pdfSource, $requiredPrintField) === false) throw new RuntimeException('Campo em falta no fallback: ' . $requiredPrintField);
 }
 if (strpos($dossier, "include __DIR__.'/production_dossier_print.php'") === false) throw new RuntimeException('A Folha de Acompanhamento não reutiliza diretamente o template HTML imprimível.');
-if (strpos($print, "window.addEventListener('load',function(){window.print();})") === false) throw new RuntimeException('A vista imprimível não abre o diálogo de impressão do browser.');
+if (strpos($print, 'class="print-actions"') === false || strpos($print, 'onclick="window.print()"') === false) throw new RuntimeException('A vista imprimível não apresenta a ação de imprimir/guardar PDF.');
+if (strpos($print, "window.addEventListener('load'") !== false) throw new RuntimeException('A vista imprimível abre a impressão antes de o utilizador a rever.');
 foreach (['Folha de Acompanhamento', 'Dados principais da encomenda', 'Identificação do cliente e do artigo', 'Maqueta do artigo / Referência visual', 'Registo de produção', 'Observações'] as $section) {
     if (strpos($print, $section) === false) throw new RuntimeException('Secção em falta na folha de acompanhamento: ' . $section);
 }
