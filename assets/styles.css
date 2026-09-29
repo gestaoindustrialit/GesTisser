@@ -943,6 +943,50 @@ body {
     font-size: 1.02rem;
 }
 
+.shopfloor-operation-grid {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: .75rem;
+}
+
+.shopfloor-operation-card {
+    min-width: 0;
+    padding: .85rem;
+    border: 1px solid #dce3e8;
+    border-radius: 1rem;
+    background: #fff;
+    box-shadow: 0 3px 12px rgba(29, 50, 64, .06);
+}
+
+.shopfloor-operation-card.is-active { border-color: #71ad63; box-shadow: 0 3px 14px rgba(69, 147, 51, .14); }
+.shopfloor-operation-card.is-monitor-only { background: #f8fafb; }
+.shopfloor-operation-card-header { display: flex; justify-content: space-between; align-items: flex-start; gap: .65rem; }
+.shopfloor-operation-card h4 { margin: .1rem 0 .25rem; font-size: .98rem; overflow-wrap: anywhere; }
+.shopfloor-operation-sequence { display: inline-grid; place-items: center; flex: 0 0 2.35rem; min-height: 2.35rem; padding: .2rem; border-radius: .65rem; background: #e9f1f8; color: #275679; font-weight: 750; }
+.shopfloor-operation-status { flex: 0 0 auto; padding: .35rem .65rem; border-radius: 999px; background: #edf0f2; color: #53616b; font-size: .78rem; font-weight: 700; white-space: nowrap; }
+.shopfloor-operation-status.is-running { background: #e4f4df; color: #347426; }
+.shopfloor-operation-status.is-paused { background: #fff1d6; color: #885d0b; }
+.shopfloor-operation-metrics { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: .45rem; margin: .75rem 0; }
+.shopfloor-operation-metrics > div { display: flex; flex-direction: column; gap: .1rem; min-width: 0; padding: .55rem; border-radius: .65rem; background: #f2f5f7; }
+.shopfloor-operation-metrics span { color: #66747d; font-size: .76rem; font-weight: 650; text-transform: uppercase; letter-spacing: .025em; }
+.shopfloor-operation-metrics strong { font-size: 1rem; white-space: nowrap; }
+.shopfloor-operation-actions .btn { min-height: 3rem; font-weight: 650; }
+
+@media (min-width: 640px) {
+    .shopfloor-operation-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+
+@media (min-width: 992px) {
+    .shopfloor-operation-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+}
+
+@media (max-width: 575.98px) {
+    .shopfloor-operation-card-header { flex-direction: column; }
+    .shopfloor-operation-status { align-self: flex-start; }
+    .shopfloor-operation-metrics { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    .shopfloor-operation-timer { grid-column: 1 / -1; }
+}
+
 .shopfloor-status-pill {
     border: 1px solid rgba(37, 99, 235, 0.25);
     background: rgba(59, 130, 246, 0.09);
