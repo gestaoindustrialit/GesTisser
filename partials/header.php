@@ -103,6 +103,12 @@ if ($currentFile === '') {
     $currentFile = basename((string) ($_SERVER['PHP_SELF'] ?? ''));
 }
 $currentErpPage = trim((string) ($_GET['page'] ?? 'overview'));
+$shopfloorUserNameParts = preg_split('/\s+/u', trim((string) ($user['name'] ?? ''))) ?: [];
+$shopfloorUserShortName = $shopfloorUserNameParts !== []
+    ? ($shopfloorUserNameParts[0] . (count($shopfloorUserNameParts) > 1 ? ' ' . $shopfloorUserNameParts[count($shopfloorUserNameParts) - 1] : ''))
+    : 'Utilizador';
+$shopfloorUserNumber = trim((string) ($user['user_number'] ?? ''));
+$shopfloorUserLabel = trim($shopfloorUserNumber . ' · ' . $shopfloorUserShortName, ' ·');
 $hrFiles = [
     'hr.php', 'users.php', 'hr_departments.php', 'hr_schedules.php', 'hr_calendar.php',
     'hr_bank.php', 'hr_absences.php', 'hr_vacations.php', 'hr_alerts.php',
@@ -337,7 +343,16 @@ header('Content-Type: text/html; charset=UTF-8');
                         <span><?= $activeBreak ? 'Terminar pausa/paragem' : 'Iniciar pausa/paragem' ?></span>
                     </button>
                 <?php endif; ?>
-                <div class="gt-top-user">
+                <?php if ($currentFile === 'shopfloor.php' && $user): ?>
+                    <div class="shopfloor-user-identity" aria-label="Utilizador atual">
+                        <i class="bi bi-person-circle" aria-hidden="true"></i>
+                        <span><?= h($shopfloorUserLabel) ?></span>
+                    </div>
+                    <a class="btn btn-sm btn-outline-secondary shopfloor-switch-user" href="logout.php?next=pin" aria-label="Trocar de utilizador" title="Trocar de utilizador">
+                        <i class="bi bi-person-gear" aria-hidden="true"></i>
+                    </a>
+                <?php endif; ?>
+                <div class="gt-top-user<?= $currentFile === 'shopfloor.php' ? ' d-none' : '' ?>">
                     <span><?= h((string) ($user['name'] ?? 'Utilizador')) ?></span>
                     <small><?= (int) ($user['is_admin'] ?? 0) === 1 ? 'Admin' : h((string) ($user['access_profile'] ?? 'Utilizador')) ?></small>
                 </div>

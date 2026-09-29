@@ -1,10 +1,11 @@
 <?php
 require_once __DIR__ . '/helpers.php';
 $logoutUserId = isset($_SESSION['user_id']) ? (int) $_SESSION['user_id'] : null;
+$returnToPin = isset($_GET['next']) && (string) $_GET['next'] === 'pin';
 if ($logoutUserId) {
     $sessionLoginAt = trim((string) ($_SESSION['login_at'] ?? ''));
     $pendingAnnouncement = fetch_pending_shopfloor_announcement_ack($pdo, $logoutUserId, $sessionLoginAt);
-    if ($pendingAnnouncement !== null) {
+    if ($pendingAnnouncement !== null && !$returnToPin) {
         redirect('shopfloor.php?announcement_ack_required=1');
     }
     log_app_event($pdo, $logoutUserId, 'auth.logout', 'Sessão terminada pelo utilizador.');
@@ -16,4 +17,4 @@ if (ini_get('session.use_cookies')) {
     setcookie(session_name(), '', time() - 42000, $params['path'], $params['domain'], (bool) $params['secure'], (bool) $params['httponly']);
 }
 session_destroy();
-redirect('login.php');
+redirect($returnToPin ? 'login.php?mode=pin' : 'login.php');

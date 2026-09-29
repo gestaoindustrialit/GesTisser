@@ -77,6 +77,26 @@ body {
     object-fit: contain;
 }
 
+.shopfloor-user-identity {
+    display: inline-flex;
+    align-items: center;
+    gap: .4rem;
+    color: #334155;
+    font-size: .8rem;
+    font-weight: 700;
+    white-space: nowrap;
+}
+
+.shopfloor-switch-user {
+    white-space: nowrap;
+}
+
+@media (max-width: 767.98px) {
+    .shopfloor-user-identity i {
+        display: none;
+    }
+}
+
 /* Keep dense data views readable without forcing columns to wrap or overflow. */
 .gt-authenticated .table {
     font-size: 0.82rem;
@@ -744,6 +764,12 @@ body {
 .shopfloor-body {
     background: linear-gradient(180deg, #f2f5fb 0%, #eef2ff 100%);
     color: #0f172a;
+}
+
+/* Scale the complete terminal workspace so controls retain their proportions
+   while gaining a little more breathing room on the Shopfloor screen. */
+.shopfloor-body .gt-app-shell {
+    zoom: .95;
 }
 
 .shopfloor-shell {
