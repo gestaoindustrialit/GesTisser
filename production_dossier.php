@@ -75,7 +75,7 @@ if(($_GET['format']??'')==='pdf'){
         try{ob_start();include __DIR__.'/production_dossier_print.php';$html=(string)ob_get_clean();$pdf=new Mpdf\Mpdf(['format'=>'A4','margin_left'=>0,'margin_right'=>0,'margin_top'=>0,'margin_bottom'=>0]);$pdf->WriteHTML($html);$pdfOutput=$pdf->Output($filename,'S');}
         catch(Throwable $e){while(ob_get_level()>$pdfBufferLevel)ob_end_clean();error_log('Falha ao gerar PDF mPDF da OF '.$id.': '.$e->getMessage());}
     }
-    if($pdfOutput==='')$pdfOutput=ProductionDossierPdf::render($d,$mainDocumentThumbnail,$productionDossierDocumentNumber,$productionCompanyPdfLogo,$productionCompanyName);
+    if($pdfOutput==='')$pdfOutput=ProductionDossierPdf::render($d,$mainDocumentThumbnail,$productionDossierDocumentNumber,$productionCompanyLogo,$productionCompanyName);
     header('Content-Type: application/pdf');header('Content-Disposition: inline; filename="'.$filename.'"');header('Content-Length: '.strlen($pdfOutput));echo $pdfOutput;exit;
 }
 $pageTitle='Dossier de Produção · OF '.$o['order_number'];require __DIR__.'/partials/header.php';

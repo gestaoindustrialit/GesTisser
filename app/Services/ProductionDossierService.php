@@ -7,11 +7,16 @@ final class ProductionDossierService
     private $pdo;
     public function __construct(PDO $pdo) { $this->pdo = $pdo; }
 
-    public function createSnapshot(int $orderId, int $articleId, int $userId, array $orderData = []): int
+    public function createSnapshot(int $orderId, int $articleId, int $userId, array $orderData = [], int $versionId = 0): int
     {
         $article = $this->row('SELECT fp.*,c.code customer_code,c.name customer_name FROM erp_finished_products fp LEFT JOIN erp_customers c ON c.id=fp.customer_id WHERE fp.id=?',[$articleId]);
         if (!$article) throw new RuntimeException('Artigo não encontrado para gerar o dossier.');
-        $version = $this->row('SELECT * FROM erp_article_technical_sheet_versions WHERE finished_product_id=? AND status="approved" AND (effective_from IS NULL OR effective_from<=date("now")) ORDER BY version_no DESC LIMIT 1',[$articleId]);
+        if ($versionId > 0) {
+            $version = $this->row('SELECT * FROM erp_article_technical_sheet_versions WHERE id=? AND finished_product_id=?',[$versionId,$articleId]);
+            if (!$version) throw new RuntimeException('A versão selecionada não pertence ao artigo da OF.');
+        } else {
+            $version = $this->row('SELECT * FROM erp_article_technical_sheet_versions WHERE finished_product_id=? AND status="approved" AND (effective_from IS NULL OR effective_from<=date("now")) ORDER BY version_no DESC LIMIT 1',[$articleId]);
+        }
         if (!$version) {
             $next=(int)$this->scalar('SELECT COALESCE(MAX(version_no),0)+1 FROM erp_article_technical_sheet_versions WHERE finished_product_id=?',[$articleId]);
             $master=$this->articleSnapshot($articleId,$article);

@@ -13,14 +13,14 @@ $pdf = ProductionDossierPdf::render([
     'order' => ['order_number' => 'OF-7', 'customer_name' => 'Cliente', 'article_code' => 'ART-1', 'planned_quantity' => 100, 'status' => 'Planeada'],
     'snapshot' => ['description' => 'Saco de teste', 'material' => 'Ráfia'],
     'metrics' => ['good' => 90, 'rejected' => 2],
-    'operations' => [['sequence_no' => 10, 'name' => 'Corte', 'status' => 'Planeada']],
+    'operations' => array_map(function ($number) { return ['sequence_no' => $number * 10, 'name' => 'Operacao ' . $number, 'status' => 'Planeada']; }, range(1, 6)),
 ], $jpeg === '' ? '' : 'data:image/jpeg;base64,' . base64_encode($jpeg), 'DOC-TEST-009');
 if (strpos($pdf, 'DOC-TEST-009') === false) throw new RuntimeException('Código documental em falta no PDF de fallback.');
 if (strpos($pdf, '%PDF-1.4') !== 0 || strpos($pdf, 'xref') === false || strpos($pdf, 'OF-7') === false) {
     throw new RuntimeException('O fallback não produziu um PDF válido do dossier.');
 }
 if ($jpeg !== '' && strpos($pdf, '/Subtype /Image') === false) throw new RuntimeException('A imagem do artigo não foi incorporada no PDF da OF.');
-if (strpos($pdf, 'FOLHA DE ACOMPANHAMENTO') === false || strpos($pdf, 'REGISTO DE PRODUCAO') === false) throw new RuntimeException('O PDF não tem a estrutura gráfica da folha de acompanhamento.');
+if (strpos($pdf, 'FOLHA DE ACOMPANHAMENTO') === false || strpos($pdf, 'REGISTO DE PRODUCAO') === false || strpos($pdf, 'Operacao 6') === false) throw new RuntimeException('O PDF não tem a estrutura gráfica da folha de acompanhamento.');
 foreach (['QUANTIDADE BOA', 'DESPERDICIO', 'EFICIENCIA'] as $removedMetric) {
     if (strpos($pdf, $removedMetric) !== false) throw new RuntimeException('A métrica removida ainda aparece no PDF: ' . $removedMetric);
 }
