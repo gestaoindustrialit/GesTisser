@@ -19,7 +19,12 @@ production_dossier_layout_check(strpos($pdfSource,'barcode128')!==false,'Fallbac
 production_dossier_layout_check(strpos($controllerSource,"$"."productionOrderFrontColors=pd_order_colors($"."s['of_front_colors']??'')")!==false,'Cores da OF em falta.');
 production_dossier_layout_check(strpos($controllerSource,"$"."productionCompanyLogo=pd_logo_src((string)app_setting(\$pdo,'logo_report_dark',''))")!==false,'A folha não replica o carregamento do logótipo da ficha técnica.');
 production_dossier_layout_check(strpos($controllerSource,"include __DIR__.'/production_dossier_print.php'")!==false,'A impressão não usa diretamente o template HTML.');
-production_dossier_layout_check(strpos($printSource,'.operations tbody tr:first-child td{padding-top:3mm}')!==false,'A primeira operação não tem separação suficiente do cabeçalho.');
+production_dossier_layout_check(strpos($printSource,'.primary-grid td{height:16mm;padding:1.5mm 2.3mm')!==false&&strpos($printSource,'.primary-value{display:block;font-size:12pt')!==false,'Os dados principais continuam demasiado altos.');
+production_dossier_layout_check(strpos($printSource,'.technical-grid{border-top:1px solid #aaa}')!==false,'Falta a linha entre a descrição e os detalhes técnicos.');
+production_dossier_layout_check(strpos($printSource,'.feature-grid caption{')!==false&&strpos($printSource,'border-top:1px solid #aaa;border-bottom:1px solid #aaa')!==false,'As características do saco não estão separadas por linhas.');
+production_dossier_layout_check(strpos($printSource,'.identity-grid .value{font-size:8.5pt')!==false&&strpos($printSource,'.technical-grid .value{display:block;font-size:7.3pt')!==false,'Os detalhes do artigo continuam com fonte demasiado grande.');
+production_dossier_layout_check(strpos($printSource,'.operations{page-break-inside:auto;font-size:7.2pt')!==false&&strpos($printSource,'.operations td{border-top:1px solid #bbb;border-right:1px solid #bbb;padding:1.1mm 1.4mm')!==false,'As linhas e a fonte das operações continuam demasiado grandes.');
+production_dossier_layout_check(strpos($printSource,'.operations tbody tr:first-child td{padding-top:1.1mm}')!==false,'A primeira operação não acompanha a altura compacta das restantes linhas.');
 production_dossier_layout_check(strpos($printSource,'.notes{min-height:9mm;padding:1.5mm 2.5mm;white-space:normal')!==false,'A área de observações não foi reduzida para libertar espaço para as operações.');
 production_dossier_layout_check(strpos($pdfSource,'array_slice($operations,0,6)')!==false,'O fallback não lista as seis operações do routing.');
 production_dossier_layout_check(strpos($printSource,'<?=h($productionCompanyName)?>')!==false,'O cabeçalho não usa os dados da empresa.');
