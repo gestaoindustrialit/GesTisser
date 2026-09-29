@@ -23,5 +23,12 @@ operation_flow_check(strpos($shopfloor, 'data-auto-show-checklist') !== false, '
 operation_flow_check(strpos($shopfloor, 'Validar checklist e continuar') !== false, 'A pop-up não permite validar a checklist e continuar.');
 operation_flow_check(strpos($shopfloor, 'data-productivity-quantity') !== false, 'A quantidade produzida não alimenta o indicador de produtividade.');
 operation_flow_check(strpos($shopfloor, 'data-productivity-value') !== false, 'Falta o indicador previsto/real de produtividade.');
+operation_flow_check(strpos($shopfloor, "json_each(CASE WHEN json_valid(center_op.allowed_machine_ids_json)") !== false, 'As OF não são disponibilizadas nos centros das máquinas alternativas.');
+operation_flow_check(strpos($shopfloor, "AND opo.work_center_id=?") === false, 'A lista da OF continua a ocultar operações de outros centros de trabalho.');
+operation_flow_check(strpos($shopfloor, 'Apenas acompanhamento') !== false, 'As operações não executáveis não são apresentadas em modo de acompanhamento.');
+operation_flow_check(strpos($shopfloor, 'shopfloor_operation_can_run_at_work_center') !== false, 'O arranque não valida máquinas alternativas do centro de trabalho.');
+operation_flow_check(strpos($shopfloor, 'shopfloor-operation-grid') !== false, 'As operações não são apresentadas numa grelha de cards responsiva.');
+operation_flow_check(strpos($shopfloor, 'shopfloor-operation-card') !== false, 'Falta o card individual de operação para tablet.');
+operation_flow_check(strpos($shopfloor, '<table class="table table-sm shopfloor-table"') === false, 'As operações continuam a ser apresentadas em tabela.');
 
 echo "Fluxo de operações do Shopfloor validado.\n";
