@@ -92,8 +92,7 @@ body {
 }
 
 @media (max-width: 767.98px) {
-    .shopfloor-user-identity i,
-    .shopfloor-switch-user span {
+    .shopfloor-user-identity i {
         display: none;
     }
 }
@@ -765,6 +764,12 @@ body {
 .shopfloor-body {
     background: linear-gradient(180deg, #f2f5fb 0%, #eef2ff 100%);
     color: #0f172a;
+}
+
+/* Scale the complete terminal workspace so controls retain their proportions
+   while gaining a little more breathing room on the Shopfloor screen. */
+.shopfloor-body .gt-app-shell {
+    zoom: .95;
 }
 
 .shopfloor-shell {

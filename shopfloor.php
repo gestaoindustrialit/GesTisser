@@ -978,7 +978,7 @@ if ($selectedOfId > 0) {
 }
 
 $pageTitle = 'Shopfloor';
-$bodyClass = 'bg-light';
+$bodyClass = 'shopfloor-body';
 $showProductionLabelShortcuts = true;
 require __DIR__ . '/partials/header.php';
 ?>

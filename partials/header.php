@@ -348,9 +348,8 @@ header('Content-Type: text/html; charset=UTF-8');
                         <i class="bi bi-person-circle" aria-hidden="true"></i>
                         <span><?= h($shopfloorUserLabel) ?></span>
                     </div>
-                    <a class="btn btn-sm btn-outline-secondary shopfloor-switch-user" href="logout.php?next=pin" aria-label="Trocar de utilizador">
+                    <a class="btn btn-sm btn-outline-secondary shopfloor-switch-user" href="logout.php?next=pin" aria-label="Trocar de utilizador" title="Trocar de utilizador">
                         <i class="bi bi-person-gear" aria-hidden="true"></i>
-                        <span>Trocar utilizador</span>
                     </a>
                 <?php endif; ?>
                 <div class="gt-top-user<?= $currentFile === 'shopfloor.php' ? ' d-none' : '' ?>">
