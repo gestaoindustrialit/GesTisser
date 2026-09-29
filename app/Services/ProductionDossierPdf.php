@@ -87,7 +87,7 @@ final class ProductionDossierPdf
         self::sectionBar($content,28,244,539,18,'REGISTO DE PRODUCAO');
         self::tableHeader($content,28,224,[48,270,221],['SEQ.','OPERACAO','MAQUINA']);
         $rowY=200;
-        foreach (array_slice($operations,0,4) as $operation) {
+        foreach (array_slice($operations,0,6) as $operation) {
             self::tableRow($content,28,$rowY,[48,270,221],[(string)($operation['sequence_no']??$dash),self::shorten($value($operation['name']??''),42),self::shorten($value($operation['machine_name']??''),34)]);
             $rowY-=20;
         }
@@ -95,8 +95,8 @@ final class ProductionDossierPdf
 
         $notesTop = min(190, $rowY - 8);
         self::sectionBar($content,28,$notesTop,539,18,'OBSERVACOES');
-        self::rect($content,28,$notesTop-48,539,48,true,[1,1,1]);
-        self::wrappedText($content,36,$notesTop-18,8,$value($order['notes']??$snapshot['_order']['notes']??''),86,3);
+        self::rect($content,28,$notesTop-28,539,28,true,[1,1,1]);
+        self::wrappedText($content,36,$notesTop-17,8,$value($order['notes']??$snapshot['_order']['notes']??''),86,2);
         self::line($content,28,35,567,35,.45,[.55,.55,.55]);
         self::text($content,28,22,6,'Documento: '.$documentNumber.'  |  OF: '.$orderNo.'  |  Gerado pelo GesTisser',false,[.35,.4,.4]);
         self::text($content,567,22,7,'TISSER',true,[.2,.25,.25],true);
@@ -211,16 +211,48 @@ final class ProductionDossierPdf
         if (substr($decoded, 0, 2) === "\xFF\xD8") return ['data'=>$decoded,'width'=>(int)($size[0]??1),'height'=>(int)($size[1]??1),'filter'=>'DCTDecode'];
         if (!function_exists('imagecreatefromstring')) return self::pngForPdf($decoded);
         $image = @imagecreatefromstring($decoded); if (!$image) return [];
-        $width=imagesx($image);$height=imagesy($image);ob_start(); imagejpeg($image, null, 92); $jpeg = (string) ob_get_clean(); imagedestroy($image); return ['data'=>$jpeg,'width'=>$width,'height'=>$height,'filter'=>'DCTDecode'];
+        $width=imagesx($image);$height=imagesy($image);ob_start(); imagejpeg($image, null, 92); $jpeg = (string) ob_get_clean(); unset($image); return ['data'=>$jpeg,'width'=>$width,'height'=>$height,'filter'=>'DCTDecode'];
     }
 
     /** Embed ordinary RGB/RGBA PNG logos even on servers where GD is unavailable. */
     private static function pngForPdf(string $png): array
     {
-        if(substr($png,0,8)!=="\x89PNG\r\n\x1a\n")return[];$width=0;$height=0;$type=-1;$idat='';$palette='';$transparency='';$offset=8;
-        while($offset+12<=strlen($png)){$length=unpack('N',substr($png,$offset,4))[1];$name=substr($png,$offset+4,4);$data=substr($png,$offset+8,$length);$offset+=12+$length;if($name==='IHDR'){$head=unpack('Nwidth/Nheight/Cdepth/Ctype/Ccompression/Cfilter/Cinterlace',$data);$width=$head['width'];$height=$head['height'];$type=$head['type'];if($head['depth']!==8||$head['interlace']!==0)return[];}elseif($name==='PLTE')$palette=$data;elseif($name==='tRNS')$transparency=$data;elseif($name==='IDAT')$idat.=$data;elseif($name==='IEND')break;}
-        if($width<1||$height<1||!in_array($type,[0,2,3,4,6],true)||($type===3&&strlen($palette)<3))return[];$raw=@gzuncompress($idat);if(!is_string($raw))return[];$channels=[0=>1,2=>3,3=>1,4=>2,6=>4][$type];$stride=$width*$channels;$previous=array_fill(0,$stride,0);$position=0;$pdf='';
-        for($row=0;$row<$height;$row++){$filter=ord($raw[$position++]);$bytes=[];for($i=0;$i<$stride;$i++){$byte=ord($raw[$position++]);$left=$i>=$channels?$bytes[$i-$channels]:0;$up=$previous[$i];$upperLeft=$i>=$channels?$previous[$i-$channels]:0;if($filter===1)$byte=($byte+$left)&255;elseif($filter===2)$byte=($byte+$up)&255;elseif($filter===3)$byte=($byte+(int)floor(($left+$up)/2))&255;elseif($filter===4){$p=$left+$up-$upperLeft;$pa=abs($p-$left);$pb=abs($p-$up);$pc=abs($p-$upperLeft);$byte=($byte+($pa<=$pb&&$pa<=$pc?$left:($pb<=$pc?$up:$upperLeft)))&255;}$bytes[]=$byte;}$previous=$bytes;$pdf.="\0";for($i=0;$i<$stride;$i+=$channels){if($type===0){$red=$green=$blue=$bytes[$i];$alpha=255;}elseif($type===2){$red=$bytes[$i];$green=$bytes[$i+1];$blue=$bytes[$i+2];$alpha=255;}elseif($type===3){$index=$bytes[$i];$paletteOffset=$index*3;if($paletteOffset+2>=strlen($palette))return[];$red=ord($palette[$paletteOffset]);$green=ord($palette[$paletteOffset+1]);$blue=ord($palette[$paletteOffset+2]);$alpha=$index<strlen($transparency)?ord($transparency[$index]):255;}elseif($type===4){$red=$green=$blue=$bytes[$i];$alpha=$bytes[$i+1];}else{$red=$bytes[$i];$green=$bytes[$i+1];$blue=$bytes[$i+2];$alpha=$bytes[$i+3];}foreach([$red,$green,$blue]as$colour)$pdf.=chr((int)round(($colour*$alpha+255*(255-$alpha))/255));}}
+        if (substr($png, 0, 8) !== "\x89PNG\r\n\x1a\n") return [];
+        $width=0;$height=0;$depth=0;$type=-1;$interlace=-1;$idat='';$palette='';$transparency='';$offset=8;
+        while ($offset+12<=strlen($png)) {
+            $length=unpack('N',substr($png,$offset,4))[1];$name=substr($png,$offset+4,4);$data=substr($png,$offset+8,$length);$offset+=12+$length;
+            if ($name==='IHDR') {$head=unpack('Nwidth/Nheight/Cdepth/Ctype/Ccompression/Cfilter/Cinterlace',$data);$width=$head['width'];$height=$head['height'];$depth=$head['depth'];$type=$head['type'];$interlace=$head['interlace'];}
+            elseif ($name==='PLTE') $palette=$data;
+            elseif ($name==='tRNS') $transparency=$data;
+            elseif ($name==='IDAT') $idat.=$data;
+            elseif ($name==='IEND') break;
+        }
+        $validDepths=[0=>[1,2,4,8,16],2=>[8,16],3=>[1,2,4,8],4=>[8,16],6=>[8,16]];
+        if($width<1||$height<1||$interlace!==0||!isset($validDepths[$type])||!in_array($depth,$validDepths[$type],true)||($type===3&&strlen($palette)<3))return[];
+        $raw=@gzuncompress($idat);if(!is_string($raw))return[];
+        $channels=[0=>1,2=>3,3=>1,4=>2,6=>4][$type];$scanlineBytes=(int)ceil($width*$channels*$depth/8);$filterBytes=max(1,(int)ceil($channels*$depth/8));$previous=array_fill(0,$scanlineBytes,0);$position=0;$rawLength=strlen($raw);$pdf='';
+        for($row=0;$row<$height;$row++){
+            if($position>=$rawLength)return[];$filter=ord($raw[$position++]);$bytes=[];
+            for($i=0;$i<$scanlineBytes;$i++){
+                if($position>=$rawLength)return[];$byte=ord($raw[$position++]);$left=$i>=$filterBytes?$bytes[$i-$filterBytes]:0;$up=$previous[$i];$upperLeft=$i>=$filterBytes?$previous[$i-$filterBytes]:0;
+                if($filter===1)$byte=($byte+$left)&255;elseif($filter===2)$byte=($byte+$up)&255;elseif($filter===3)$byte=($byte+(int)floor(($left+$up)/2))&255;elseif($filter===4){$p=$left+$up-$upperLeft;$pa=abs($p-$left);$pb=abs($p-$up);$pc=abs($p-$upperLeft);$byte=($byte+($pa<=$pb&&$pa<=$pc?$left:($pb<=$pc?$up:$upperLeft)))&255;}elseif($filter!==0)return[];$bytes[]=$byte;
+            }
+            $previous=$bytes;$samples=[];$bitPosition=0;$sampleCount=$width*$channels;$maxSample=(1<<min($depth,8))-1;
+            for($sample=0;$sample<$sampleCount;$sample++){
+                if($depth===16){$byteIndex=intdiv($bitPosition,8);$samples[]=($bytes[$byteIndex]<<8)|$bytes[$byteIndex+1];$bitPosition+=16;continue;}
+                $byteIndex=intdiv($bitPosition,8);$shift=8-$depth-($bitPosition%8);$samples[]=($bytes[$byteIndex]>>$shift)&$maxSample;$bitPosition+=$depth;
+            }
+            $pdf.="\0";
+            for($pixel=0;$pixel<$width;$pixel++){
+                $base=$pixel*$channels;$scale=function($sample)use($depth){return $depth===16?(int)round($sample/257):($depth===8?$sample:(int)round($sample*255/((1<<$depth)-1)));};
+                if($type===0){$red=$green=$blue=$scale($samples[$base]);$alpha=255;}
+                elseif($type===2){$red=$scale($samples[$base]);$green=$scale($samples[$base+1]);$blue=$scale($samples[$base+2]);$alpha=255;}
+                elseif($type===3){$index=$samples[$base];$paletteOffset=$index*3;if($paletteOffset+2>=strlen($palette))return[];$red=ord($palette[$paletteOffset]);$green=ord($palette[$paletteOffset+1]);$blue=ord($palette[$paletteOffset+2]);$alpha=$index<strlen($transparency)?ord($transparency[$index]):255;}
+                elseif($type===4){$red=$green=$blue=$scale($samples[$base]);$alpha=$scale($samples[$base+1]);}
+                else{$red=$scale($samples[$base]);$green=$scale($samples[$base+1]);$blue=$scale($samples[$base+2]);$alpha=$scale($samples[$base+3]);}
+                foreach([$red,$green,$blue]as$colour)$pdf.=chr((int)round(($colour*$alpha+255*(255-$alpha))/255));
+            }
+        }
         return ['data'=>gzcompress($pdf,9),'width'=>$width,'height'=>$height,'filter'=>'FlateDecode'];
     }
 
