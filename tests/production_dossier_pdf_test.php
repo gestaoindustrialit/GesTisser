@@ -46,14 +46,13 @@ if(strpos($fourBitPdf,'/Logo ')===false)throw new RuntimeException('O logótipo 
 $dossier = (string) file_get_contents(__DIR__ . '/../production_dossier.php');
 $print = (string) file_get_contents(__DIR__ . '/../production_dossier_print.php');
 $sheet = (string) file_get_contents(__DIR__ . '/../erp_technical_sheet.php');
-if (strpos($dossier, 'ProductionDossierPdf::render($d,$mainDocumentThumbnail,$productionDossierDocumentNumber,$productionCompanyPdfLogo,$productionCompanyName)') === false) throw new RuntimeException('Fallback PDF não está ligado ao logótipo raster da empresa.');
 if (strpos($pdfSource, "157, 811, 16, 'FOLHA DE ACOMPANHAMENTO'") === false) throw new RuntimeException('O título do fallback pode sobrepor-se ao logótipo.');
 if (strpos($pdfSource, 'self::text($content,$x+7,$y+5,9,$title') === false) throw new RuntimeException('Os títulos do fallback não estão alinhados à esquerda.');
 foreach (['CARACTERISTICAS DO SACO', 'proof_reference', "['SEQ.','OPERACAO','MAQUINA']"] as $requiredPrintField) {
     if (strpos($pdfSource, $requiredPrintField) === false) throw new RuntimeException('Campo em falta no fallback: ' . $requiredPrintField);
 }
-if (strpos($dossier, 'catch(Throwable $e)') === false || strpos($dossier, 'Output($filename,\'S\')') === false) throw new RuntimeException('O PDF da OF não tem recuperação segura em caso de falha do mPDF.');
-if (strpos($dossier, 'onclick="window.print()"') !== false) throw new RuntimeException('O botão Imprimir ainda aparece no dossier.');
+if (strpos($dossier, "include __DIR__.'/production_dossier_print.php'") === false) throw new RuntimeException('A Folha de Acompanhamento não reutiliza diretamente o template HTML imprimível.');
+if (strpos($print, "window.addEventListener('load',function(){window.print();})") === false) throw new RuntimeException('A vista imprimível não abre o diálogo de impressão do browser.');
 foreach (['Folha de Acompanhamento', 'Dados principais da encomenda', 'Identificação do cliente e do artigo', 'Maqueta do artigo / Referência visual', 'Registo de produção', 'Observações'] as $section) {
     if (strpos($print, $section) === false) throw new RuntimeException('Secção em falta na folha de acompanhamento: ' . $section);
 }

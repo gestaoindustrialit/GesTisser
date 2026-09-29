@@ -48,35 +48,18 @@ function pd_logo_src(string $configuredPath): string
     $contents = file_get_contents($absolutePath);
     return $contents === false ? '' : 'data:' . ($mimeTypes[$extension] ?? 'application/octet-stream') . ';base64,' . base64_encode($contents);
 }
-function pd_pdf_logo_src(string $configuredPath, string $resolvedLogo): string
-{
-    if (!preg_match('#^https?://#i', $configuredPath)) {
-        return $resolvedLogo;
-    }
-    $urlPath = rawurldecode((string) parse_url($configuredPath, PHP_URL_PATH));
-    $assetsPosition = stripos($urlPath, '/assets/');
-    if ($assetsPosition === false) {
-        return $resolvedLogo;
-    }
-    $localLogo = pd_logo_src(ltrim(substr($urlPath, $assetsPosition + 1), '/'));
-    return $localLogo !== '' ? $localLogo : $resolvedLogo;
-}
 $documentNumberStmt=$pdo->prepare('SELECT document_number FROM erp_document_catalog WHERE code = ? AND is_active = 1 LIMIT 1');$documentNumberStmt->execute(['production_dossier']);$productionDossierDocumentNumber=trim((string)$documentNumberStmt->fetchColumn())?:'DOC-PRD-001';
-$productionCompanyName=trim((string)app_setting($pdo,'company_name','TISSER'))?:'TISSER';$productionCompanyAddress=trim((string)app_setting($pdo,'company_address',''));$configuredReportLogo=(string)app_setting($pdo,'logo_report_dark','');$productionCompanyLogo=pd_logo_src($configuredReportLogo);$productionCompanyPdfLogo=pd_pdf_logo_src($configuredReportLogo,$productionCompanyLogo);$productionCompanyContacts=array_filter([trim((string)app_setting($pdo,'company_phone','')),trim((string)app_setting($pdo,'company_email',''))]);
+$productionCompanyName=trim((string)app_setting($pdo,'company_name','TISSER'))?:'TISSER';$productionCompanyAddress=trim((string)app_setting($pdo,'company_address',''));$productionCompanyLogo=pd_logo_src((string)app_setting($pdo,'logo_report_dark',''));$productionCompanyContacts=array_filter([trim((string)app_setting($pdo,'company_phone','')),trim((string)app_setting($pdo,'company_email',''))]);
 $productionOrderFrontColors=pd_order_colors($s['of_front_colors']??'');$productionOrderBackColors=pd_order_colors($s['of_back_colors']??'');$cr=(array)($d['closeReport']??[]);
 $statusClass=['Planeada'=>'primary','Libertada'=>'info','Em produção'=>'warning','Suspensa'=>'secondary','Fechada'=>'success','Cancelada'=>'danger'][$o['status']]??'light';
 $mainDocument=ArticleDocument::mainArtwork((array)($s['_documents']??[]));
 $mainDocumentThumbnail='';if($mainDocument){$path=ArticleDocument::absolutePath(__DIR__,(string)($mainDocument['file_url']??''));if($path!=='')$mainDocumentThumbnail='data:image/jpeg;base64,'.base64_encode(ArticleDocument::thumbnail($path));}
 if(($_GET['format']??'')==='pdf'){
-    $filename='OF-'.preg_replace('/[^A-Za-z0-9._-]/','-',(string)$o['order_number']).'.pdf';
-    $pdfOutput='';
-    if(class_exists('Mpdf\\Mpdf')){
-        $pdfBufferLevel=ob_get_level();
-        try{ob_start();include __DIR__.'/production_dossier_print.php';$html=(string)ob_get_clean();$pdf=new Mpdf\Mpdf(['format'=>'A4','margin_left'=>0,'margin_right'=>0,'margin_top'=>0,'margin_bottom'=>0]);$pdf->WriteHTML($html);$pdfOutput=$pdf->Output($filename,'S');}
-        catch(Throwable $e){while(ob_get_level()>$pdfBufferLevel)ob_end_clean();error_log('Falha ao gerar PDF mPDF da OF '.$id.': '.$e->getMessage());}
-    }
-    if($pdfOutput==='')$pdfOutput=ProductionDossierPdf::render($d,$mainDocumentThumbnail,$productionDossierDocumentNumber,$productionCompanyLogo,$productionCompanyName);
-    header('Content-Type: application/pdf');header('Content-Disposition: inline; filename="'.$filename.'"');header('Content-Length: '.strlen($pdfOutput));echo $pdfOutput;exit;
+    // Tal como a Ficha Técnica, a Folha de Acompanhamento é entregue ao
+    // browser como HTML A4. O browser imprime a mesma data URI já validada,
+    // sem passar por um segundo renderer de imagens.
+    include __DIR__.'/production_dossier_print.php';
+    exit;
 }
 $pageTitle='Dossier de Produção · OF '.$o['order_number'];require __DIR__.'/partials/header.php';
 ?>
