@@ -492,6 +492,7 @@ Quando configurado, a necessidade é reservada por ordem dos saldos disponíveis
 - Validação de checklist operacional.
 - Iniciar, pausar, retomar e terminar operação.
 - Registar tempos, máquina, quantidade boa/rejeitada, desperdício, paragens e consumos.
+- A produtividade compara o ritmo real com o ritmo planeado para o mesmo intervalo: `(quantidade OK × minutos previstos) ÷ (quantidade da OF × minutos realizados) × 100`, com apresentação limitada a 200%. Nas operações em curso, os minutos realizados e a percentagem são atualizados continuamente; o tempo de pausa não é contabilizado.
 - Comunicados internos com publicação, confirmação de leitura, ativação e eliminação.
 - No mesmo portal: ponto, pausas, ausências, justificações e férias.
 

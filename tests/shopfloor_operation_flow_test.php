@@ -33,6 +33,8 @@ operation_flow_check(strpos($shopfloor, 'data-auto-show-checklist') !== false, '
 operation_flow_check(strpos($shopfloor, 'Validar checklist e continuar') !== false, 'A pop-up não permite validar a checklist e continuar.');
 operation_flow_check(strpos($shopfloor, 'data-productivity-quantity') !== false, 'A quantidade produzida não alimenta o indicador de produtividade.');
 operation_flow_check(strpos($shopfloor, 'data-productivity-value') !== false, 'Falta o indicador previsto/real de produtividade.');
+operation_flow_check(strpos($shopfloor, 'shopfloor_productivity_percentage') !== false && strpos($shopfloor, 'Math.min(200, (quantity * plannedMinutes) / (plannedQuantity * actualMinutes) * 100)') !== false, 'A produtividade não compara a quantidade produzida com o intervalo de tempo realizado ou não respeita o limite de 200%.');
+operation_flow_check(strpos($shopfloor, 'data-planned-minutes') !== false && strpos($shopfloor, 'data-actual-minutes') !== false, 'O indicador de produtividade não recebe os tempos previsto e realizado.');
 operation_flow_check(strpos($shopfloor, "percentage >= 100") !== false && strpos($shopfloor, "percentage >= 90 && percentage < 100") !== false && strpos($shopfloor, "percentage >= 80 && percentage < 90") !== false && strpos($shopfloor, "percentage < 80") !== false, 'As cores da produtividade não respeitam os intervalos definidos.');
 operation_flow_check(strpos($shopfloor, 'OK /') !== false && strpos($shopfloor, 'NOK /') !== false && strpos($shopfloor, ' OF') !== false, 'O detalhe da produtividade não apresenta OK, NOK e OF.');
 operation_flow_check(strpos($shopfloor, 'placeholder="NOK"') !== false && strpos($shopfloor, 'placeholder="Motivo NOK"') !== false, 'A recolha ainda utiliza terminologia antiga em vez de NOK.');
