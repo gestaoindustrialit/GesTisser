@@ -18,6 +18,8 @@ operation_flow_check(strpos($shopfloor, 'Esta operação precisa de uma máquina
 operation_flow_check(strpos($shopfloor, 'Indique a quantidade produzida antes de concluir a operação.') === false, 'A conclusão ainda exige quantidade superior a zero.');
 operation_flow_check(strpos($shopfloor, 'COALESCE(te.quantity_good, 0) + COALESCE(te.quantity_rejected, 0)') !== false, 'A quantidade anterior deixa de ser reconhecida quando uma das parcelas é nula.');
 operation_flow_check(strpos($shopfloor, "['requires_good_quantity']") !== false, 'A configuração de recolha de quantidade da operação não é respeitada.');
+operation_flow_check(strpos($shopfloor, 'COALESCE(opo.requires_good_quantity,op.requires_good_quantity) requires_good_quantity') !== false, 'A configuração de quantidades específica do artigo não prevalece no Shopfloor.');
+operation_flow_check(strpos((string) file_get_contents(__DIR__ . '/../erp_routing.php'), 'name="requires_good_quantity"') !== false, 'O routing do artigo não permite configurar se a operação recolhe quantidades.');
 operation_flow_check(strpos($shopfloor, "'100%'") !== false && strpos($shopfloor, 'shopfloor_format_quantity') !== false, 'O estado concluído não apresenta quantidade ou percentagem.');
 operation_flow_check(strpos($shopfloor, '$allowedMachineIds[0]') !== false, 'O arranque não recupera uma máquina autorizada quando não existe máquina principal.');
 operation_flow_check(strpos($shopfloor, 'Já existe uma operação em curso.') !== false, 'O colaborador pode arrancar duas operações em simultâneo.');
