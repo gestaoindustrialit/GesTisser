@@ -81,10 +81,15 @@ if (!function_exists('shopfloor_operation_can_run_at_work_center')) {
         if ($workCenterId <= 0) {
             return false;
         }
+        $allowedWorkCenterIds = json_decode((string) ($operation['allowed_work_center_ids_json'] ?? '[]'), true);
+        if (is_array($allowedWorkCenterIds) && in_array($workCenterId, array_map('intval', $allowedWorkCenterIds), true)) {
+            return true;
+        }
+        // Backward compatibility for OFs released before multiple start stations.
         if ((int) ($operation['work_center_id'] ?? 0) === $workCenterId) {
             return true;
         }
-        if ($workCenterMachineId <= 0) {
+        if ($workCenterMachineId <= 0 || (int) ($operation['machine_required'] ?? 1) !== 1) {
             return false;
         }
         $allowedMachineIds = json_decode((string) ($operation['allowed_machine_ids_json'] ?? '[]'), true);
@@ -230,7 +235,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 : (int)($operation['primary_machine_id']??0);
         }
         $allowed=json_decode((string)($operation['allowed_machine_ids_json']??'[]'),true)?:[];
-        $labourTimeOnly = (int) ($operation['labour_time_only'] ?? 0) === 1;
+        $machineRequired = (int) ($operation['machine_required'] ?? 1) === 1;
+        $labourTimeOnly = !$machineRequired || (int) ($operation['labour_time_only'] ?? 0) === 1;
         if ($labourTimeOnly) { $machineId = 0; }
         $blockedStmt=$pdo->prepare('SELECT COUNT(*) FROM erp_routing_step_dependencies d JOIN erp_production_order_operations predecessor ON predecessor.routing_step_id=d.predecessor_step_id WHERE d.routing_step_id=? AND predecessor.production_order_id=? AND predecessor.status<>"Concluída"');$blockedStmt->execute([(int)($operation['routing_step_id']??0),(int)($operation['production_order_id']??0)]);
         $pendingDocsStmt = $pdo->prepare('SELECT COUNT(*) FROM erp_production_order_documents d JOIN erp_production_order_operations opo ON opo.production_order_id = d.production_order_id WHERE opo.id = ? AND d.is_required = 1 AND NOT EXISTS (SELECT 1 FROM erp_production_order_document_acknowledgements a WHERE a.document_id = d.id AND a.user_id = ?)');
@@ -247,6 +253,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $flashError = 'Selecione primeiro o centro de trabalho deste dispositivo.';
         } elseif (!$canRunAtSelectedWorkCenter) {
             $flashError = 'Esta operação só pode ser acompanhada neste centro de trabalho; não pode ser arrancada aqui.';
+        } elseif ($machineRequired && $machineId <= 0) {
+            $flashError = 'Esta operação precisa de uma máquina para ser iniciada.';
         } elseif ($machineId && !in_array($machineId,array_map('intval',$allowed),true)) {
             $flashError = 'A máquina selecionada não está autorizada para esta operação.';
         } elseif ((int)$blockedStmt->fetchColumn()>0 && empty($operation['parallel_allowed'])) {
@@ -979,7 +987,8 @@ $formattedHourBank = sprintf('%s%02dh%02dm', $displayedHourBankMinutes < 0 ? '-'
 $ofSql = 'SELECT o.id, o.order_number, o.product_id, fp.id AS finished_product_id, o.planned_quantity, o.status, COALESCE(fp.code,p.code) AS product_code, COALESCE(fp.description,p.description) AS product_description FROM erp_production_orders o JOIN erp_products p ON p.id = o.product_id LEFT JOIN erp_finished_products fp ON fp.id=o.finished_product_id OR (o.finished_product_id IS NULL AND fp.code=p.code) WHERE o.status IN ("Planeada", "Em curso")';
 $ofParams = [];
 if ($selectedWorkCenterId > 0) {
-    $ofSql .= ' AND EXISTS (SELECT 1 FROM erp_production_order_operations center_op WHERE center_op.production_order_id = o.id AND (center_op.work_center_id = ? OR (? > 0 AND EXISTS (SELECT 1 FROM json_each(CASE WHEN json_valid(center_op.allowed_machine_ids_json) THEN center_op.allowed_machine_ids_json ELSE "[]" END) allowed_machine WHERE CAST(allowed_machine.value AS INTEGER) = ?))))';
+    $ofSql .= ' AND EXISTS (SELECT 1 FROM erp_production_order_operations center_op WHERE center_op.production_order_id = o.id AND (center_op.work_center_id = ? OR EXISTS (SELECT 1 FROM json_each(CASE WHEN json_valid(center_op.allowed_work_center_ids_json) THEN center_op.allowed_work_center_ids_json ELSE "[]" END) allowed_center WHERE CAST(allowed_center.value AS INTEGER) = ?) OR (? > 0 AND center_op.machine_required = 1 AND EXISTS (SELECT 1 FROM json_each(CASE WHEN json_valid(center_op.allowed_machine_ids_json) THEN center_op.allowed_machine_ids_json ELSE "[]" END) allowed_machine WHERE CAST(allowed_machine.value AS INTEGER) = ?))))';
+    $ofParams[] = $selectedWorkCenterId;
     $ofParams[] = $selectedWorkCenterId;
     $ofParams[] = $selectedWorkCenterMachineId;
     $ofParams[] = $selectedWorkCenterMachineId;
