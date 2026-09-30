@@ -13,18 +13,19 @@ $pdf = ProductionDossierPdf::render([
     'order' => ['order_number' => 'OF-7', 'customer_name' => 'Cliente', 'article_code' => 'ART-1', 'planned_quantity' => 100, 'status' => 'Planeada'],
     'snapshot' => ['description' => 'Saco de teste', 'material' => 'Ráfia'],
     'metrics' => ['good' => 90, 'rejected' => 2],
-    'operations' => array_map(function ($number) { return ['sequence_no' => $number * 10, 'name' => 'Operacao ' . $number, 'status' => 'Planeada']; }, range(1, 6)),
+    'operations' => array_map(function ($number) { return ['sequence_no' => $number * 10, 'name' => 'Operacao ' . $number, 'status' => 'Planeada', 'planned_consumptions' => $number === 1 ? [['code' => 'MP-01', 'required_qty' => 12.5, 'unit_code' => 'kg']] : []]; }, range(1, 6)),
 ], $jpeg === '' ? '' : 'data:image/jpeg;base64,' . base64_encode($jpeg), 'DOC-TEST-009');
 if (strpos($pdf, 'DOC-TEST-009') === false) throw new RuntimeException('Código documental em falta no PDF de fallback.');
 if (strpos($pdf, '%PDF-1.4') !== 0 || strpos($pdf, 'xref') === false || strpos($pdf, 'OF-7') === false) {
     throw new RuntimeException('O fallback não produziu um PDF válido do dossier.');
 }
 if ($jpeg !== '' && strpos($pdf, '/Subtype /Image') === false) throw new RuntimeException('A imagem do artigo não foi incorporada no PDF da OF.');
-if (strpos($pdf, 'FOLHA DE ACOMPANHAMENTO') === false || strpos($pdf, 'REGISTO DE PRODUCAO') === false || strpos($pdf, 'Operacao 6') === false) throw new RuntimeException('O PDF não tem a estrutura gráfica da folha de acompanhamento.');
+if (strpos($pdf, 'FOLHA DE ACOMPANHAMENTO') === false || strpos($pdf, 'OPERACOES') === false || strpos($pdf, 'Operacao 6') === false) throw new RuntimeException('O PDF não tem a estrutura gráfica da folha de acompanhamento.');
 foreach (['QUANTIDADE BOA', 'DESPERDICIO', 'EFICIENCIA'] as $removedMetric) {
     if (strpos($pdf, $removedMetric) !== false) throw new RuntimeException('A métrica removida ainda aparece no PDF: ' . $removedMetric);
 }
 if (strpos($pdfSource, 'barcode128') === false) throw new RuntimeException('O fallback não inclui o código de barras da OF.');
+if (strpos($pdf, 'MP-01 12.5 kg') === false) throw new RuntimeException('O fallback não apresenta o consumo previsto da operação.');
 $pngPath=__DIR__.'/../docs/mapper-reference/ui/assets/logo-tisser-blue.png';
 $pngLogo='data:image/png;base64,'.base64_encode((string)file_get_contents($pngPath));
 $pngPdf=ProductionDossierPdf::render(['order'=>['order_number'=>'PNG-1'],'snapshot'=>[],'operations'=>[]],'','DOC-PNG-001',$pngLogo);
@@ -48,13 +49,13 @@ $print = (string) file_get_contents(__DIR__ . '/../production_dossier_print.php'
 $sheet = (string) file_get_contents(__DIR__ . '/../erp_technical_sheet.php');
 if (strpos($pdfSource, "157, 811, 16, 'FOLHA DE ACOMPANHAMENTO'") === false) throw new RuntimeException('O título do fallback pode sobrepor-se ao logótipo.');
 if (strpos($pdfSource, 'self::text($content,$x+7,$y+5,9,$title') === false) throw new RuntimeException('Os títulos do fallback não estão alinhados à esquerda.');
-foreach (['CARACTERISTICAS DO SACO', 'proof_reference', "['SEQ.','OPERACAO','MAQUINA']"] as $requiredPrintField) {
+foreach (['CARACTERISTICAS DO SACO', "['Furos','has_holes']", 'proof_reference', "['SEQ.','OPERACAO','MAQUINA','CONSUMOS PREVISTOS']"] as $requiredPrintField) {
     if (strpos($pdfSource, $requiredPrintField) === false) throw new RuntimeException('Campo em falta no fallback: ' . $requiredPrintField);
 }
 if (strpos($dossier, "include __DIR__.'/production_dossier_print.php'") === false) throw new RuntimeException('A Folha de Acompanhamento não reutiliza diretamente o template HTML imprimível.');
 if (strpos($print, 'class="print-actions"') === false || strpos($print, 'onclick="window.print()"') === false) throw new RuntimeException('A vista imprimível não apresenta a ação de imprimir/guardar PDF.');
 if (strpos($print, "window.addEventListener('load'") !== false) throw new RuntimeException('A vista imprimível abre a impressão antes de o utilizador a rever.');
-foreach (['Folha de Acompanhamento', 'Dados principais da encomenda', 'Identificação do cliente e do artigo', 'Maqueta do artigo / Referência visual', 'Registo de produção', 'Observações'] as $section) {
+foreach (['Folha de Acompanhamento', 'Dados principais da encomenda', 'Identificação do cliente e do artigo', 'Maqueta do artigo / Referência visual', 'Operações', 'Consumos previstos', 'Observações'] as $section) {
     if (strpos($print, $section) === false) throw new RuntimeException('Secção em falta na folha de acompanhamento: ' . $section);
 }
 if (strpos($print, '$productionOrderFrontColors') === false || strpos($print, '$productionOrderBackColors') === false) throw new RuntimeException('A folha não usa as cores próprias da OF.');

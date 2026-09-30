@@ -3,7 +3,7 @@ $printSource=(string)file_get_contents(__DIR__.'/../production_dossier_print.php
 $controllerSource=(string)file_get_contents(__DIR__.'/../production_dossier.php');
 $pdfSource=(string)file_get_contents(__DIR__.'/../app/Services/ProductionDossierPdf.php');
 function production_dossier_layout_check($condition,$message){if(!$condition)throw new RuntimeException($message);}
-foreach(['Dados principais da encomenda','Identificação do cliente e do artigo','Maqueta do artigo / Referência visual','Registo de produção','Observações']as$title)production_dossier_layout_check(stripos($printSource,$title)!==false,'Secção em falta: '.$title);
+foreach(['Dados principais da encomenda','Identificação do cliente e do artigo','Maqueta do artigo / Referência visual','Operações','Consumos previstos','Observações']as$title)production_dossier_layout_check(stripos($printSource,$title)!==false,'Secção em falta: '.$title);
 production_dossier_layout_check(strpos($printSource,'@page{size:A4 portrait;margin:0}')!==false,'A impressão não está configurada para A4 vertical.');
 production_dossier_layout_check(strpos($printSource,'class="print-page"')!==false&&strpos($printSource,'.print-page{position:relative;width:210mm;height:297mm')!==false,'A pré-visualização não apresenta uma folha A4 centrada.');
 production_dossier_layout_check(strpos($printSource,'class="print-actions"')!==false&&strpos($printSource,'onclick="window.print()"')!==false,'A pré-visualização não tem a ação de imprimir/guardar PDF.');
@@ -29,14 +29,15 @@ production_dossier_layout_check(strpos($printSource,'.notes{min-height:9mm;paddi
 production_dossier_layout_check(strpos($pdfSource,'array_slice($operations,0,6)')!==false,'O fallback não lista as seis operações do routing.');
 production_dossier_layout_check(strpos($printSource,'<?=h($productionCompanyName)?>')!==false,'O cabeçalho não usa os dados da empresa.');
 $serviceSource=(string)file_get_contents(__DIR__.'/../production_dossier_service.php');
+production_dossier_layout_check(strpos($serviceSource,"operation['planned_consumptions']")!==false,'Os consumos previstos não são associados às operações.');
 production_dossier_layout_check(strpos($serviceSource,'article_of_front_colors')!==false,'As cores de OF não têm fallback para snapshots antigos.');
 foreach (['proof_reference', 'pallet_quantity', 'pallet_weight', 'printer_roll_measure', 'of_front_colors', 'of_back_colors'] as $articleFallbackField) production_dossier_layout_check(strpos($serviceSource, "['proof_reference', 'pallet_quantity', 'pallet_weight', 'printer_roll_measure', 'of_front_colors', 'of_back_colors']")!==false&&strpos($serviceSource, "\$order['article_' . \$articleField]")!==false,'Fallback do artigo em falta: '.$articleFallbackField);
 production_dossier_layout_check(strpos($printSource,'.section-title{font-size:9pt;text-align:left')!==false,'Os títulos das secções não estão alinhados à esquerda.');
-production_dossier_layout_check(strpos($printSource,'Características do saco')!==false&&strpos($printSource,"'centered_gusset'=>'Fole centrado'")!==false,'As características Sim/Não do saco estão incompletas.');
+production_dossier_layout_check(strpos($printSource,'Características do saco')!==false&&strpos($printSource,"'centered_gusset'=>'Fole centrado'")!==false&&strpos($printSource,"'has_holes'=>'Furos'")!==false,'As características Sim/Não do saco estão incompletas.');
 production_dossier_layout_check(strpos($printSource,"$"."key==='has_gusset'&&$"."enabled")!==false&&strpos($printSource,'$gussetLength')!==false,'A medida do fole não aparece junto ao fole ativo.');
 production_dossier_layout_check(strpos($printSource,'Sacos por palete')!==false&&strpos($printSource,'Peso teórico da palete')!==false,'Os dados teóricos da palete não aparecem na folha.');
 production_dossier_layout_check(strpos($pdfSource,"$"."snapshot['pallet_quantity']")!==false&&strpos($pdfSource,"$"."snapshot['pallet_weight']")!==false,'O fallback não apresenta os dados da palete.');
 production_dossier_layout_check(strpos($printSource,"$"."s['proof_reference']")!==false,'A referência de prova não aparece antes da impressão.');
 production_dossier_layout_check(strpos($printSource,'<th class="status">Estado</th>')===false&&strpos($printSource,"$"."op['status']")===false,'O estado ainda aparece na tabela de operações.');
-production_dossier_layout_check(strpos($pdfSource,"['SEQ.','OPERACAO','MAQUINA']")!==false&&strpos($pdfSource,"$"."operation['status']")===false,'O fallback ainda apresenta o estado das operações.');
+production_dossier_layout_check(strpos($pdfSource,"['SEQ.','OPERACAO','MAQUINA','CONSUMOS PREVISTOS']")!==false&&strpos($pdfSource,"$"."operation['status']")===false,'O fallback ainda apresenta o estado das operações.');
 echo "production_dossier_print_layout_test: OK\n";

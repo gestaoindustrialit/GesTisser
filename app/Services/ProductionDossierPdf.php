@@ -55,7 +55,7 @@ final class ProductionDossierPdf
 
         self::text($content,35,538,7,'CARACTERISTICAS DO SACO',true,[.32,.38,.39]);
         $featureX=28; $featureWidth=539/7;
-        foreach ([['Microperfuracao','microperforation'],['Asa','has_handle'],['Furo','has_holes'],['Fole','has_gusset'],['Fole centrado','centered_gusset']] as $feature) {
+        foreach ([['Microperfuracao','microperforation'],['Asa','has_handle'],['Furos','has_holes'],['Fole','has_gusset'],['Fole centrado','centered_gusset']] as $feature) {
             $detail = $feature[1] === 'has_gusset' && !empty($snapshot[$feature[1]]) ? $value($snapshot['gusset_length'] ?? '') : '';
             self::featureCell($content,$featureX,506,$featureWidth,26,$feature[0],!empty($snapshot[$feature[1]]),$detail);
             $featureX += $featureWidth;
@@ -84,14 +84,15 @@ final class ProductionDossierPdf
         self::text($content,394,314,9,'ROLO IMPRESSOR',true);
         self::text($content,394,296,9,$roll);
 
-        self::sectionBar($content,28,244,539,18,'REGISTO DE PRODUCAO');
-        self::tableHeader($content,28,224,[48,270,221],['SEQ.','OPERACAO','MAQUINA']);
+        self::sectionBar($content,28,244,539,18,'OPERACOES');
+        self::tableHeader($content,28,224,[42,190,135,172],['SEQ.','OPERACAO','MAQUINA','CONSUMOS PREVISTOS']);
         $rowY=200;
         foreach (array_slice($operations,0,6) as $operation) {
-            self::tableRow($content,28,$rowY,[48,270,221],[(string)($operation['sequence_no']??$dash),self::shorten($value($operation['name']??''),42),self::shorten($value($operation['machine_name']??''),34)]);
+            $plannedRows=[];foreach((array)($operation['planned_consumptions']??[])as$consumption)$plannedRows[]=trim((string)($consumption['code']??'').' '.self::number($consumption['required_qty']??0,3).' '.(string)($consumption['unit_code']??''));
+            self::tableRow($content,28,$rowY,[42,190,135,172],[(string)($operation['sequence_no']??$dash),self::shorten($value($operation['name']??''),29),self::shorten($value($operation['machine_name']??''),19),self::shorten($plannedRows?implode(', ',$plannedRows):$dash,25)]);
             $rowY-=20;
         }
-        if (!$operations) { self::tableRow($content,28,$rowY,[48,270,221],[$dash,$dash,$dash]); $rowY-=20; }
+        if (!$operations) { self::tableRow($content,28,$rowY,[42,190,135,172],[$dash,$dash,$dash,$dash]); $rowY-=20; }
 
         $notesTop = min(190, $rowY - 8);
         self::sectionBar($content,28,$notesTop,539,18,'OBSERVACOES');
@@ -167,6 +168,9 @@ final class ProductionDossierPdf
     {
         foreach ($values as $index => $value) { self::text($content, $x + 7, $y, $size, (string) $value, $bold); $x += $widths[$index]; }
     }
+
+    private static function number($value, int $decimals): string
+    { return rtrim(rtrim(number_format((float)$value,$decimals,'.',''),'0'),'.'); }
 
     private static function text(string &$content, float $x, float $y, int $size, string $value, bool $bold = false, array $colour = [0.09, .15, .12], bool $right = false)
     {
