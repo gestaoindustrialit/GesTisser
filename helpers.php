@@ -1641,6 +1641,35 @@ function taskforce_store_generated_pdf_on_server(string $pdfContent, string $fil
     ];
 }
 
+/**
+ * Resolve o logotipo configurado nos detalhes da empresa para os documentos de RH.
+ *
+ * Mantém URLs remotos intactos e incorpora ficheiros locais, tal como a ficha
+ * técnica do ERP. Assim, o motor HTML não depende de conseguir aceder à própria
+ * aplicação através do URL público para desenhar o cabeçalho.
+ */
+function taskforce_company_report_logo_src(string $configuredPath): string
+{
+    $configuredPath = trim($configuredPath);
+    if ($configuredPath === '') {
+        return '';
+    }
+    if (preg_match('#^https?://#i', $configuredPath)) {
+        return $configuredPath;
+    }
+
+    $absolutePath = __DIR__ . '/' . ltrim($configuredPath, '/');
+    if (!is_file($absolutePath)) {
+        return '';
+    }
+
+    $extension = strtolower((string) pathinfo($absolutePath, PATHINFO_EXTENSION));
+    $mimeTypes = ['png' => 'image/png', 'jpg' => 'image/jpeg', 'jpeg' => 'image/jpeg', 'webp' => 'image/webp', 'svg' => 'image/svg+xml'];
+    $contents = file_get_contents($absolutePath);
+
+    return $contents === false ? '' : 'data:' . ($mimeTypes[$extension] ?? 'application/octet-stream') . ';base64,' . base64_encode($contents);
+}
+
 function taskforce_generate_monthly_attendance_report(PDO $pdo, array $user, DateTimeImmutable $referenceDate): array
 {
     $periodStart = $referenceDate->modify('first day of this month')->setTime(0, 0, 0);
@@ -1873,10 +1902,7 @@ function taskforce_generate_monthly_attendance_report(PDO $pdo, array $user, Dat
     // Reutilizar o logótipo configurado para relatórios, que é também o que
     // acompanha o conteúdo HTML enviado por email.
     $logoPath = app_setting($pdo, 'logo_report_dark', '');
-    $logoUrl = '';
-    if ($logoPath !== '') {
-        $logoUrl = app_base_url() . '/' . ltrim($logoPath, '/');
-    }
+    $logoRenderSrc = taskforce_company_report_logo_src((string) $logoPath);
     $logoFilePath = '';
     if ($logoPath !== '') {
         $urlPath = parse_url($logoPath, PHP_URL_PATH);
@@ -1890,7 +1916,6 @@ function taskforce_generate_monthly_attendance_report(PDO $pdo, array $user, Dat
             if (is_file($candidatePath)) { $logoFilePath = $candidatePath; break; }
         }
     }
-    $logoRenderSrc = $logoUrl;
     if ($logoFilePath !== '') {
         $embeddedLogo = taskforce_pdf_image_data_uri($logoFilePath);
         if ($embeddedLogo !== '') {

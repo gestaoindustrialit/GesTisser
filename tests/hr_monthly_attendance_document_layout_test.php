@@ -28,4 +28,16 @@ monthly_document_assert(strpos($pdf, 'Empresa Teste') !== false, 'O cabeçalho/r
 monthly_document_assert(strpos($pdf, 'Rua Industrial, 123') !== false, 'O cabeçalho deve apresentar a morada da empresa.');
 monthly_document_assert(strpos($pdf, 'empresa@example.test') !== false, 'O cabeçalho deve apresentar os contactos da empresa.');
 
+$logoFixture = __DIR__ . '/.monthly-attendance-logo.png';
+file_put_contents($logoFixture, 'company-logo');
+try {
+    $logoSource = taskforce_company_report_logo_src('tests/.monthly-attendance-logo.png');
+    monthly_document_assert(strpos($logoSource, 'data:image/png;base64,') === 0, 'O logótipo local dos detalhes da empresa deve ser incorporado no documento.');
+    monthly_document_assert(base64_decode(substr($logoSource, strlen('data:image/png;base64,')), true) === 'company-logo', 'O conteúdo incorporado do logótipo deve corresponder ao ficheiro configurado.');
+} finally {
+    @unlink($logoFixture);
+}
+monthly_document_assert(taskforce_company_report_logo_src('https://example.test/logo.svg') === 'https://example.test/logo.svg', 'Os URLs de logótipo devem ser preservados como na ficha técnica.');
+monthly_document_assert(taskforce_company_report_logo_src('tests/logo-inexistente.png') === '', 'Um caminho de logótipo inexistente não deve ser apresentado.');
+
 echo "Monthly attendance document layout tests passed.\n";
