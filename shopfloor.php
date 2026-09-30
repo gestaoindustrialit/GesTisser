@@ -1169,6 +1169,8 @@ require __DIR__ . '/partials/header.php';
                 <div class="d-flex flex-wrap gap-2" aria-label="Etiquetas de acerto e reimpressão">
                     <button type="button" class="btn btn-warning btn-sm fw-semibold" data-bs-toggle="modal" data-bs-target="#productionLabelModal-roll"><i class="bi bi-upc-scan me-1" aria-hidden="true"></i>Etiqueta de rolo</button>
                     <button type="button" class="btn btn-info btn-sm fw-semibold" data-bs-toggle="modal" data-bs-target="#productionLabelModal-ink"><i class="bi bi-droplet-fill me-1" aria-hidden="true"></i>Etiqueta de tinta</button>
+                    <button type="button" class="btn btn-dark btn-sm fw-semibold" data-bs-toggle="modal" data-bs-target="#shopfloorCalculatorModal"><i class="bi bi-calculator me-1" aria-hidden="true"></i>Calculadora</button>
+                    <?php if ($articleArtwork): ?><button type="button" class="btn btn-outline-primary btn-sm fw-semibold" data-bs-toggle="modal" data-bs-target="#articleArtworkModal"><i class="bi bi-image me-1" aria-hidden="true"></i>Previsualizar maquete</button><?php else: ?><button type="button" class="btn btn-outline-secondary btn-sm" disabled title="Este artigo não tem uma maquete definida"><i class="bi bi-image me-1" aria-hidden="true"></i>Sem maquete</button><?php endif; ?>
                 </div>
             </div>
             <h3 class="h6">Documentos obrigatórios</h3>
