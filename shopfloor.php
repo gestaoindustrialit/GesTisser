@@ -85,7 +85,7 @@ if (!function_exists('shopfloor_productivity_percentage')) {
      * A value of 100 means that the quantity produced in the elapsed interval
      * is exactly the quantity expected for that same interval.
      */
-    function shopfloor_productivity_percentage(float $goodQuantity, float $plannedQuantity, float $actualMinutes, float $plannedMinutes): ?float
+    function shopfloor_productivity_percentage(float $goodQuantity, float $plannedQuantity, float $actualMinutes, float $plannedMinutes)
     {
         if ($plannedQuantity <= 0 || $actualMinutes <= 0 || $plannedMinutes <= 0) {
             return null;
