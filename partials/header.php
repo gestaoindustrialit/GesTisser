@@ -308,6 +308,16 @@ header('Content-Type: text/html; charset=UTF-8');
                     <button type="button" class="btn btn-sm btn-info fw-semibold" data-bs-toggle="modal" data-bs-target="#productionLabelModal-ink">
                         <i class="bi bi-droplet-fill" aria-hidden="true"></i><span class="d-none d-lg-inline"> Etiqueta de tinta</span>
                     </button>
+                    <?php if ($currentFile === 'shopfloor.php'): ?>
+                        <button type="button" class="btn btn-sm btn-dark fw-semibold" data-bs-toggle="modal" data-bs-target="#shopfloorCalculatorModal">
+                            <i class="bi bi-calculator" aria-hidden="true"></i><span class="d-none d-lg-inline"> Calculadora</span>
+                        </button>
+                        <?php if (!empty($articleArtwork)): ?>
+                            <button type="button" class="btn btn-sm btn-outline-primary fw-semibold" data-bs-toggle="modal" data-bs-target="#articleArtworkModal">
+                                <i class="bi bi-image" aria-hidden="true"></i><span class="d-none d-lg-inline"> Previsualizar maquete</span>
+                            </button>
+                        <?php endif; ?>
+                    <?php endif; ?>
                 </div>
             <?php endif; ?>
             <div class="gt-top-actions">
