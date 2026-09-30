@@ -1084,20 +1084,19 @@ function taskforce_generate_monthly_native_pdf(array $reportData): string
     }
     $content .= $text(465, 774, 'Data: ' . date('d/m/Y'), 7, 'F2');
     $content .= "0.12 0.13 0.14 RG 1.2 w 30 758 m 565 758 l S\n";
-    $content .= $text(30, 720, 'Mapa mensal de picagens', 19, 'F2');
-    $content .= $text(30, 700, (string) ($reportData['month'] ?? ''), 10, 'F2', '0.176 0.412 0.631');
-    $content .= $text(30, 680, 'Colaborador', 7, 'F2', '0.42 0.45 0.44');
-    $content .= $text(30, 665, (string) ($reportData['employee'] ?? '-'), 10, 'F2');
-    $content .= $text(260, 680, 'PERIODO', 7, 'F2', '0.42 0.45 0.44');
-    $content .= $text(260, 665, (string) ($reportData['period'] ?? '-'), 9, 'F1');
-    $content .= $text(430, 680, 'NUMERO / DEPARTAMENTO', 7, 'F2', '0.42 0.45 0.44');
-    $content .= $text(430, 665, trim((string) ($reportData['user_number'] ?? '-') . '  /  ' . (string) ($reportData['department'] ?? '-')), 8, 'F1');
+    $content .= $text(30, 720, (string) ($reportData['month'] ?? ''), 13, 'F2');
+    $content .= $text(30, 692, 'Colaborador', 7, 'F2', '0.42 0.45 0.44');
+    $content .= $text(30, 677, (string) ($reportData['employee'] ?? '-'), 10, 'F2');
+    $content .= $text(260, 692, 'PERIODO', 7, 'F2', '0.42 0.45 0.44');
+    $content .= $text(260, 677, (string) ($reportData['period'] ?? '-'), 9, 'F1');
+    $content .= $text(430, 692, 'NUMERO / DEPARTAMENTO', 7, 'F2', '0.42 0.45 0.44');
+    $content .= $text(430, 677, trim((string) ($reportData['user_number'] ?? '-') . '  /  ' . (string) ($reportData['department'] ?? '-')), 8, 'F1');
 
     $columns = [
         ['Data', 30, 55, 12], ['Dia', 85, 28, 5], ['Tipo', 113, 52, 10],
         ['Picagens', 165, 220, 49], ['BH', 385, 42, 8], ['Justificacao', 427, 138, 27],
     ];
-    $tableTop = 635;
+    $tableTop = 647;
     $content .= "0.90 0.91 0.92 rg 30 {$tableTop} 535 20 re f\n";
     foreach ($columns as $column) {
         $content .= $text($column[1] + 5, $tableTop + 7, $column[0], 7, 'F2', '0.08 0.09 0.10');
@@ -1382,14 +1381,13 @@ function taskforce_generate_monthly_attendance_fpdf_pdf(array $reportData)
     $pdf->SetY($headerTop + 21); $pdf->SetDrawColor(160, 160, 160); $pdf->SetLineWidth(0.2);
     $pdf->SetTextColor(31, 41, 55);
 
-    $pdf->SetFont('Arial', 'B', 15);
-    $pdf->Cell(0, 8, $toPdfText('Mapa mensal de picagens'), 0, 1);
+    $pdf->SetFont('Arial', 'B', 12);
+    $pdf->Cell(0, 8, $toPdfText($month), 0, 1);
     $pdf->SetFont('Arial', '', 9.5);
     $pdf->Cell(0, 5.6, $toPdfText('Período: ' . $period), 0, 1);
     $pdf->Cell(0, 5.6, $toPdfText('Colaborador: ' . $employee), 0, 1);
     $pdf->Cell(0, 5.6, $toPdfText('Número: ' . ($userNumber !== '' ? $userNumber : '—')), 0, 1);
     $pdf->Cell(0, 5.6, $toPdfText('Departamento: ' . ($department !== '' ? $department : '—')), 0, 1);
-    $pdf->Cell(0, 5.6, $toPdfText('Mês de referência: ' . $month), 0, 1);
     $pdf->Ln(1.5);
 
     $headers = [
@@ -2021,7 +2019,7 @@ function taskforce_generate_monthly_attendance_report(PDO $pdo, array $user, Dat
         . '.logo{text-align:left;}'
         . '.pdf-header .logo img,.header .logo img{max-height:36px;max-width:220px;width:auto;height:auto;display:block;margin-right:auto;}'
         . 'h1{font-size:16px;margin:0 0 6px;font-weight:700;color:#212124;}'
-        . '.month-label{color:#2D69A1;font-size:11px;font-weight:700;margin:0 0 7px;}'
+        . '.month-label{color:#212124;font-size:12px;font-weight:700;margin:0 0 7px;}'
         . '.meta{margin:2px 0;}'
         . '.metric-grid{width:100%;border-collapse:separate;border-spacing:10px 0;margin:6px 0 14px;}'
         . '.metric-grid td{background:#f8fafc;border:1px solid #e5e7eb;border-radius:8px;padding:9px 10px;width:20%;}'
@@ -2041,13 +2039,12 @@ function taskforce_generate_monthly_attendance_report(PDO $pdo, array $user, Dat
         . ($companyPhone !== '' || $companyEmail !== '' ? '<div>' . h(implode(' · ', array_filter([$companyPhone !== '' ? 'Tel.: ' . $companyPhone : '', $companyEmail]))) . '</div>' : '')
         . '<div class="date">Data: ' . date('d/m/Y') . '</div></td></tr></table>'
         . '<table class="header" role="presentation"><tr>'
-        . '<td><h1>Mapa mensal de picagens</h1>'
-        . '<p class="month-label">' . h($reportMonthLabel) . '</p>'
+        . '<td><p class="month-label">' . h($reportMonthLabel) . '</p>'
         . '<p class="meta"><strong>Período:</strong> ' . h($periodStart->format('d/m/Y') . ' - ' . $periodEnd->format('d/m/Y')) . '</p>'
         . '<p class="meta"><strong>Colaborador:</strong> ' . h((string) ($user['name'] ?? '')) . '</p>'
         . '<p class="meta"><strong>Número:</strong> ' . h($userNumberLabel) . '</p>'
         . '<p class="meta"><strong>Departamento:</strong> ' . h($departmentLabel) . '</p>'
-        . '<p class="meta"><strong>Mês de referência:</strong> ' . h($reportMonthLabel) . '</p></td>'
+        . '</td>'
         . '<td></td>'
         . '</tr></table>'
         . '<table class="metric-grid" role="presentation"><tr>' . $summaryHtml . '</tr></table>'
@@ -2066,7 +2063,6 @@ function taskforce_generate_monthly_attendance_report(PDO $pdo, array $user, Dat
             'document_number' => $documentNumber,
             'logo_path' => $logoFilePath,
             'company_contacts' => $companyContacts,
-            'logo_path' => $logoFilePath,
             'period' => $periodStart->format('d/m/Y') . ' - ' . $periodEnd->format('d/m/Y'),
             'employee' => (string) ($user['name'] ?? ''),
             'user_number' => $userNumberLabel,
@@ -2080,7 +2076,6 @@ function taskforce_generate_monthly_attendance_report(PDO $pdo, array $user, Dat
                 'Saldo BH: ' . taskforce_format_minutes_signed($totalBhMinutes),
                 'Saldos Férias: ' . number_format($vacationBalance, 1, ',', '') . ' dias',
             ],
-            'logo_path' => $logoFilePath,
             'lines' => $lines,
         ]);
     }
@@ -2089,6 +2084,7 @@ function taskforce_generate_monthly_attendance_report(PDO $pdo, array $user, Dat
         $pdfContent = taskforce_generate_monthly_native_pdf([
             'company_name' => (string) $companyName,
             'document_number' => $documentNumber,
+            'company_contacts' => $companyContacts,
             'period' => $periodStart->format('d/m/Y') . ' - ' . $periodEnd->format('d/m/Y'),
             'employee' => (string) ($user['name'] ?? ''),
             'user_number' => $userNumberLabel,
