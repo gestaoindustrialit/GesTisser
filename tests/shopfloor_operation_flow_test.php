@@ -28,6 +28,8 @@ operation_flow_check(strpos($shopfloor, "json_each(CASE WHEN json_valid(center_o
 operation_flow_check(strpos($shopfloor, "AND opo.work_center_id=?") === false, 'A lista da OF continua a ocultar operações de outros centros de trabalho.');
 operation_flow_check(strpos($shopfloor, 'Apenas acompanhamento') !== false, 'As operações não executáveis não são apresentadas em modo de acompanhamento.');
 operation_flow_check(strpos($shopfloor, 'shopfloor_operation_can_run_at_work_center') !== false, 'O arranque não valida máquinas alternativas do centro de trabalho.');
+operation_flow_check(strpos($shopfloor, '$machineId = 0') !== false && strpos($shopfloor, "['labour_time_only']") !== false, 'O arranque não permite contabilizar exclusivamente o tempo do colaborador.');
+operation_flow_check(strpos((string) file_get_contents(__DIR__ . '/../erp_operations.php'), 'select-all-operation-machines') !== false, 'A edição da operação não permite selecionar todas as máquinas.');
 operation_flow_check(strpos($shopfloor, 'shopfloor-operation-grid') !== false, 'As operações não são apresentadas numa grelha de cards responsiva.');
 operation_flow_check(strpos($shopfloor, 'shopfloor-operation-card') !== false, 'Falta o card individual de operação para tablet.');
 operation_flow_check(strpos($shopfloor, '<table class="table table-sm shopfloor-table"') === false, 'As operações continuam a ser apresentadas em tabela.');

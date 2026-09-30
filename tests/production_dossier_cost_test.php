@@ -16,4 +16,7 @@ if($labourOnly['planned_total']!==40.0||$labourOnly['actual_total']!==20.0)throw
 $withMachine=$method->invoke($service,['planned_quantity'=>1],[],[array_merge($base,['primary_machine_id'=>7])],[]);
 $rows=array_column($withMachine['rows'],null,'category');
 if((float)$rows['Máquina']['planned']!==60.0||(float)$withMachine['planned_total']!==100.0)throw new RuntimeException('O custo de máquina selecionada não foi aplicado.');
+$configuredLabourOnly=$method->invoke($service,['planned_quantity'=>1],[],[array_merge($base,['primary_machine_id'=>7,'labour_time_only'=>1])],[]);
+if(isset(array_column($configuredLabourOnly['rows'],null,'category')['Máquina']))throw new RuntimeException('Uma operação configurada só para colaborador recebeu custo de máquina.');
+if($configuredLabourOnly['planned_total']!==40.0||$configuredLabourOnly['actual_total']!==20.0)throw new RuntimeException('A opção de tempo exclusivo do colaborador não foi respeitada.');
 echo "production_dossier_cost_test: OK\n";
