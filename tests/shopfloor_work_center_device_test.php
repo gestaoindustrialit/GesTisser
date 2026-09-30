@@ -17,7 +17,7 @@ work_center_check(strpos($shopfloor, 'wc.is_active DESC') !== false, 'Os centros
 work_center_check(strpos($shopfloor, 'gestisser_shopfloor_work_center_id') !== false, 'A escolha do dispositivo não é persistida no armazenamento local.');
 work_center_check(strpos($shopfloor, "\$_SESSION['shopfloor_work_center_id']") !== false, 'O centro do dispositivo não é validado na sessão.');
 work_center_check(strpos($shopfloor, 'center_op.work_center_id = ?') !== false, 'As OF não são filtradas pelo centro selecionado.');
-work_center_check(strpos($shopfloor, 'Esta operação não pertence ao centro de trabalho selecionado.') !== false, 'O arranque não protege operações de outros centros.');
+work_center_check(strpos($shopfloor, 'Esta operação só pode ser acompanhada neste centro de trabalho; não pode ser arrancada aqui.') !== false, 'O arranque não protege operações de outros centros.');
 work_center_check(strpos($label, 'wc.default_printer_id') !== false, 'A etiqueta não resolve a impressora através do centro de trabalho.');
 work_center_check(strpos($label, 'machine_id') === false, 'A etiqueta não deve resolver a impressora através da máquina.');
 
