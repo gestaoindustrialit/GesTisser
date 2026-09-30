@@ -33,9 +33,11 @@ operation_flow_check(strpos($shopfloor, 'data-auto-show-checklist') !== false, '
 operation_flow_check(strpos($shopfloor, 'Validar checklist e continuar') !== false, 'A pop-up não permite validar a checklist e continuar.');
 operation_flow_check(strpos($shopfloor, 'data-productivity-quantity') !== false, 'A quantidade produzida não alimenta o indicador de produtividade.');
 operation_flow_check(strpos($shopfloor, 'data-productivity-value') !== false, 'Falta o indicador previsto/real de produtividade.');
-operation_flow_check(strpos($shopfloor, "percentage >= 90") !== false && strpos($shopfloor, "percentage >= 70 && percentage < 90") !== false, 'As cores da produtividade não respeitam os intervalos definidos.');
+operation_flow_check(strpos($shopfloor, "percentage >= 100") !== false && strpos($shopfloor, "percentage >= 90 && percentage < 100") !== false && strpos($shopfloor, "percentage >= 80 && percentage < 90") !== false && strpos($shopfloor, "percentage < 80") !== false, 'As cores da produtividade não respeitam os intervalos definidos.');
+operation_flow_check(strpos($shopfloor, 'OK /') !== false && strpos($shopfloor, 'NOK /') !== false && strpos($shopfloor, ' OF') !== false, 'O detalhe da produtividade não apresenta OK, NOK e OF.');
+operation_flow_check(strpos($shopfloor, 'placeholder="NOK"') !== false && strpos($shopfloor, 'placeholder="Motivo NOK"') !== false, 'A recolha ainda utiliza terminologia antiga em vez de NOK.');
 operation_flow_check(strpos($shopfloor, 'register_material_consumption') !== false && strpos($shopfloor, 'data-consumption-unit') !== false, 'Falta o registo de consumo com unidade dinâmica.');
-operation_flow_check(strpos($shopfloor, 'erp_production_order_material_reservations') !== false && strpos($shopfloor, 'todos os materiais obrigatórios desta operação') !== false, 'A conclusão da quantidade prevista não exige os consumos da operação.');
+operation_flow_check(strpos($shopfloor, 'erp_production_order_material_reservations') !== false && strpos($shopfloor, 'todos os materiais obrigatórios da operação') !== false, 'A conclusão da quantidade prevista não exige os consumos da operação.');
 operation_flow_check(strpos($shopfloor, 'DELETE FROM erp_production_consumptions WHERE production_order_operation_id=?') !== false && strpos($shopfloor, 'Editar consumo') !== false, 'Os consumos existentes não podem ser editados.');
 operation_flow_check(strpos($shopfloor, 'data-add-consumption-row') !== false && strpos($shopfloor, 'data-consumption-row-template') !== false, 'O formulário não permite adicionar linhas de consumo extra.');
 operation_flow_check(strpos($shopfloor, 'operação retomada automaticamente') !== false, 'A operação não é retomada automaticamente no fim da pausa.');
