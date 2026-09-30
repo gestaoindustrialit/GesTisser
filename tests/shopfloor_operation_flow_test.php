@@ -33,6 +33,9 @@ operation_flow_check(strpos($shopfloor, 'data-productivity-quantity') !== false,
 operation_flow_check(strpos($shopfloor, 'data-productivity-value') !== false, 'Falta o indicador previsto/real de produtividade.');
 operation_flow_check(strpos($shopfloor, "percentage >= 90") !== false && strpos($shopfloor, "percentage >= 70 && percentage < 90") !== false, 'As cores da produtividade não respeitam os intervalos definidos.');
 operation_flow_check(strpos($shopfloor, 'register_material_consumption') !== false && strpos($shopfloor, 'data-consumption-unit') !== false, 'Falta o registo de consumo com unidade dinâmica.');
+operation_flow_check(strpos($shopfloor, 'erp_production_order_material_reservations') !== false && strpos($shopfloor, 'todos os materiais obrigatórios desta operação') !== false, 'A conclusão da quantidade prevista não exige os consumos da operação.');
+operation_flow_check(strpos($shopfloor, 'DELETE FROM erp_production_consumptions WHERE production_order_operation_id=?') !== false && strpos($shopfloor, 'Editar consumo') !== false, 'Os consumos existentes não podem ser editados.');
+operation_flow_check(strpos($shopfloor, 'data-add-consumption-row') !== false && strpos($shopfloor, 'data-consumption-row-template') !== false, 'O formulário não permite adicionar linhas de consumo extra.');
 operation_flow_check(strpos($shopfloor, 'operação retomada automaticamente') !== false, 'A operação não é retomada automaticamente no fim da pausa.');
 operation_flow_check(strpos($shopfloor, "json_each(CASE WHEN json_valid(center_op.allowed_machine_ids_json)") !== false, 'As OF não são disponibilizadas nos centros das máquinas alternativas.');
 operation_flow_check(strpos($shopfloor, "AND opo.work_center_id=?") === false, 'A lista da OF continua a ocultar operações de outros centros de trabalho.');
