@@ -15,7 +15,7 @@ function operation_flow_check(bool $condition, string $message): void
 operation_flow_check(strpos($shopfloor, 'allowed_work_center_ids_json') !== false, 'Os vários postos de arranque não são considerados no Shopfloor.');
 operation_flow_check(strpos($shopfloor, "require_once __DIR__ . '/app/Services/RoutingService.php';") !== false, 'O Shopfloor utiliza o RoutingService sem carregar a respetiva classe.');
 operation_flow_check(strpos($shopfloor, 'Esta operação precisa de uma máquina') !== false, 'O requisito de máquina não é validado no arranque.');
-operation_flow_check(strpos($shopfloor, 'Registe quantidades na operação anterior antes de iniciar esta operação.') !== false, 'O arranque não valida quantidades na operação anterior.');
+operation_flow_check(strpos($shopfloor, 'Indique a quantidade produzida antes de concluir a operação.') === false, 'A conclusão ainda exige quantidade superior a zero.');
 operation_flow_check(strpos($shopfloor, 'COALESCE(te.quantity_good, 0) + COALESCE(te.quantity_rejected, 0)') !== false, 'A quantidade anterior deixa de ser reconhecida quando uma das parcelas é nula.');
 operation_flow_check(strpos($shopfloor, "['requires_good_quantity']") !== false, 'A configuração de recolha de quantidade da operação não é respeitada.');
 operation_flow_check(strpos($shopfloor, "'100%'") !== false && strpos($shopfloor, 'shopfloor_format_quantity') !== false, 'O estado concluído não apresenta quantidade ou percentagem.');
@@ -31,6 +31,9 @@ operation_flow_check(strpos($shopfloor, 'data-auto-show-checklist') !== false, '
 operation_flow_check(strpos($shopfloor, 'Validar checklist e continuar') !== false, 'A pop-up não permite validar a checklist e continuar.');
 operation_flow_check(strpos($shopfloor, 'data-productivity-quantity') !== false, 'A quantidade produzida não alimenta o indicador de produtividade.');
 operation_flow_check(strpos($shopfloor, 'data-productivity-value') !== false, 'Falta o indicador previsto/real de produtividade.');
+operation_flow_check(strpos($shopfloor, "percentage >= 90") !== false && strpos($shopfloor, "percentage >= 70 && percentage < 90") !== false, 'As cores da produtividade não respeitam os intervalos definidos.');
+operation_flow_check(strpos($shopfloor, 'register_material_consumption') !== false && strpos($shopfloor, 'data-consumption-unit') !== false, 'Falta o registo de consumo com unidade dinâmica.');
+operation_flow_check(strpos($shopfloor, 'operação retomada automaticamente') !== false, 'A operação não é retomada automaticamente no fim da pausa.');
 operation_flow_check(strpos($shopfloor, "json_each(CASE WHEN json_valid(center_op.allowed_machine_ids_json)") !== false, 'As OF não são disponibilizadas nos centros das máquinas alternativas.');
 operation_flow_check(strpos($shopfloor, "AND opo.work_center_id=?") === false, 'A lista da OF continua a ocultar operações de outros centros de trabalho.');
 operation_flow_check(strpos($shopfloor, 'Apenas acompanhamento') !== false, 'As operações não executáveis não são apresentadas em modo de acompanhamento.');
