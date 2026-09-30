@@ -3,6 +3,7 @@ require_once __DIR__ . '/helpers.php';
 require_once __DIR__ . '/app/Services/ShopfloorAttachment.php';
 require_once __DIR__ . '/app/Services/ArticleDocument.php';
 require_once __DIR__ . '/app/Services/OperationChecklistService.php';
+require_once __DIR__ . '/app/Services/RoutingService.php';
 $validatedHourBankCalculatorPath = __DIR__ . '/app/Services/ValidatedHourBankCalculator.php';
 if (is_file($validatedHourBankCalculatorPath)) {
     require_once $validatedHourBankCalculatorPath;
