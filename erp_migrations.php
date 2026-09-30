@@ -367,9 +367,10 @@ function gt_erp_run_phase1_migrations(PDO $pdo)
             $pdo->exec('UPDATE erp_production_orders SET planning_priority=id WHERE planning_priority IS NULL');
         }
         $pdo->exec('CREATE INDEX IF NOT EXISTS idx_erp_production_planning_priority ON erp_production_orders(planning_priority, due_date)');
-        foreach (['raw_material_id'=>'INTEGER REFERENCES erp_raw_materials(id) ON DELETE RESTRICT','lot'=>'TEXT','planned_quantity'=>'REAL NOT NULL DEFAULT 0','source_movement_id'=>'INTEGER REFERENCES erp_stock_movements(id) ON DELETE SET NULL'] as $column=>$definition) {
+        foreach (['raw_material_id'=>'INTEGER REFERENCES erp_raw_materials(id) ON DELETE RESTRICT','production_order_operation_id'=>'INTEGER REFERENCES erp_production_order_operations(id) ON DELETE SET NULL','lot'=>'TEXT','planned_quantity'=>'REAL NOT NULL DEFAULT 0','source_movement_id'=>'INTEGER REFERENCES erp_stock_movements(id) ON DELETE SET NULL'] as $column=>$definition) {
             if (!gt_erp_migration_column_exists($pdo,'erp_production_consumptions',$column)) $pdo->exec('ALTER TABLE erp_production_consumptions ADD COLUMN '.$column.' '.$definition);
         }
+        $pdo->exec('CREATE INDEX IF NOT EXISTS idx_erp_production_consumptions_operation ON erp_production_consumptions(production_order_operation_id)');
         $pdo->exec('CREATE INDEX IF NOT EXISTS idx_erp_sheet_versions_article ON erp_article_technical_sheet_versions(finished_product_id,status,effective_from)');
         $pdo->exec('CREATE UNIQUE INDEX IF NOT EXISTS idx_erp_orders_public_token ON erp_production_orders(public_token) WHERE public_token IS NOT NULL');
         $pdo->exec('CREATE INDEX IF NOT EXISTS idx_erp_order_costs_order ON erp_production_order_costs(production_order_id,category)');
