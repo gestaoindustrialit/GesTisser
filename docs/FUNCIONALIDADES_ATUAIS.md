@@ -492,6 +492,7 @@ Quando configurado, a necessidade é reservada por ordem dos saldos disponíveis
 - Validação de checklist operacional.
 - Iniciar, pausar, retomar e terminar operação.
 - Registar tempos, máquina, quantidade boa/rejeitada, desperdício, paragens e consumos.
+- A produtividade compara o ritmo real com o ritmo planeado para o mesmo intervalo: `(quantidade OK × minutos previstos) ÷ (quantidade da OF × minutos realizados) × 100`, com apresentação limitada a 200%. Nas operações em curso, os minutos realizados e a percentagem são atualizados continuamente; o tempo de pausa não é contabilizado.
 - Comunicados internos com publicação, confirmação de leitura, ativação e eliminação.
 - No mesmo portal: ponto, pausas, ausências, justificações e férias.
 
@@ -516,7 +517,7 @@ custo unitário = custo real / boa
 custo por mil = custo unitário × 1 000
 ```
 
-> A rejeição é somada entre operações, enquanto a produção boa usa o máximo. Isto evita multiplicar a quantidade boa ao longo da rota, mas pode somar refugo ocorrido em várias fases — comportamento que deve ser confirmado com o processo da empresa.
+> A rejeição é somada entre operações, enquanto a produção boa usa o máximo. Isto evita multiplicar a quantidade boa ao longo da rota, mas pode somar desperdício ocorrido em várias fases — comportamento que deve ser confirmado com o processo da empresa.
 
 ### 13.4 Custos industriais
 
@@ -586,13 +587,13 @@ eficiência = horas padrão / horas produtivas reais × 100
 cumprimento = OF concluídas até à data prevista / OF concluídas com datas válidas × 100
 atraso médio = média(hoje − data prevista) das OF abertas atrasadas
 paragem = Σ(fim/agora − início da paragem)
-desperdício = refugo / (quantidade boa + refugo) × 100
+desperdício = NOK / (quantidade OK + NOK) × 100
 setup médio = média do intervalo entre fim de uma OF e início de outra na mesma máquina
 ```
 
 - OF aberta: estado diferente de Concluída, Fechada e Cancelada.
 - OF atrasada: aberta, com data prevista anterior a hoje.
-- Refugo de arranque: motivo contém “arranque”, “afina” ou “setup”; restante refugo é de produção.
+- Desperdício de arranque: o Motivo NOK contém “arranque”, “afina” ou “setup”; o restante desperdício é de produção.
 - Sem percentagem, o semáforo é neutro. Indicador positivo: verde ≥95%, amarelo ≥80%, vermelho abaixo. Indicador negativo: verde ≤3%, amarelo ≤8%, vermelho acima.
 - Alerta de desperdício usa o parâmetro `bi_warning_waste_percent`, com default de 6%.
 

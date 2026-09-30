@@ -79,6 +79,22 @@ if (!function_exists('shopfloor_format_quantity')) {
     }
 }
 
+if (!function_exists('shopfloor_productivity_percentage')) {
+    /**
+     * Compares the actual production rate with the rate planned for the OF.
+     * A value of 100 means that the quantity produced in the elapsed interval
+     * is exactly the quantity expected for that same interval.
+     */
+    function shopfloor_productivity_percentage(float $goodQuantity, float $plannedQuantity, float $actualMinutes, float $plannedMinutes): ?float
+    {
+        if ($plannedQuantity <= 0 || $actualMinutes <= 0 || $plannedMinutes <= 0) {
+            return null;
+        }
+
+        return min(200, ($goodQuantity * $plannedMinutes) / ($plannedQuantity * $actualMinutes) * 100);
+    }
+}
+
 if (!function_exists('shopfloor_operation_can_run_at_work_center')) {
     /**
      * An operation belongs at a workstation either through its assigned work
@@ -314,7 +330,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $missingOperationConsumption = $reachesPlannedQuantity && (int) ($completionConsumption['required_materials'] ?? 0) > (int) ($completionConsumption['consumed_materials'] ?? 0);
         }
         if($endChecklistRequired){try{$operationChecklistService->validateAndEncode((int)$entryInfo['checklist_template_id'],(array)($_POST['checklist']??[]));}catch(InvalidArgumentException$exception){$flashError=$exception->getMessage();}}
-        if($flashError){}elseif($entryInfo&&(int)$entryInfo['requires_good_quantity']===1&&$reject>0&&$reason===''){$flashError='Indique o motivo do desperdício/refugo.';}elseif($entryInfo&&((int)$entryInfo['requires_quality']||trim((string)$entryInfo['quality_points'])!=='')&&!in_array($qualityResult,['pass','fail','na'],true)){$flashError='Execute e registe o controlo de qualidade obrigatório.';}else{$stmt->execute([$good, $reject, trim((string)($_POST['notes'] ?? '')) ?: null, $entryId, $userId]);if($stmt->rowCount()>0){$pdo->prepare('UPDATE erp_operation_stoppages SET ended_at = CURRENT_TIMESTAMP WHERE time_entry_id = ? AND ended_at IS NULL')->execute([$entryId]);if($endChecklistRequired)$operationChecklistService->save($entryInfo,$userId,'end',(array)($_POST['checklist']??[]),$entryId);if($reject>0)$pdo->prepare('INSERT INTO erp_operation_waste(time_entry_id,quantity,reason,created_by) VALUES (?,?,?,?)')->execute([$entryId,$reject,$reason,$userId]);if($qualityResult!=='')$pdo->prepare('INSERT INTO erp_operation_quality_checks(production_order_operation_id,checkpoint,result,checked_by) VALUES (?,?,?,?)')->execute([(int)$entryInfo['id'],trim((string)$entryInfo['quality_points'])?:'Controlo obrigatório',$qualityResult,$userId]);$pdo->prepare('UPDATE erp_production_order_operations SET status="Concluída" WHERE id=(SELECT production_order_operation_id FROM erp_operation_time_entries WHERE id=?)')->execute([$entryId]);}$flashSuccess=$stmt->rowCount()>0?'Operação concluída e tempos registados na OF.':'Operação inválida.';}
+        if($flashError){}elseif($entryInfo&&(int)$entryInfo['requires_good_quantity']===1&&$reject>0&&$reason===''){$flashError='Indique o Motivo NOK.';}elseif($entryInfo&&((int)$entryInfo['requires_quality']||trim((string)$entryInfo['quality_points'])!=='')&&!in_array($qualityResult,['pass','fail','na'],true)){$flashError='Execute e registe o controlo de qualidade obrigatório.';}else{$stmt->execute([$good, $reject, trim((string)($_POST['notes'] ?? '')) ?: null, $entryId, $userId]);if($stmt->rowCount()>0){$pdo->prepare('UPDATE erp_operation_stoppages SET ended_at = CURRENT_TIMESTAMP WHERE time_entry_id = ? AND ended_at IS NULL')->execute([$entryId]);if($endChecklistRequired)$operationChecklistService->save($entryInfo,$userId,'end',(array)($_POST['checklist']??[]),$entryId);if($reject>0)$pdo->prepare('INSERT INTO erp_operation_waste(time_entry_id,quantity,reason,created_by) VALUES (?,?,?,?)')->execute([$entryId,$reject,$reason,$userId]);if($qualityResult!=='')$pdo->prepare('INSERT INTO erp_operation_quality_checks(production_order_operation_id,checkpoint,result,checked_by) VALUES (?,?,?,?)')->execute([(int)$entryInfo['id'],trim((string)$entryInfo['quality_points'])?:'Controlo obrigatório',$qualityResult,$userId]);$pdo->prepare('UPDATE erp_production_order_operations SET status="Concluída" WHERE id=(SELECT production_order_operation_id FROM erp_operation_time_entries WHERE id=?)')->execute([$entryId]);}$flashSuccess=$stmt->rowCount()>0?'Operação concluída e tempos registados na OF.':'Operação inválida.';}
     }
 
     if ($action === 'register_material_consumption') {
@@ -1091,7 +1107,7 @@ if ($selectedOfId > 0) {
         $consumptionMaterialsStmt->execute([(int) $selectedOf['finished_product_id']]);
         $ofConsumptionMaterials = $consumptionMaterialsStmt->fetchAll(PDO::FETCH_ASSOC);
     }
-    $opsSql = 'SELECT opo.*, COALESCE(opo.operation_code,op.code) code,COALESCE(opo.operation_name,op.name) name, op.standard_minutes, COALESCE(opo.requires_good_quantity,op.requires_good_quantity) requires_good_quantity, op.requires_waste, op.requires_waste_reason, COALESCE((SELECT SUM(COALESCE(te.quantity_good, 0)) FROM erp_operation_time_entries te WHERE te.production_order_operation_id=opo.id), 0) AS quantity_good, COALESCE((SELECT SUM(COALESCE(te.quantity_rejected, 0)) FROM erp_operation_time_entries te WHERE te.production_order_operation_id=opo.id), 0) AS quantity_rejected, (SELECT id FROM erp_operation_time_entries te WHERE te.production_order_operation_id=opo.id AND te.user_id=? AND te.ended_at IS NULL LIMIT 1) AS open_entry_id, (SELECT status FROM erp_operation_time_entries te WHERE te.production_order_operation_id=opo.id AND te.user_id=? AND te.ended_at IS NULL LIMIT 1) AS open_entry_status, (SELECT CAST(MAX(0, (julianday(CASE WHEN te.status="paused" THEN te.paused_at ELSE CURRENT_TIMESTAMP END)-julianday(te.started_at))*86400-te.pause_seconds) AS INTEGER) FROM erp_operation_time_entries te WHERE te.production_order_operation_id=opo.id AND te.user_id=? AND te.ended_at IS NULL LIMIT 1) AS open_elapsed_seconds, (SELECT COALESCE(SUM((julianday(CASE WHEN te.ended_at IS NOT NULL THEN te.ended_at WHEN te.status="paused" THEN te.paused_at ELSE CURRENT_TIMESTAMP END)-julianday(te.started_at))*1440)-SUM(te.pause_seconds)/60,0) FROM erp_operation_time_entries te WHERE te.production_order_operation_id=opo.id) actual_minutes FROM erp_production_order_operations opo JOIN erp_operations op ON op.id=opo.operation_id WHERE opo.production_order_id=?';
+    $opsSql = 'SELECT opo.*, COALESCE(opo.operation_code,op.code) code,COALESCE(opo.operation_name,op.name) name, op.standard_minutes, COALESCE(opo.requires_good_quantity,op.requires_good_quantity) requires_good_quantity, op.requires_waste, op.requires_waste_reason, COALESCE((SELECT SUM(COALESCE(te.quantity_good, 0)) FROM erp_operation_time_entries te WHERE te.production_order_operation_id=opo.id), 0) AS quantity_good, COALESCE((SELECT SUM(COALESCE(te.quantity_rejected, 0)) FROM erp_operation_time_entries te WHERE te.production_order_operation_id=opo.id), 0) AS quantity_rejected, (SELECT id FROM erp_operation_time_entries te WHERE te.production_order_operation_id=opo.id AND te.user_id=? AND te.ended_at IS NULL LIMIT 1) AS open_entry_id, (SELECT status FROM erp_operation_time_entries te WHERE te.production_order_operation_id=opo.id AND te.user_id=? AND te.ended_at IS NULL LIMIT 1) AS open_entry_status, (SELECT CAST(MAX(0, (julianday(CASE WHEN te.status="paused" THEN te.paused_at ELSE CURRENT_TIMESTAMP END)-julianday(te.started_at))*86400-te.pause_seconds) AS INTEGER) FROM erp_operation_time_entries te WHERE te.production_order_operation_id=opo.id AND te.user_id=? AND te.ended_at IS NULL LIMIT 1) AS open_elapsed_seconds, (SELECT COALESCE(SUM((julianday(CASE WHEN te.ended_at IS NOT NULL THEN te.ended_at WHEN te.status="paused" THEN te.paused_at ELSE CURRENT_TIMESTAMP END)-julianday(te.started_at))*1440)-SUM(te.pause_seconds)/60,0) FROM erp_operation_time_entries te WHERE te.production_order_operation_id=opo.id) actual_minutes, EXISTS(SELECT 1 FROM erp_operation_time_entries te WHERE te.production_order_operation_id=opo.id AND te.ended_at IS NULL AND te.status<>"paused") has_running_entry FROM erp_production_order_operations opo JOIN erp_operations op ON op.id=opo.operation_id WHERE opo.production_order_id=?';
     $opsParams = [$userId, $userId, $userId, $selectedOfId];
     $opsSql .= ' ORDER BY opo.sequence_no, opo.id';
     $opsStmt = $pdo->prepare($opsSql);
@@ -1279,8 +1295,8 @@ require __DIR__ . '/partials/header.php';
                         <div class="d-flex align-items-start gap-3 min-w-0">
                             <span class="shopfloor-operation-sequence" aria-label="Sequência <?= (int)$op['sequence_no'] ?>"><?= (int)$op['sequence_no'] ?></span>
                             <div class="min-w-0 flex-grow-1"><h4><?= h($op['code'].' - '.$op['name']) ?></h4>
-                                <?php if ((int) ($op['requires_good_quantity'] ?? 1) === 1): $productivityPercentage=(float)($selectedOf['planned_quantity']??0)>0?((float)($op['quantity_good']??0)/(float)$selectedOf['planned_quantity'])*100:0; ?>
-                                    <div class="shopfloor-productivity-compact" data-productivity data-planned-quantity="<?=h((string)($selectedOf['planned_quantity']??0))?>" data-realized-quantity="<?=h((string)($op['quantity_good']??0))?>"><div class="d-flex justify-content-between"><span>Produtividade</span><strong data-productivity-value><?=h(number_format($productivityPercentage,0,',','.'))?>%</strong></div><div class="progress" role="progressbar" aria-label="Quantidade realizada face à prevista" aria-valuemin="0" aria-valuemax="100" aria-valuenow="<?=h((string)round($productivityPercentage))?>"><div class="progress-bar <?= $productivityPercentage>=90?'bg-success':($productivityPercentage>=70?'bg-warning':'bg-danger') ?>" data-productivity-bar style="width:<?=h((string)min(100,max(0,$productivityPercentage)))?>%"></div></div><small data-productivity-detail><?=h(shopfloor_format_quantity((float)($op['quantity_good']??0)))?> realizadas / <?=h(shopfloor_format_quantity((float)($selectedOf['planned_quantity']??0)))?> previstas</small></div>
+                                <?php if ((int) ($op['requires_good_quantity'] ?? 1) === 1): $productivityPercentage=shopfloor_productivity_percentage((float)($op['quantity_good']??0),(float)($selectedOf['planned_quantity']??0),(float)($op['actual_minutes']??0),(float)($op['planned_minutes']??0)); ?>
+                                    <div class="shopfloor-productivity-compact" data-productivity data-planned-quantity="<?=h((string)($selectedOf['planned_quantity']??0))?>" data-planned-minutes="<?=h((string)($op['planned_minutes']??0))?>" data-actual-minutes="<?=h((string)($op['actual_minutes']??0))?>" data-running="<?=!empty($op['has_running_entry'])?'1':'0'?>" data-realized-quantity="<?=h((string)($op['quantity_good']??0))?>" data-rejected-quantity="<?=h((string)($op['quantity_rejected']??0))?>"><div class="d-flex justify-content-between"><span>Produtividade</span><strong data-productivity-value><?=$productivityPercentage===null?'—':h(number_format($productivityPercentage,0,',','.')).'%'?></strong></div><div class="progress" role="progressbar" aria-label="Ritmo de produção real face ao ritmo previsto" aria-valuemin="0" aria-valuemax="200" aria-valuenow="<?=h((string)min(200,max(0,round($productivityPercentage??0))))?>"><div class="progress-bar <?= $productivityPercentage===null?'':($productivityPercentage>=100?'bg-success':($productivityPercentage>=90?'bg-warning':($productivityPercentage>=80?'bg-productivity-orange':'bg-danger'))) ?>" data-productivity-bar style="width:<?=h((string)min(100,max(0,$productivityPercentage??0)))?>%"></div></div><small data-productivity-detail><?=h(shopfloor_format_quantity((float)($op['quantity_good']??0)))?> OK / <?=h(shopfloor_format_quantity((float)($op['quantity_rejected']??0)))?> NOK / <?=h(shopfloor_format_quantity((float)($selectedOf['planned_quantity']??0)))?> OF</small></div>
                                 <?php endif; ?>
                                 <div class="small text-secondary"><?= nl2br(h((string)($op['instructions']??''))) ?></div></div>
                         </div>
@@ -1303,7 +1319,7 @@ require __DIR__ . '/partials/header.php';
                             <?php else: ?><input class="form-control form-control-sm" id="<?=h($fieldId)?>" type="<?=in_array($fieldType,['number','date'],true)?$fieldType:'text'?>" name="checklist[<?=(int)$checkItem['id']?>]" <?=$fieldType==='number'?'step="any"':''?> <?=$required?'required':''?>><?php endif; ?></div>
                         <?php endforeach; ?></div><?php endif; ?>
                     <?php if ($isOpen): ?>
-                        <?php if ((int) ($op['requires_good_quantity'] ?? 1) === 1): ?><div class="col-6 col-xl"><input class="form-control form-control-sm" type="number" min="0" step="0.001" name="quantity_good" placeholder="Qtd. OK (opcional)" inputmode="decimal" data-productivity-quantity></div><?php else: ?><input type="hidden" name="quantity_good" value="0"><?php endif; ?><?php if ((int) ($op['requires_good_quantity'] ?? 1) === 1 && (int) ($op['requires_waste'] ?? 1) === 1): ?><div class="col-6 col-xl"><input class="form-control form-control-sm" type="number" min="0" step="0.001" name="quantity_rejected" placeholder="Refugo" inputmode="decimal"></div><?php else: ?><input type="hidden" name="quantity_rejected" value="0"><?php endif; ?><?php if ((int) ($op['requires_good_quantity'] ?? 1) === 1 && (int) ($op['requires_waste_reason'] ?? 1) === 1): ?><div class="col-6 col-xl"><input class="form-control form-control-sm" name="waste_reason" placeholder="Motivo refugo"></div><?php endif; ?><div class="col-6 col-xl"><select class="form-select form-select-sm" name="quality_result"><option value="">Qualidade…</option><option value="pass">Conforme</option><option value="fail">Não conforme</option><option value="na">N/A</option></select></div>
+                        <?php if ((int) ($op['requires_good_quantity'] ?? 1) === 1): ?><div class="col-6 col-xl"><input class="form-control form-control-sm" type="number" min="0" step="0.001" name="quantity_good" placeholder="Qtd. OK (opcional)" inputmode="decimal" data-productivity-quantity></div><?php else: ?><input type="hidden" name="quantity_good" value="0"><?php endif; ?><?php if ((int) ($op['requires_good_quantity'] ?? 1) === 1 && (int) ($op['requires_waste'] ?? 1) === 1): ?><div class="col-6 col-xl"><input class="form-control form-control-sm" type="number" min="0" step="0.001" name="quantity_rejected" placeholder="NOK" inputmode="decimal" data-productivity-rejected></div><?php else: ?><input type="hidden" name="quantity_rejected" value="0"><?php endif; ?><?php if ((int) ($op['requires_good_quantity'] ?? 1) === 1 && (int) ($op['requires_waste_reason'] ?? 1) === 1): ?><div class="col-6 col-xl"><input class="form-control form-control-sm" name="waste_reason" placeholder="Motivo NOK"></div><?php endif; ?><div class="col-6 col-xl"><select class="form-select form-select-sm" name="quality_result"><option value="">Qualidade…</option><option value="pass">Conforme</option><option value="fail">Não conforme</option><option value="na">N/A</option></select></div>
 
                     <?php endif; ?>
                     <div class="col-12"><button class="btn <?= !$canRunHere ? 'btn-outline-secondary' : ($isOpen ? 'btn-danger' : 'btn-success') ?> w-100" <?= !$canRunHere ? 'type="button" disabled title="Operação disponível apenas para acompanhamento neste posto"' : '' ?>><?= !$canRunHere ? 'Apenas acompanhamento' : ($isOpen ? 'Concluir operação' : 'Arrancar') ?></button></div>
@@ -2047,32 +2063,43 @@ document.querySelectorAll('[data-auto-show-checklist]').forEach((modalElement) =
     document.querySelectorAll('[data-productivity]').forEach((indicator) => {
         const card = indicator.closest('.shopfloor-operation-card');
         const quantityInput = card ? card.querySelector('[data-productivity-quantity]') : null;
+        const rejectedInput = card ? card.querySelector('[data-productivity-rejected]') : null;
         const value = indicator.querySelector('[data-productivity-value]');
         const detail = indicator.querySelector('[data-productivity-detail]');
         const bar = indicator.querySelector('[data-productivity-bar]');
         const plannedQuantity = Number(indicator.dataset.plannedQuantity || 0);
+        const plannedMinutes = Number(indicator.dataset.plannedMinutes || 0);
+        const initialActualMinutes = Number(indicator.dataset.actualMinutes || 0);
+        const running = indicator.dataset.running === '1';
+        const loadedAt = Date.now();
         const realizedQuantity = Number(indicator.dataset.realizedQuantity || 0);
+        const rejectedQuantity = Number(indicator.dataset.rejectedQuantity || 0);
 
         const refreshProductivity = () => {
             const quantity = realizedQuantity + Number(quantityInput?.value || 0);
-            if (plannedQuantity <= 0) {
+            const rejected = rejectedQuantity + Number(rejectedInput?.value || 0);
+            const actualMinutes = initialActualMinutes + (running ? (Date.now() - loadedAt) / 60000 : 0);
+            if (plannedQuantity <= 0 || plannedMinutes <= 0 || actualMinutes <= 0) {
                 value.textContent = '—';
-                detail.textContent = 'Sem quantidade prevista para calcular.';
+                detail.textContent = 'Sem tempo previsto ou realizado para calcular.';
                 bar.style.width = '0%';
                 return;
             }
-            const percentage = (quantity / plannedQuantity) * 100;
+            const percentage = Math.min(200, (quantity * plannedMinutes) / (plannedQuantity * actualMinutes) * 100);
             value.textContent = `${percentage.toLocaleString('pt-PT', { maximumFractionDigits: 0 })}%`;
-            detail.textContent = `${quantity.toLocaleString('pt-PT')} realizadas / ${plannedQuantity.toLocaleString('pt-PT', { maximumFractionDigits: 2 })} previstas`;
+            detail.textContent = `${quantity.toLocaleString('pt-PT')} OK / ${rejected.toLocaleString('pt-PT')} NOK / ${plannedQuantity.toLocaleString('pt-PT', { maximumFractionDigits: 2 })} OF`;
             bar.style.width = `${Math.min(100, Math.max(0, percentage))}%`;
-            bar.classList.toggle('bg-success', percentage >= 90);
-            bar.classList.toggle('bg-warning', percentage >= 70 && percentage < 90);
-            bar.classList.toggle('bg-danger', percentage < 70);
-            indicator.querySelector('.progress').setAttribute('aria-valuenow', String(Math.round(percentage)));
+            bar.classList.toggle('bg-success', percentage >= 100);
+            bar.classList.toggle('bg-warning', percentage >= 90 && percentage < 100);
+            bar.classList.toggle('bg-productivity-orange', percentage >= 80 && percentage < 90);
+            bar.classList.toggle('bg-danger', percentage < 80);
+            indicator.querySelector('.progress').setAttribute('aria-valuenow', String(Math.min(200, Math.max(0, Math.round(percentage)))));
         };
 
         quantityInput?.addEventListener('input', refreshProductivity);
+        rejectedInput?.addEventListener('input', refreshProductivity);
         refreshProductivity();
+        if (running) window.setInterval(refreshProductivity, 1000);
     });
 })();
 

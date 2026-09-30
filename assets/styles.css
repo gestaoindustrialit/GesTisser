@@ -1036,6 +1036,7 @@ body {
 .shopfloor-productivity small { color: #60705d; }
 .shopfloor-productivity-compact { margin-top: .4rem; max-width: 24rem; font-size: .75rem; color: #475569; }
 .shopfloor-productivity-compact .progress { height: .45rem; margin: .2rem 0; background: #e2e8f0; }
+.shopfloor-productivity-compact .bg-productivity-orange { background-color: #fd7e14; }
 .shopfloor-operation-state-actions { display: flex; flex-direction: column; align-items: flex-end; gap: .45rem; flex: 0 0 auto; }
 .shopfloor-checklist-modal .modal-content { max-height: calc(100vh - 2rem); border: 0; border-radius: 1rem; }
 .shopfloor-checklist-modal .modal-body { padding: 1rem; background: #f8fafc; }
