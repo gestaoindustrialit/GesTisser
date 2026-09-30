@@ -230,6 +230,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 : (int)($operation['primary_machine_id']??0);
         }
         $allowed=json_decode((string)($operation['allowed_machine_ids_json']??'[]'),true)?:[];
+        $labourTimeOnly = (int) ($operation['labour_time_only'] ?? 0) === 1;
+        if ($labourTimeOnly) { $machineId = 0; }
         $blockedStmt=$pdo->prepare('SELECT COUNT(*) FROM erp_routing_step_dependencies d JOIN erp_production_order_operations predecessor ON predecessor.routing_step_id=d.predecessor_step_id WHERE d.routing_step_id=? AND predecessor.production_order_id=? AND predecessor.status<>"Concluída"');$blockedStmt->execute([(int)($operation['routing_step_id']??0),(int)($operation['production_order_id']??0)]);
         $pendingDocsStmt = $pdo->prepare('SELECT COUNT(*) FROM erp_production_order_documents d JOIN erp_production_order_operations opo ON opo.production_order_id = d.production_order_id WHERE opo.id = ? AND d.is_required = 1 AND NOT EXISTS (SELECT 1 FROM erp_production_order_document_acknowledgements a WHERE a.document_id = d.id AND a.user_id = ?)');
         $pendingDocsStmt->execute([$poOperationId, $userId]);
