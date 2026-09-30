@@ -13,6 +13,7 @@ function operation_flow_check(bool $condition, string $message): void
 }
 
 operation_flow_check(strpos($shopfloor, 'allowed_work_center_ids_json') !== false, 'Os vários postos de arranque não são considerados no Shopfloor.');
+operation_flow_check(strpos($shopfloor, "require_once __DIR__ . '/app/Services/RoutingService.php';") !== false, 'O Shopfloor utiliza o RoutingService sem carregar a respetiva classe.');
 operation_flow_check(strpos($shopfloor, 'Esta operação precisa de uma máquina') !== false, 'O requisito de máquina não é validado no arranque.');
 operation_flow_check(strpos($shopfloor, 'Registe quantidades na operação anterior antes de iniciar esta operação.') !== false, 'O arranque não valida quantidades na operação anterior.');
 operation_flow_check(strpos($shopfloor, 'Já existe uma operação em curso.') !== false, 'O colaborador pode arrancar duas operações em simultâneo.');
