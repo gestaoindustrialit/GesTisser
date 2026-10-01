@@ -2011,7 +2011,7 @@ require __DIR__ . '/partials/header.php';
             // Keep the last server-rendered values when the connection is unavailable.
         }
     };
-    window.setInterval(refresh, 20000);
+    window.setInterval(refresh, 1000);
 })();
 
 (() => {

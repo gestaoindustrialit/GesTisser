@@ -69,5 +69,8 @@ $endpointSource = (string) file_get_contents(__DIR__ . '/../shopfloor_daily_indi
 if (strpos($endpointSource, "formatDuration(\$indicators['production_seconds'])") === false || strpos($endpointSource, "'production_quantity'") !== false) {
     throw new RuntimeException('Production must be exposed as the duration of the current operation.');
 }
+if (strpos($shopfloorSource, 'window.setInterval(refresh, 1000)') === false) {
+    throw new RuntimeException('Daily indicators must refresh independently every second.');
+}
 
 echo "shopfloor daily indicators ok\n";
