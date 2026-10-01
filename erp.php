@@ -20,6 +20,7 @@ require_once __DIR__ . '/app/Services/StockTransferService.php';
 require_once __DIR__ . '/app/Services/PurchaseReceiptService.php';
 require_once __DIR__ . '/app/Services/NumberSequenceService.php';
 require_once __DIR__ . '/app/Services/LegacyProductBridge.php';
+require_once __DIR__ . '/app/Services/ProductionOrderStatusService.php';
 require_once __DIR__ . '/app/Services/SimpleXlsx.php';
 require_once __DIR__ . '/app/Services/OrderPdfUpload.php';
 require_once __DIR__ . '/app/Services/PdfTextExtractor.php';
@@ -433,6 +434,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 $page = (string)($_GET['page'] ?? 'overview');
 if ($page === 'settings') { redirect('erp_settings.php'); }
 if ($page === 'master') { redirect('erp.php'); }
+if ($page === 'production') ProductionOrderStatusService::syncAll($pdo,$userId);
 $units=$pdo->query('SELECT * FROM erp_units ORDER BY code')->fetchAll(PDO::FETCH_ASSOC);
 $materialTypes=$pdo->query('SELECT * FROM erp_material_types ORDER BY code')->fetchAll(PDO::FETCH_ASSOC);
 $inkTypes=$pdo->query('SELECT * FROM erp_ink_types WHERE is_active=1 ORDER BY name COLLATE NOCASE')->fetchAll(PDO::FETCH_ASSOC);

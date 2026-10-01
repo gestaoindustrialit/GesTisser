@@ -6,6 +6,7 @@ require_once __DIR__ . '/app/Services/OperationChecklistService.php';
 require_once __DIR__ . '/app/Services/RoutingService.php';
 require_once __DIR__ . '/app/Services/ShopfloorDailyIndicators.php';
 require_once __DIR__ . '/app/Services/OperationConsumptionService.php';
+require_once __DIR__ . '/app/Services/ProductionOrderStatusService.php';
 $validatedHourBankCalculatorPath = __DIR__ . '/app/Services/ValidatedHourBankCalculator.php';
 if (is_file($validatedHourBankCalculatorPath)) {
     require_once $validatedHourBankCalculatorPath;
@@ -1094,6 +1095,7 @@ $formattedHourBank = sprintf('%s%02dh%02dm', $displayedHourBankMinutes < 0 ? '-'
 // Refresh only operations that have never started, so corrections to an
 // article routing become usable without rewriting production history.
 (new RoutingService($pdo))->syncPendingOrderOperations();
+ProductionOrderStatusService::syncAll($pdo,$userId);
 $ofSql = 'SELECT o.id, o.order_number, o.product_id, fp.id AS finished_product_id, o.planned_quantity, o.status, COALESCE(fp.code,p.code) AS product_code, COALESCE(fp.description,p.description) AS product_description FROM erp_production_orders o JOIN erp_products p ON p.id = o.product_id LEFT JOIN erp_finished_products fp ON fp.id=o.finished_product_id OR (o.finished_product_id IS NULL AND fp.code=p.code) WHERE o.status IN ("Por iniciar", "Em Produção", "Em Pausa", "Planeada", "Em curso")';
 $ofParams = [];
 if ($selectedWorkCenterId > 0) {
