@@ -305,6 +305,11 @@ header('Content-Type: text/html; charset=UTF-8');
                     <button type="button" class="btn btn-sm btn-warning fw-semibold" data-bs-toggle="modal" data-bs-target="#productionLabelModal-roll">
                         <i class="bi bi-upc-scan" aria-hidden="true"></i><span class="d-none d-lg-inline"> Etiqueta de rolo</span>
                     </button>
+                    <?php if ($currentFile === 'shopfloor.php' && isset($selectedWorkCenter)): ?>
+                        <button type="button" class="btn btn-sm <?= $selectedWorkCenter ? 'btn-outline-primary' : 'btn-warning' ?> fw-semibold" data-bs-toggle="modal" data-bs-target="#workCenterModal">
+                            <i class="bi bi-geo-alt-fill" aria-hidden="true"></i><span class="d-none d-lg-inline"> <?= $selectedWorkCenter ? h((string) $selectedWorkCenter['code'] . ' · ' . (string) $selectedWorkCenter['name']) : 'Escolher posto' ?></span>
+                        </button>
+                    <?php endif; ?>
                     <button type="button" class="btn btn-sm btn-info fw-semibold" data-bs-toggle="modal" data-bs-target="#productionLabelModal-ink">
                         <i class="bi bi-droplet-fill" aria-hidden="true"></i><span class="d-none d-lg-inline"> Etiqueta de tinta</span>
                     </button>
