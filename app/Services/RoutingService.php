@@ -34,6 +34,23 @@ final class RoutingService
         }); return $id;
     }
 
+    /** @return string[] URLs of uploaded files that can be removed after the transaction commits. */
+    public function deleteOperation(int $operationId, int $userId): array
+    {
+        if ($operationId <= 0) throw new InvalidArgumentException('Operação inválida.');
+        return $this->transaction(function () use ($operationId, $userId) {
+            $operation=$this->one('SELECT * FROM erp_operations WHERE id=?',[$operationId]);
+            if(!$operation)throw new InvalidArgumentException('Operação inexistente.');
+            $routingUses=(int)$this->scalar('SELECT COUNT(*) FROM erp_article_routing_steps WHERE operation_id=?',[$operationId]);
+            $orderUses=(int)$this->scalar('SELECT COUNT(*) FROM erp_production_order_operations WHERE operation_id=?',[$operationId]);
+            if($routingUses||$orderUses)throw new DomainException('Não é possível eliminar uma operação utilizada em routings ou ordens de fabrico. Desative-a para impedir novas utilizações.');
+            $files=array_map('strval',array_column($this->all('SELECT file_url FROM erp_operation_documents WHERE operation_id=?',[$operationId]),'file_url'));
+            $this->pdo->prepare('DELETE FROM erp_operations WHERE id=?')->execute([$operationId]);
+            $this->audit($userId,'delete','operation',$operationId,$operation,[]);
+            return $files;
+        });
+    }
+
     /** @param int|null $sourceVersionId */
     public function createVersion(int $articleId, int $userId, $sourceVersionId=null): int
     {
