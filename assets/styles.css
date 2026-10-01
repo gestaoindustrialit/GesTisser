@@ -1398,7 +1398,7 @@ body {
 /* Production planning */
 .production-planning-board {
     display: grid;
-    grid-template-columns: repeat(4, minmax(240px, 1fr));
+    grid-template-columns: repeat(3, minmax(240px, 1fr));
     gap: 1rem;
     overflow-x: auto;
     padding-bottom: .25rem;
@@ -1450,7 +1450,7 @@ body {
 .production-planning-empty .bi { font-size: 1.25rem; }
 
 @media (max-width: 1199.98px) {
-    .production-planning-board { grid-template-columns: repeat(4, 260px); }
+    .production-planning-board { grid-template-columns: repeat(3, 260px); }
 }
 
 /* Production priority administration */

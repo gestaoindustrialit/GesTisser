@@ -35,7 +35,7 @@ final class RawMaterialRollLabelService
 
     public function productionOrders(): array
     {
-        $stmt=$this->pdo->query('SELECT id,order_number,status FROM erp_production_orders WHERE status NOT IN ("Concluída","Cancelada") ORDER BY CASE WHEN status IN ("Planeada","Em curso") THEN 0 ELSE 1 END,due_date,id DESC');return $stmt->fetchAll(PDO::FETCH_ASSOC);
+        $stmt=$this->pdo->query('SELECT id,order_number,status FROM erp_production_orders WHERE status NOT IN ("Concluída","Encerrada","Fechada","Cancelada") ORDER BY CASE WHEN status IN ("Por iniciar","Em Produção","Planeada","Em curso") THEN 0 ELSE 1 END,due_date,id DESC');return $stmt->fetchAll(PDO::FETCH_ASSOC);
     }
 
     public function save(int $materialId,array $values,int $userId,int $id=0): array
