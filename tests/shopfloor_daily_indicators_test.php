@@ -5,6 +5,9 @@ $serviceSource = (string) file_get_contents(__DIR__ . '/../app/Services/Shopfloo
 if (preg_match('/\b(?:public|protected|private)\s+[A-Za-z_\\\\][A-Za-z0-9_\\\\]*\s+\$/', $serviceSource)) {
     throw new RuntimeException('The daily indicators service must remain compatible with PHP versions before typed properties.');
 }
+if (preg_match('/function\s+[A-Za-z_][A-Za-z0-9_]*\s*\([^)]*\?[A-Za-z_\\\\]/', $serviceSource)) {
+    throw new RuntimeException('The daily indicators service must remain compatible with PHP 7.0 nullable parameters.');
+}
 
 $pdo = new PDO('sqlite::memory:');
 $pdo->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);

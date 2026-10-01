@@ -14,7 +14,7 @@ class ShopfloorDailyIndicators
      * Build the live indicators from the existing clock, break and operation
      * records. Durations are kept in seconds until they reach the view.
      */
-    public function forUser(int $userId, ?DateTimeImmutable $now = null): array
+    public function forUser(int $userId, DateTimeImmutable $now = null): array
     {
         $now = $now ?: new DateTimeImmutable('now');
         $dayStart = $now->setTime(0, 0, 0);
