@@ -1190,7 +1190,7 @@ require __DIR__ . '/partials/header.php';
 
     <?php if ($flashSuccess || $flashError): ?>
         <div class="toast-container position-fixed top-0 end-0 p-3 shopfloor-toast-container" aria-live="polite" aria-atomic="true">
-            <div class="toast align-items-center border-0 text-bg-<?= $flashError ? 'danger' : 'success' ?>" role="alert" data-shopfloor-notification data-bs-autohide="true" data-bs-delay="10000">
+            <div class="toast align-items-center border-0 text-bg-<?= $flashError ? 'danger' : 'success' ?>" role="alert" data-shopfloor-notification data-bs-autohide="true" data-bs-delay="7000">
                 <div class="d-flex">
                     <div class="toast-body fw-semibold"><?= h((string) ($flashError ?: $flashSuccess)) ?></div>
                     <button type="button" class="btn-close btn-close-white me-2 m-auto" data-bs-dismiss="toast" aria-label="Fechar"></button>
@@ -1959,7 +1959,7 @@ require __DIR__ . '/partials/header.php';
     <div class="modal-dialog modal-fullscreen-lg-down modal-xl modal-dialog-centered">
         <div class="modal-content">
             <div class="modal-header"><div><h2 class="modal-title fs-5" id="articleArtworkModalLabel">Maquete do artigo</h2><p class="small text-secondary mb-0"><?= h((string) ($selectedOf['product_code'] ?? '')) ?> · <?= h((string) ($articleArtwork['title'] ?? 'Maquete de produção')) ?></p></div><button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Fechar"></button></div>
-            <div class="modal-body text-center bg-light p-0"><?php if ($articleArtworkPresentation['kind'] === 'pdf'): ?><iframe src="<?= h(ArticleDocument::url((int) $articleArtwork['id'])) ?>#view=FitH" class="shopfloor-artwork-pdf" title="PDF da maquete do artigo <?= h((string) ($selectedOf['product_code'] ?? '')) ?>"></iframe><?php else: ?><img src="<?= h(ArticleDocument::url((int) $articleArtwork['id'])) ?>" class="shopfloor-artwork-preview" alt="Maquete do artigo <?= h((string) ($selectedOf['product_code'] ?? '')) ?>"><?php endif; ?></div>
+            <div class="modal-body text-center bg-light p-0"><?php if ($articleArtworkPresentation['kind'] === 'pdf'): ?><iframe src="<?= h(ArticleDocument::url((int) $articleArtwork['id'])) ?>#view=FitH" class="shopfloor-artwork-pdf" title="PDF da maquete do artigo <?= h((string) ($selectedOf['product_code'] ?? '')) ?>"></iframe><div class="shopfloor-artwork-pdf-tablet"><img src="<?= h(ArticleDocument::thumbnailUrl((int) $articleArtwork['id'])) ?>" class="shopfloor-artwork-preview" alt="Primeira página do PDF da maquete do artigo <?= h((string) ($selectedOf['product_code'] ?? '')) ?>"><p>Pré-visualização da primeira página. Use <strong>Abrir original</strong> para consultar o PDF completo.</p></div><?php else: ?><img src="<?= h(ArticleDocument::url((int) $articleArtwork['id'])) ?>" class="shopfloor-artwork-preview" alt="Maquete do artigo <?= h((string) ($selectedOf['product_code'] ?? '')) ?>"><?php endif; ?></div>
             <div class="modal-footer"><button type="button" class="btn btn-outline-secondary btn-lg" data-bs-dismiss="modal">Fechar</button><a href="<?= h(ArticleDocument::url((int) $articleArtwork['id'])) ?>" target="_blank" rel="noopener" class="btn btn-primary btn-lg"><i class="bi bi-arrows-fullscreen me-1"></i>Abrir original</a></div>
         </div>
     </div>
@@ -2031,7 +2031,7 @@ require __DIR__ . '/partials/header.php';
     window.addEventListener('load', () => {
         const notification = document.querySelector('[data-shopfloor-notification]');
         if (notification && typeof bootstrap !== 'undefined') {
-            bootstrap.Toast.getOrCreateInstance(notification, { autohide: true, delay: 10000 }).show();
+            bootstrap.Toast.getOrCreateInstance(notification, { autohide: true, delay: 7000 }).show();
         }
     }, { once: true });
 })();
