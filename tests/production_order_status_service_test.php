@@ -1,6 +1,8 @@
 <?php
 require_once __DIR__.'/../app/Services/ProductionOrderStatusService.php';
 function status_service_check($condition,$message){if(!$condition)throw new RuntimeException($message);}
+$serviceSource=file_get_contents(__DIR__.'/../app/Services/ProductionOrderStatusService.php');
+status_service_check(preg_match('/function\s+\w+\s*\([^)]*\?(?:array|int|string|float|bool)\b/',$serviceSource)!==1,'O serviço contém parâmetros nullable incompatíveis com PHP 7.0.');
 $pdo=new PDO('sqlite::memory:');$pdo->setAttribute(PDO::ATTR_ERRMODE,PDO::ERRMODE_EXCEPTION);
 $pdo->exec('CREATE TABLE erp_production_orders(id INTEGER PRIMARY KEY,status TEXT,updated_at TEXT);CREATE TABLE erp_production_order_operations(id INTEGER PRIMARY KEY,production_order_id INTEGER,status TEXT);CREATE TABLE erp_operation_time_entries(id INTEGER PRIMARY KEY,production_order_operation_id INTEGER,status TEXT,ended_at TEXT);CREATE TABLE erp_production_order_audit(id INTEGER PRIMARY KEY,production_order_id INTEGER,user_id INTEGER,action TEXT,old_value_json TEXT,new_value_json TEXT,reason TEXT);');
 $pdo->exec("INSERT INTO erp_production_orders VALUES(1,'Por iniciar',NULL),(2,'Por iniciar',NULL),(3,'Por iniciar',NULL),(4,'Encerrada',NULL);INSERT INTO erp_production_order_operations VALUES(11,1,'Em curso'),(12,2,'Em curso'),(13,3,'Concluída'),(14,4,'Em curso');INSERT INTO erp_operation_time_entries VALUES(21,11,'completed','2026-01-01'),(22,12,'paused',NULL),(23,13,'completed','2026-01-01'),(24,14,'running',NULL);");

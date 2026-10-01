@@ -4,7 +4,8 @@ declare(strict_types=1);
 /** Keeps the OF status consistent with the operation clocks recorded by Shopfloor. */
 final class ProductionOrderStatusService
 {
-    public static function syncAll(PDO $pdo, ?int $userId = null): int
+    /** @param int|null $userId */
+    public static function syncAll(PDO $pdo, $userId = null): int
     {
         $orders=$pdo->query('SELECT id,status FROM erp_production_orders WHERE status NOT IN ("Concluída","Encerrada","Fechada","Cancelada")')->fetchAll(PDO::FETCH_ASSOC);
         $changed=0;
@@ -12,7 +13,11 @@ final class ProductionOrderStatusService
         return $changed;
     }
 
-    public static function syncOrder(PDO $pdo, int $orderId, ?int $userId = null, ?string $currentStatus = null): bool
+    /**
+     * @param int|null $userId
+     * @param string|null $currentStatus
+     */
+    public static function syncOrder(PDO $pdo, int $orderId, $userId = null, $currentStatus = null): bool
     {
         if($currentStatus===null){$stmt=$pdo->prepare('SELECT status FROM erp_production_orders WHERE id=?');$stmt->execute([$orderId]);$currentStatus=$stmt->fetchColumn();if($currentStatus===false)return false;$currentStatus=(string)$currentStatus;}
         if(in_array($currentStatus,['Concluída','Encerrada','Fechada','Cancelada'],true))return false;
