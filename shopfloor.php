@@ -1194,7 +1194,7 @@ require __DIR__ . '/partials/header.php';
     </div>
 
     <?php if ($flashSuccess || $flashError): ?>
-        <div class="toast-container position-fixed top-0 end-0 p-3 shopfloor-toast-container" aria-live="polite" aria-atomic="true">
+        <div class="toast-container position-fixed shopfloor-toast-container" aria-live="polite" aria-atomic="true">
             <div class="toast align-items-center border-0 text-bg-<?= $flashError ? 'danger' : 'success' ?>" role="alert" data-shopfloor-notification data-bs-autohide="true" data-bs-delay="7000">
                 <div class="d-flex">
                     <div class="toast-body fw-semibold"><?= h((string) ($flashError ?: $flashSuccess)) ?></div>
