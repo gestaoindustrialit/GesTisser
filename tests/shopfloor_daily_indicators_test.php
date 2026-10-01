@@ -32,7 +32,7 @@ $expected = [
     'pause_seconds' => 900,
     'stoppage_seconds' => 1200,
     'dead_seconds' => 2100,
-    'production_quantity' => 1245.0,
+    'production_seconds' => 10200,
 ];
 foreach ($expected as $key => $value) {
     if ($result[$key] !== $value) {
@@ -52,6 +52,9 @@ $overlapResult = (new ShopfloorDailyIndicators($pdo))->forUser(2, new DateTimeIm
 if ($overlapResult['worked_seconds'] !== 10800) {
     throw new RuntimeException('Overlapping operation intervals were counted more than once.');
 }
+if ($overlapResult['production_seconds'] !== 0) {
+    throw new RuntimeException('Production time must be zero without a currently open operation.');
+}
 
 $shopfloorSource = (string) file_get_contents(__DIR__ . '/../shopfloor.php');
 foreach (['T. Presença', 'T. Trabalhado', 'T. Morto', 'Produção', 'Pausas', 'Paragens', '<h2>BH</h2>', '<h2>Férias</h2>'] as $indicatorLabel) {
@@ -61,6 +64,10 @@ foreach (['T. Presença', 'T. Trabalhado', 'T. Morto', 'Produção', 'Pausas', '
 }
 if (strpos($shopfloorSource, 'Gestão pessoal') !== false || strpos($shopfloorSource, 'Pedidos ligados ao módulo de RH') !== false) {
     throw new RuntimeException('The removed personal-management heading is still present.');
+}
+$endpointSource = (string) file_get_contents(__DIR__ . '/../shopfloor_daily_indicators.php');
+if (strpos($endpointSource, "formatDuration(\$indicators['production_seconds'])") === false || strpos($endpointSource, "'production_quantity'") !== false) {
+    throw new RuntimeException('Production must be exposed as the duration of the current operation.');
 }
 
 echo "shopfloor daily indicators ok\n";

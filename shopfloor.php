@@ -1148,7 +1148,7 @@ require __DIR__ . '/partials/header.php';
             </article>
             <article class="shopfloor-kpi-card shopfloor-kpi-card-compact">
                 <h2>Produção</h2>
-                <strong data-daily-indicator="production"><?= h(shopfloor_format_quantity((float) $dailyIndicators['production_quantity'])) ?> un.</strong>
+                <strong data-daily-indicator="production"><?= h(ShopfloorDailyIndicators::formatDuration($dailyIndicators['production_seconds'])) ?></strong>
             </article>
             <article class="shopfloor-kpi-card shopfloor-kpi-card-compact">
                 <h2>Pausas</h2>

@@ -60,6 +60,7 @@ class ShopfloorDailyIndicators
         $operationStmt->execute([$userId, $userId, $dayEnd->format('Y-m-d H:i:s'), $dayStart->format('Y-m-d H:i:s')]);
         $operations = $operationStmt->fetchAll(PDO::FETCH_ASSOC);
         $workedIntervals = [];
+        $workedIntervalsByEntry = [];
         foreach ($operations as $operation) {
             $sessionEnd = $operation['ended_at'] ? (string) $operation['ended_at'] : $now->format('Y-m-d H:i:s');
             $sessionStartTimestamp = max((int) strtotime((string) $operation['started_at']), $dayStart->getTimestamp());
@@ -79,13 +80,14 @@ class ShopfloorDailyIndicators
                 $activeIntervals = $this->subtractInterval($activeIntervals, $stoppageStart, $stoppageEnd);
             }
             $workedIntervals = array_merge($workedIntervals, $activeIntervals);
+            $workedIntervalsByEntry[(int) $operation['id']] = $activeIntervals;
         }
         // Union all active fragments so simultaneous operations never count the
         // same chronological second more than once.
         $workedSeconds = $this->mergedIntervalSeconds($workedIntervals);
 
         $activeOperationStmt = $this->pdo->prepare(
-            'SELECT te.production_order_operation_id FROM erp_operation_time_entries te
+            'SELECT te.id, te.production_order_operation_id FROM erp_operation_time_entries te
              WHERE (te.user_id = ? OR EXISTS (
                        SELECT 1 FROM erp_operation_execution_operators execution_operator
                        WHERE execution_operator.time_entry_id = te.id AND execution_operator.user_id = ?
@@ -93,16 +95,12 @@ class ShopfloorDailyIndicators
                AND te.ended_at IS NULL ORDER BY te.started_at DESC LIMIT 1'
         );
         $activeOperationStmt->execute([$userId, $userId]);
-        $activeOperationId = (int) ($activeOperationStmt->fetchColumn() ?: 0);
-        $productionQuantity = 0.0;
-        if ($activeOperationId > 0) {
-            $quantityStmt = $this->pdo->prepare(
-                'SELECT COALESCE(SUM(quantity_good), 0) FROM erp_operation_time_entries
-                 WHERE production_order_operation_id = ? AND started_at >= ? AND started_at < ?'
-            );
-            $quantityStmt->execute([$activeOperationId, $dayStart->format('Y-m-d H:i:s'), $dayEnd->format('Y-m-d H:i:s')]);
-            $productionQuantity = (float) $quantityStmt->fetchColumn();
-        }
+        $activeOperation = $activeOperationStmt->fetch(PDO::FETCH_ASSOC) ?: [];
+        $activeEntryId = (int) ($activeOperation['id'] ?? 0);
+        $activeOperationId = (int) ($activeOperation['production_order_operation_id'] ?? 0);
+        $productionSeconds = $activeEntryId > 0
+            ? $this->mergedIntervalSeconds($workedIntervalsByEntry[$activeEntryId] ?? [])
+            : 0;
 
         $pauseSeconds = $breaks['Pausa']['seconds'];
         $stoppageSeconds = $breaks['Paragem']['seconds'];
@@ -114,7 +112,7 @@ class ShopfloorDailyIndicators
             'stoppage_seconds' => $stoppageSeconds,
             'stoppage_count' => $breaks['Paragem']['count'],
             'dead_seconds' => max(0, $presenceSeconds - $workedSeconds - $pauseSeconds - $stoppageSeconds),
-            'production_quantity' => $productionQuantity,
+            'production_seconds' => $productionSeconds,
             'active_operation_id' => $activeOperationId,
         ];
     }
