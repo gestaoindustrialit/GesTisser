@@ -302,8 +302,8 @@ header('Content-Type: text/html; charset=UTF-8');
             <?php endif; ?>
             <?php if (!empty($showProductionLabelShortcuts)): ?>
                 <div class="d-flex gap-2 me-auto" role="group" aria-label="Etiquetas de matérias-primas">
-                    <button type="button" class="btn btn-sm btn-warning fw-semibold" data-bs-toggle="modal" data-bs-target="#productionLabelModal-roll">
-                        <i class="bi bi-upc-scan" aria-hidden="true"></i><span class="d-none d-lg-inline"> Etiqueta de rolo</span>
+                    <button type="button" class="btn btn-sm btn-warning fw-semibold" data-bs-toggle="modal" data-bs-target="#productionLabelModal-roll" aria-label="Etiqueta de rolo" title="Etiqueta de rolo">
+                        <i class="bi bi-upc-scan" aria-hidden="true"></i><span class="d-none d-xxl-inline"> Etiqueta de rolo</span>
                     </button>
                     <?php if ($currentFile === 'shopfloor.php' && isset($selectedWorkCenter)): ?>
                         <button type="button" class="btn btn-sm <?= $selectedWorkCenter ? 'btn-outline-primary' : 'btn-warning' ?> fw-semibold" data-bs-toggle="modal" data-bs-target="#workCenterModal">
@@ -314,12 +314,12 @@ header('Content-Type: text/html; charset=UTF-8');
                         <i class="bi bi-droplet-fill" aria-hidden="true"></i><span class="d-none d-lg-inline"> Etiqueta de tinta</span>
                     </button>
                     <?php if ($currentFile === 'shopfloor.php'): ?>
-                        <button type="button" class="btn btn-sm btn-dark fw-semibold" data-bs-toggle="modal" data-bs-target="#shopfloorCalculatorModal">
-                            <i class="bi bi-calculator" aria-hidden="true"></i><span class="d-none d-lg-inline"> Calculadora</span>
+                        <button type="button" class="btn btn-sm btn-dark fw-semibold" data-bs-toggle="modal" data-bs-target="#shopfloorCalculatorModal" aria-label="Calculadora" title="Calculadora">
+                            <i class="bi bi-calculator" aria-hidden="true"></i><span class="d-none d-xxl-inline"> Calculadora</span>
                         </button>
                         <?php if (!empty($articleArtwork)): ?>
-                            <button type="button" class="btn btn-sm btn-outline-primary fw-semibold" data-bs-toggle="modal" data-bs-target="#articleArtworkModal">
-                                <i class="bi bi-image" aria-hidden="true"></i><span class="d-none d-lg-inline"> Previsualizar maquete</span>
+                            <button type="button" class="btn btn-sm btn-outline-primary fw-semibold" data-bs-toggle="modal" data-bs-target="#articleArtworkModal" aria-label="Previsualizar maquete" title="Previsualizar maquete">
+                                <i class="bi bi-image" aria-hidden="true"></i><span class="d-none d-xxl-inline"> Previsualizar maquete</span>
                             </button>
                         <?php endif; ?>
                     <?php endif; ?>
