@@ -795,7 +795,8 @@ body {
 
 .shopfloor-topbar-kpis {
     display: flex;
-    flex-wrap: nowrap;
+    flex-wrap: wrap;
+    justify-content: flex-end;
     align-items: stretch;
     gap: 0.55rem;
     margin-left: auto;

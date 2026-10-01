@@ -4,6 +4,7 @@ require_once __DIR__ . '/app/Services/ShopfloorAttachment.php';
 require_once __DIR__ . '/app/Services/ArticleDocument.php';
 require_once __DIR__ . '/app/Services/OperationChecklistService.php';
 require_once __DIR__ . '/app/Services/RoutingService.php';
+require_once __DIR__ . '/app/Services/ShopfloorDailyIndicators.php';
 $validatedHourBankCalculatorPath = __DIR__ . '/app/Services/ValidatedHourBankCalculator.php';
 if (is_file($validatedHourBankCalculatorPath)) {
     require_once $validatedHourBankCalculatorPath;
@@ -813,6 +814,7 @@ foreach ($dailyBreakSummaryRows as $dailyBreakSummaryRow) {
         'seconds' => max(0, (int) ($dailyBreakSummaryRow['total_seconds'] ?? 0)),
     ];
 }
+$dailyIndicators = (new ShopfloorDailyIndicators($pdo))->forUser($userId);
 $dailyBreakByReasonStmt = $pdo->prepare(
     'SELECT r.code, r.label, b.break_type, COUNT(*) AS total_count, SUM(CASE WHEN b.ended_at IS NULL THEN CAST((julianday(CURRENT_TIMESTAMP) - julianday(b.started_at)) * 86400 AS INTEGER) ELSE CAST((julianday(b.ended_at) - julianday(b.started_at)) * 86400 AS INTEGER) END) AS total_seconds
      FROM shopfloor_break_entries b
@@ -1142,7 +1144,7 @@ require __DIR__ . '/partials/header.php';
                 <span class="badge text-bg-light border ms-1"><i class="bi bi-printer me-1"></i><?= h((string) $selectedWorkCenter['printer_name']) ?></span>
             <?php endif; ?>
         </div>
-        <div class="shopfloor-topbar-kpis" aria-label="Resumo rápido de horas e férias">
+        <div class="shopfloor-topbar-kpis" aria-label="Indicadores diários do colaborador">
             <article class="shopfloor-kpi-card shopfloor-kpi-card-compact">
                 <h2>Balanço de BH</h2>
                 <strong class="<?= $displayedHourBankMinutes < 0 ? 'text-danger' : '' ?>"><?= h($formattedHourBank) ?></strong>
@@ -1152,14 +1154,30 @@ require __DIR__ . '/partials/header.php';
                 <strong><?= h(number_format($availableVacationDays, 1, ',', '.')) ?></strong>
             </article>
             <article class="shopfloor-kpi-card shopfloor-kpi-card-compact">
+                <h2>Tempo de presença</h2>
+                <strong data-daily-indicator="presence"><?= h(ShopfloorDailyIndicators::formatDuration($dailyIndicators['presence_seconds'])) ?></strong>
+            </article>
+            <article class="shopfloor-kpi-card shopfloor-kpi-card-compact">
+                <h2>Tempo trabalhado</h2>
+                <strong data-daily-indicator="worked"><?= h(ShopfloorDailyIndicators::formatDuration($dailyIndicators['worked_seconds'])) ?></strong>
+            </article>
+            <article class="shopfloor-kpi-card shopfloor-kpi-card-compact">
                 <h2>Pausas (dia)</h2>
-                <strong><?= h(format_minutes((int) ($dailyBreakSummaryMap['Pausa']['seconds'] ?? 0))) ?></strong>
-                <span class="small text-secondary">(<?= (int) ($dailyBreakSummaryMap['Pausa']['count'] ?? 0) ?>)</span>
+                <strong data-daily-indicator="pauses"><?= h(ShopfloorDailyIndicators::formatDuration($dailyIndicators['pause_seconds'])) ?></strong>
+                <span class="small text-secondary">(<span data-daily-indicator="pause_count"><?= (int) $dailyIndicators['pause_count'] ?></span>)</span>
             </article>
             <article class="shopfloor-kpi-card shopfloor-kpi-card-compact">
                 <h2>Paragens (dia)</h2>
-                <strong><?= h(format_minutes((int) ($dailyBreakSummaryMap['Paragem']['seconds'] ?? 0))) ?></strong>
-                <span class="small text-secondary">(<?= (int) ($dailyBreakSummaryMap['Paragem']['count'] ?? 0) ?>)</span>
+                <strong data-daily-indicator="stoppages"><?= h(ShopfloorDailyIndicators::formatDuration($dailyIndicators['stoppage_seconds'])) ?></strong>
+                <span class="small text-secondary">(<span data-daily-indicator="stoppage_count"><?= (int) $dailyIndicators['stoppage_count'] ?></span>)</span>
+            </article>
+            <article class="shopfloor-kpi-card shopfloor-kpi-card-compact">
+                <h2>Tempo Morto (dia)</h2>
+                <strong data-daily-indicator="dead"><?= h(ShopfloorDailyIndicators::formatDuration($dailyIndicators['dead_seconds'])) ?></strong>
+            </article>
+            <article class="shopfloor-kpi-card shopfloor-kpi-card-compact">
+                <h2>Produção</h2>
+                <strong data-daily-indicator="production"><?= h(shopfloor_format_quantity((float) $dailyIndicators['production_quantity'])) ?></strong>
             </article>
         </div>
     </div>
@@ -1988,6 +2006,25 @@ require __DIR__ . '/partials/header.php';
 </div>
 
 <script>
+(() => {
+    const indicators = document.querySelectorAll('[data-daily-indicator]');
+    if (!indicators.length) return;
+    const refresh = async () => {
+        try {
+            const response = await fetch('shopfloor_daily_indicators.php', { headers: { Accept: 'application/json' }, cache: 'no-store' });
+            if (!response.ok) return;
+            const payload = await response.json();
+            indicators.forEach((indicator) => {
+                const value = payload[indicator.dataset.dailyIndicator];
+                if (value !== undefined) indicator.textContent = String(value);
+            });
+        } catch (error) {
+            // Keep the last server-rendered values when the connection is unavailable.
+        }
+    };
+    window.setInterval(refresh, 20000);
+})();
+
 (() => {
     const form = document.querySelector('[data-of-picker-form]');
     const search = form?.querySelector('[data-of-search]');
