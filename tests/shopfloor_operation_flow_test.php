@@ -43,6 +43,7 @@ operation_flow_check(strpos($shopfloor, 'register_material_consumption') !== fal
 operation_flow_check(strpos($shopfloor, 'erp_production_order_material_reservations') !== false && strpos($shopfloor, 'missingOperationConsumption') !== false, 'A conclusão da quantidade prevista não exige os consumos da operação.');
 operation_flow_check(strpos($shopfloor, 'DELETE FROM erp_production_consumptions') === false && strpos($shopfloor, 'Consumos reais da operação') !== false, 'O histórico de consumos pode ser apagado ou não é apresentado.');
 operation_flow_check(strpos($shopfloor, 'data-consumption-mode="ROLL"') !== false && strpos($shopfloor, 'data-consumption-mode="INK"') !== false && strpos($shopfloor, 'data-consumption-mode="DIRECT"') !== false, 'Os três fluxos industriais de consumo não estão disponíveis.');
+operation_flow_check(preg_match('/foreach\s*\([^)]*\bas\s*\[/', $shopfloor) !== 1, 'O Shopfloor usa destructuring em foreach, incompatível com PHP 7.0.');
 operation_flow_check(strpos($shopfloor, 'operação retomada automaticamente') !== false, 'A operação não é retomada automaticamente no fim da pausa.');
 operation_flow_check(strpos($shopfloor, "json_each(CASE WHEN json_valid(center_op.allowed_machine_ids_json)") !== false, 'As OF não são disponibilizadas nos centros das máquinas alternativas.');
 operation_flow_check(strpos($shopfloor, "AND opo.work_center_id=?") === false, 'A lista da OF continua a ocultar operações de outros centros de trabalho.');

@@ -389,7 +389,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $flashError = $consumptionError;
         } else {
             try {
-                foreach ($consumptionLines as [$materialId,$quantity,$index]) {
+                foreach ($consumptionLines as $consumptionLine) {
+                    $materialId = (int) $consumptionLine[0];
+                    $quantity = (float) $consumptionLine[1];
+                    $index = (int) $consumptionLine[2];
                     $baseKey=(string)($_POST['idempotency_key']??'');
                     $operationConsumptionService->direct($operationId,$materialId,$quantity,$userId,$selectedWorkCenterId,$baseKey.'-'.$index);
                 }

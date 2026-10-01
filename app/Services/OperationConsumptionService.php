@@ -4,12 +4,14 @@ declare(strict_types=1);
 /** Transactional production consumption ledger for labelled units and bulk stock. */
 final class OperationConsumptionService
 {
-    private PDO $pdo;
+    private $pdo;
     public function __construct(PDO $pdo) { $this->pdo = $pdo; }
 
-    public function findUnit(string $type, string $label): ?array
+    public function findUnit(string $type, string $label)
     {
-        [$table, $kind] = $this->unitDefinition($type);
+        $definition = $this->unitDefinition($type);
+        $table = $definition[0];
+        $kind = $definition[1];
         $stmt = $this->pdo->prepare('SELECT l.*,rm.code article_code,rm.description,rm.width,rm.grammage,rm.average_price,u.code unit_code,s.code supplier_code,w.code warehouse_code,loc.code location_code FROM '.$table.' l JOIN erp_raw_materials rm ON rm.id=l.raw_material_id LEFT JOIN erp_units u ON u.id=rm.primary_unit_id LEFT JOIN erp_suppliers s ON s.id=rm.preferred_supplier_id LEFT JOIN erp_warehouses w ON w.id=l.warehouse_id LEFT JOIN erp_locations loc ON loc.id=l.location_id WHERE l.barcode=? LIMIT 1');
         $stmt->execute([trim($label)]); $row = $stmt->fetch(PDO::FETCH_ASSOC);
         if (!$row) return null;
@@ -28,7 +30,9 @@ final class OperationConsumptionService
             $unit = $this->findUnit($type, $label);
             if (!$unit) throw new InvalidArgumentException('Etiqueta não encontrada.');
             if ((float)$unit['weight_kg'] <= 0 || in_array((string)$unit['status'], ['CONSUMED','BLOCKED'], true)) throw new InvalidArgumentException('Esta unidade não está disponível para consumo.');
-            [$table, $kind] = $this->unitDefinition($type);
+            $definition = $this->unitDefinition($type);
+            $table = $definition[0];
+            $kind = $definition[1];
             $active = $this->pdo->prepare('SELECT 1 FROM erp_production_consumptions WHERE stock_unit_type=? AND stock_unit_id=? AND completed_at IS NULL LIMIT 1');
             $active->execute([$kind,(int)$unit['id']]);
             if ($active->fetchColumn()) throw new InvalidArgumentException('Esta unidade já está em utilização noutra operação.');
@@ -52,7 +56,8 @@ final class OperationConsumptionService
             if ($remaining < 0 || $remaining > $before) throw new InvalidArgumentException('A quantidade restante deve estar entre zero e a quantidade inicial.');
             $quantity=$before-$remaining;
             if ($quantity <= 0) throw new InvalidArgumentException('A quantidade restante tem de ser inferior à quantidade inicial.');
-            [$table]=$this->unitDefinition((string)$row['stock_unit_type']);
+            $definition=$this->unitDefinition((string)$row['stock_unit_type']);
+            $table=$definition[0];
             $current=$this->pdo->prepare('SELECT weight_kg,status FROM '.$table.' WHERE id=?'); $current->execute([(int)$row['stock_unit_id']]); $unit=$current->fetch(PDO::FETCH_ASSOC);
             if (!$unit || (string)$unit['status']!=='IN_USE' || abs((float)$unit['weight_kg']-$before)>0.00001) throw new RuntimeException('A quantidade/estado da unidade mudou. Atualize e tente novamente.');
             $movementId=$this->deductStock((int)$row['raw_material_id'],$quantity,(float)$row['unit_cost'],$userId,(int)$row['production_order_id'],(int)$row['production_order_operation_id'],(int)$row['stock_unit_id'],(string)$row['stock_unit_type']);
@@ -78,7 +83,7 @@ final class OperationConsumptionService
         }catch(Throwable $e){if($this->pdo->inTransaction())$this->pdo->rollBack();throw $e;}
     }
 
-    private function deductStock(int $materialId,float $quantity,float $cost,int $userId,int $orderId,int $operationId,?int $unitId,string $kind): int
+    private function deductStock(int $materialId,float $quantity,float $cost,int $userId,int $orderId,int $operationId,$unitId,string $kind): int
     {
         $rows=$this->pdo->prepare('SELECT rowid,warehouse_id,location_id,lot,physical_qty,reserved_qty,blocked_qty FROM erp_stock_balances WHERE item_type="raw_material" AND item_id=? AND physical_qty>blocked_qty ORDER BY CASE WHEN reserved_qty>0 THEN 0 ELSE 1 END,updated_at,rowid');$rows->execute([$materialId]);$remaining=$quantity;$parts=[];
         foreach($rows->fetchAll(PDO::FETCH_ASSOC) as $row){$usable=max(0,(float)$row['physical_qty']-(float)$row['blocked_qty']);$take=min($remaining,$usable);if($take<=0)continue;$release=min($take,(float)$row['reserved_qty']);$update=$this->pdo->prepare('UPDATE erp_stock_balances SET physical_qty=physical_qty-CAST(? AS REAL),reserved_qty=MAX(0,reserved_qty-CAST(? AS REAL)),updated_at=CURRENT_TIMESTAMP WHERE rowid=CAST(? AS INTEGER) AND physical_qty-blocked_qty>=CAST(? AS REAL)');$update->execute([$take,$release,(int)$row['rowid'],$take]);if(!$update->rowCount())throw new RuntimeException('O stock foi alterado por outro utilizador. Atualize e tente novamente.');$parts[]=[$row,$take];$remaining-=$take;if($remaining<0.000001)break;}
