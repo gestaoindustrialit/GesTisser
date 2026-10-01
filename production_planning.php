@@ -8,7 +8,7 @@ if (!is_admin($pdo, (int) ($_SESSION['user_id'] ?? 0)) && !gt_erp_user_can($pdo,
     http_response_code(403);
     exit('Sem permissão para consultar o planeamento da produção.');
 }
-$stmt = $pdo->query("SELECT o.*, p.code product_code, fp.code finished_product_code, fp.description finished_product_description, c.name customer_name FROM erp_production_orders o JOIN erp_products p ON p.id=o.product_id LEFT JOIN erp_finished_products fp ON fp.id=o.finished_product_id LEFT JOIN erp_customers c ON c.id=o.customer_id WHERE o.status NOT IN ('Concluída','Fechada','Cancelada') ORDER BY o.planning_priority IS NULL,o.planning_priority,o.due_date IS NULL,o.due_date,o.id DESC");
+$stmt = $pdo->query("SELECT o.*, p.code product_code, fp.code finished_product_code, fp.description finished_product_description, c.name customer_name FROM erp_production_orders o JOIN erp_products p ON p.id=o.product_id LEFT JOIN erp_finished_products fp ON fp.id=o.finished_product_id LEFT JOIN erp_customers c ON c.id=o.customer_id WHERE o.status NOT IN ('Concluída','Fechada','Encerrada','Cancelada') ORDER BY o.planning_priority IS NULL,o.planning_priority,o.due_date IS NULL,o.due_date,o.id DESC");
 $orders = $stmt->fetchAll(PDO::FETCH_ASSOC);
 $updatedAt = $pdo->query("SELECT MAX(updated_at) FROM erp_production_orders")->fetchColumn();
 ?>

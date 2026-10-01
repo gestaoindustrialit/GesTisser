@@ -116,7 +116,7 @@ final class ProductionDossierService
         if($issues&&!$override)throw new RuntimeException("Não é possível fechar a OF:\n• ".implode("\n• ",$issues));
         if($issues&&trim($reason)==='')throw new RuntimeException('O motivo do override é obrigatório.');
         $this->pdo->prepare('INSERT INTO erp_production_order_closures(production_order_id,metrics_json,total_planned_cost,total_actual_cost,override_reason,closed_by) VALUES (?,?,?,?,?,?)')->execute([$orderId,json_encode($d['metrics'],JSON_UNESCAPED_UNICODE),(float)$d['metrics']['planned_cost'],(float)$d['metrics']['actual_cost'],$issues?$reason:null,$userId]);
-        $this->pdo->prepare('UPDATE erp_production_orders SET status="Fechada",produced_quantity=?,updated_at=CURRENT_TIMESTAMP WHERE id=?')->execute([(float)$d['metrics']['good'],$orderId]);
+        $this->pdo->prepare('UPDATE erp_production_orders SET status="Encerrada",produced_quantity=?,updated_at=CURRENT_TIMESTAMP WHERE id=?')->execute([(float)$d['metrics']['good'],$orderId]);
         $this->pdo->prepare('INSERT INTO erp_production_order_audit(production_order_id,user_id,action,new_value_json,reason) VALUES (?,? ,"close",?,?)')->execute([$orderId,$userId,json_encode($d['metrics'],JSON_UNESCAPED_UNICODE),$issues?$reason:null]);
         return $d;
     }

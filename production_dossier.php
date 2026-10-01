@@ -55,7 +55,7 @@ function pd_logo_src(string $configuredPath): string
 $documentNumberStmt=$pdo->prepare('SELECT document_number FROM erp_document_catalog WHERE code = ? AND is_active = 1 LIMIT 1');$documentNumberStmt->execute(['production_dossier']);$productionDossierDocumentNumber=trim((string)$documentNumberStmt->fetchColumn())?:'DOC-PRD-001';
 $productionCompanyName=trim((string)app_setting($pdo,'company_name','TISSER'))?:'TISSER';$productionCompanyAddress=trim((string)app_setting($pdo,'company_address',''));$productionCompanyLogo=pd_logo_src((string)app_setting($pdo,'logo_report_dark',''));$productionCompanyContacts=array_filter([trim((string)app_setting($pdo,'company_phone','')),trim((string)app_setting($pdo,'company_email',''))]);
 $productionOrderFrontColors=pd_order_colors($s['of_front_colors']??'');$productionOrderBackColors=pd_order_colors($s['of_back_colors']??'');$cr=(array)($d['closeReport']??[]);
-$statusClass=['Planeada'=>'primary','Libertada'=>'info','Em produção'=>'warning','Suspensa'=>'secondary','Fechada'=>'success','Cancelada'=>'danger'][$o['status']]??'light';
+$statusClass=['Por iniciar'=>'secondary','Planeada'=>'secondary','Em Produção'=>'warning','Em produção'=>'warning','Em curso'=>'warning','Em Pausa'=>'info','Suspensa'=>'info','Concluída'=>'success','Encerrada'=>'dark','Fechada'=>'dark','Cancelada'=>'danger'][$o['status']]??'light';
 $mainDocument=ArticleDocument::mainArtwork((array)($s['_documents']??[]));
 $mainDocumentThumbnail='';if($mainDocument){$path=ArticleDocument::absolutePath(__DIR__,(string)($mainDocument['file_url']??''));if($path!=='')$mainDocumentThumbnail='data:image/jpeg;base64,'.base64_encode(ArticleDocument::thumbnail($path));}
 if(($_GET['format']??'')==='pdf'){
