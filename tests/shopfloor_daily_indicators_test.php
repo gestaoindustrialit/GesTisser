@@ -1,6 +1,11 @@
 <?php
 require_once __DIR__ . '/../app/Services/ShopfloorDailyIndicators.php';
 
+$serviceSource = (string) file_get_contents(__DIR__ . '/../app/Services/ShopfloorDailyIndicators.php');
+if (preg_match('/\b(?:public|protected|private)\s+[A-Za-z_\\\\][A-Za-z0-9_\\\\]*\s+\$/', $serviceSource)) {
+    throw new RuntimeException('The daily indicators service must remain compatible with PHP versions before typed properties.');
+}
+
 $pdo = new PDO('sqlite::memory:');
 $pdo->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
 $pdo->exec('CREATE TABLE shopfloor_time_entries (id INTEGER PRIMARY KEY, user_id INTEGER, entry_type TEXT, occurred_at TEXT)');
