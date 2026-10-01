@@ -357,6 +357,17 @@ function gt_erp_run_phase1_migrations(PDO $pdo)
         $pdo->exec('CREATE INDEX IF NOT EXISTS idx_erp_raw_material_roll_consumptions_source ON erp_raw_material_roll_consumptions(source_label_id,created_at)');
         $pdo->exec('CREATE TABLE IF NOT EXISTS erp_raw_material_ink_labels (id INTEGER PRIMARY KEY AUTOINCREMENT, raw_material_id INTEGER NOT NULL, entry_number TEXT NOT NULL, supplier_lot TEXT NOT NULL, weight_kg REAL NOT NULL, barcode TEXT NOT NULL UNIQUE, label_date TEXT NOT NULL, validated_by INTEGER NOT NULL, validated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP, updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP, FOREIGN KEY(raw_material_id) REFERENCES erp_raw_materials(id) ON DELETE RESTRICT, FOREIGN KEY(validated_by) REFERENCES users(id) ON DELETE RESTRICT)');
         $pdo->exec('CREATE INDEX IF NOT EXISTS idx_erp_raw_material_ink_labels_material ON erp_raw_material_ink_labels(raw_material_id,label_date,entry_number)');
+        /* A label is the existing physical stock-unit identity.  Keep its barcode
+           stable and add lifecycle fields instead of introducing a parallel unit table. */
+        foreach (['initial_metres'=>'REAL','initial_weight_kg'=>'REAL','status'=>'TEXT NOT NULL DEFAULT "AVAILABLE"','warehouse_id'=>'INTEGER REFERENCES erp_warehouses(id) ON DELETE SET NULL','location_id'=>'INTEGER REFERENCES erp_locations(id) ON DELETE SET NULL'] as $column=>$definition) {
+            if (!gt_erp_migration_column_exists($pdo,'erp_raw_material_roll_labels',$column)) $pdo->exec('ALTER TABLE erp_raw_material_roll_labels ADD COLUMN '.$column.' '.$definition);
+        }
+        foreach (['initial_weight_kg'=>'REAL','status'=>'TEXT NOT NULL DEFAULT "AVAILABLE"','warehouse_id'=>'INTEGER REFERENCES erp_warehouses(id) ON DELETE SET NULL','location_id'=>'INTEGER REFERENCES erp_locations(id) ON DELETE SET NULL'] as $column=>$definition) {
+            if (!gt_erp_migration_column_exists($pdo,'erp_raw_material_ink_labels',$column)) $pdo->exec('ALTER TABLE erp_raw_material_ink_labels ADD COLUMN '.$column.' '.$definition);
+        }
+        $pdo->exec('UPDATE erp_raw_material_roll_labels SET initial_metres=metres WHERE initial_metres IS NULL');
+        $pdo->exec('UPDATE erp_raw_material_roll_labels SET initial_weight_kg=weight_kg WHERE initial_weight_kg IS NULL');
+        $pdo->exec('UPDATE erp_raw_material_ink_labels SET initial_weight_kg=weight_kg WHERE initial_weight_kg IS NULL');
         foreach (['validated_at'=>'DATETIME','updated_at'=>'DATETIME'] as $column=>$definition) {
             if (!gt_erp_migration_column_exists($pdo,'erp_production_labels',$column)) $pdo->exec('ALTER TABLE erp_production_labels ADD COLUMN '.$column.' '.$definition);
         }
@@ -372,7 +383,12 @@ function gt_erp_run_phase1_migrations(PDO $pdo)
         foreach (['raw_material_id'=>'INTEGER REFERENCES erp_raw_materials(id) ON DELETE RESTRICT','production_order_operation_id'=>'INTEGER REFERENCES erp_production_order_operations(id) ON DELETE SET NULL','lot'=>'TEXT','planned_quantity'=>'REAL NOT NULL DEFAULT 0','source_movement_id'=>'INTEGER REFERENCES erp_stock_movements(id) ON DELETE SET NULL'] as $column=>$definition) {
             if (!gt_erp_migration_column_exists($pdo,'erp_production_consumptions',$column)) $pdo->exec('ALTER TABLE erp_production_consumptions ADD COLUMN '.$column.' '.$definition);
         }
+        foreach (['consumption_type'=>'TEXT NOT NULL DEFAULT "DIRECT"','stock_unit_type'=>'TEXT','stock_unit_id'=>'INTEGER','quantity_before'=>'REAL','quantity_after'=>'REAL','unit_code'=>'TEXT','workstation_id'=>'INTEGER REFERENCES erp_work_centers(id) ON DELETE SET NULL','completed_at'=>'DATETIME','idempotency_key'=>'TEXT'] as $column=>$definition) {
+            if (!gt_erp_migration_column_exists($pdo,'erp_production_consumptions',$column)) $pdo->exec('ALTER TABLE erp_production_consumptions ADD COLUMN '.$column.' '.$definition);
+        }
         $pdo->exec('CREATE INDEX IF NOT EXISTS idx_erp_production_consumptions_operation ON erp_production_consumptions(production_order_operation_id)');
+        $pdo->exec('CREATE INDEX IF NOT EXISTS idx_erp_production_consumptions_unit ON erp_production_consumptions(stock_unit_type,stock_unit_id)');
+        $pdo->exec('CREATE UNIQUE INDEX IF NOT EXISTS idx_erp_production_consumptions_idempotency ON erp_production_consumptions(idempotency_key) WHERE idempotency_key IS NOT NULL');
         $pdo->exec('CREATE INDEX IF NOT EXISTS idx_erp_sheet_versions_article ON erp_article_technical_sheet_versions(finished_product_id,status,effective_from)');
         $pdo->exec('CREATE UNIQUE INDEX IF NOT EXISTS idx_erp_orders_public_token ON erp_production_orders(public_token) WHERE public_token IS NOT NULL');
         $pdo->exec('CREATE INDEX IF NOT EXISTS idx_erp_order_costs_order ON erp_production_order_costs(production_order_id,category)');
