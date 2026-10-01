@@ -5,6 +5,7 @@ require_once __DIR__ . '/app/Services/ArticleDocument.php';
 require_once __DIR__ . '/app/Services/OperationChecklistService.php';
 require_once __DIR__ . '/app/Services/RoutingService.php';
 require_once __DIR__ . '/app/Services/ShopfloorDailyIndicators.php';
+require_once __DIR__ . '/app/Services/OperationConsumptionService.php';
 $validatedHourBankCalculatorPath = __DIR__ . '/app/Services/ValidatedHourBankCalculator.php';
 if (is_file($validatedHourBankCalculatorPath)) {
     require_once $validatedHourBankCalculatorPath;
@@ -17,6 +18,7 @@ gt_erp_run_phase1_migrations($pdo);
 
 $userId = (int) $_SESSION['user_id'];
 $operationChecklistService = new OperationChecklistService($pdo);
+$operationConsumptionService = new OperationConsumptionService($pdo);
 $user = current_user($pdo);
 $profile = (string) ($user['access_profile'] ?? 'Utilizador');
 $isAdmin = (int) ($user['is_admin'] ?? 0) === 1;
@@ -72,6 +74,16 @@ if (!isset($workCentersById[$selectedWorkCenterId])) {
 }
 $selectedWorkCenter = $selectedWorkCenterId > 0 ? $workCentersById[$selectedWorkCenterId] : null;
 $selectedWorkCenterMachineId = (int) ($selectedWorkCenter['machine_id'] ?? 0);
+
+if (($_GET['action'] ?? '') === 'lookup_stock_unit') {
+    header('Content-Type: application/json; charset=utf-8');
+    try {
+        $unit=$operationConsumptionService->findUnit((string)($_GET['unit_type']??''),(string)($_GET['label_number']??''));
+        if(!$unit){http_response_code(404);echo json_encode(['ok'=>false,'message'=>'Etiqueta não encontrada.']);}
+        else echo json_encode(['ok'=>true,'unit'=>$unit],JSON_UNESCAPED_UNICODE|JSON_UNESCAPED_SLASHES);
+    } catch(Throwable $exception){http_response_code(422);echo json_encode(['ok'=>false,'message'=>$exception->getMessage()],JSON_UNESCAPED_UNICODE);}
+    exit;
+}
 
 if (!function_exists('shopfloor_format_quantity')) {
     function shopfloor_format_quantity(float $quantity): string
@@ -334,6 +346,22 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         if($flashError){}elseif($entryInfo&&(int)$entryInfo['requires_good_quantity']===1&&$reject>0&&$reason===''){$flashError='Indique o Motivo NOK.';}elseif($entryInfo&&((int)$entryInfo['requires_quality']||trim((string)$entryInfo['quality_points'])!=='')&&!in_array($qualityResult,['pass','fail','na'],true)){$flashError='Execute e registe o controlo de qualidade obrigatório.';}else{$stmt->execute([$good, $reject, trim((string)($_POST['notes'] ?? '')) ?: null, $entryId, $userId]);if($stmt->rowCount()>0){$pdo->prepare('UPDATE erp_operation_stoppages SET ended_at = CURRENT_TIMESTAMP WHERE time_entry_id = ? AND ended_at IS NULL')->execute([$entryId]);if($endChecklistRequired)$operationChecklistService->save($entryInfo,$userId,'end',(array)($_POST['checklist']??[]),$entryId);if($reject>0)$pdo->prepare('INSERT INTO erp_operation_waste(time_entry_id,quantity,reason,created_by) VALUES (?,?,?,?)')->execute([$entryId,$reject,$reason,$userId]);if($qualityResult!=='')$pdo->prepare('INSERT INTO erp_operation_quality_checks(production_order_operation_id,checkpoint,result,checked_by) VALUES (?,?,?,?)')->execute([(int)$entryInfo['id'],trim((string)$entryInfo['quality_points'])?:'Controlo obrigatório',$qualityResult,$userId]);$pdo->prepare('UPDATE erp_production_order_operations SET status="Concluída" WHERE id=(SELECT production_order_operation_id FROM erp_operation_time_entries WHERE id=?)')->execute([$entryId]);}$flashSuccess=$stmt->rowCount()>0?'Operação concluída e tempos registados na OF.':'Operação inválida.';}
     }
 
+    if ($action === 'start_unit_consumption') {
+        try {
+            if(!gt_erp_user_can($pdo,$user?:[],'erp.shopfloor.execute'))throw new RuntimeException('Sem permissão para registar consumos.');
+            $operationConsumptionService->startUnit((int)($_POST['po_operation_id']??0),(string)($_POST['unit_type']??''),(string)($_POST['label_number']??''),$userId,$selectedWorkCenterId,(string)($_POST['idempotency_key']??''));
+            $flashSuccess='Unidade associada à operação. Registe o restante quando sair da máquina.';
+        } catch (Throwable $exception) { $flashError=$exception->getMessage(); }
+    }
+    if ($action === 'finish_unit_consumption') {
+        try {
+            if(!gt_erp_user_can($pdo,$user?:[],'erp.shopfloor.execute'))throw new RuntimeException('Sem permissão para registar consumos.');
+            $remaining=(float)str_replace(',','.',(string)($_POST['remaining_quantity']??''));
+            if(isset($_POST['finished_unit']))$remaining=0.0;
+            $operationConsumptionService->finishUnit((int)($_POST['consumption_id']??0),$remaining,$userId,(string)($_POST['idempotency_key']??''));
+            $flashSuccess='Consumo fechado e movimento de stock registado.';
+        } catch (Throwable $exception) { $flashError=$exception->getMessage(); }
+    }
     if ($action === 'register_material_consumption') {
         $operationId = (int) ($_POST['po_operation_id'] ?? 0);
         $materialIds = (array) ($_POST['raw_material_id'] ?? []);
@@ -348,8 +376,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $quantity = (float) str_replace(',', '.', (string) ($quantities[$index] ?? 0));
             if ($materialId <= 0 && $quantity <= 0) continue;
             if ($materialId <= 0 || $quantity <= 0) { $consumptionError = 'Cada linha deve indicar um material e um consumo superior a zero.'; break; }
-            if (isset($consumptionLines[$materialId])) { $consumptionError = 'O mesmo material não pode aparecer em mais do que uma linha.'; break; }
-            $consumptionLines[$materialId] = $quantity;
+            $consumptionLines[] = [$materialId,$quantity,$index];
         }
         $requiredMaterialStmt = $pdo->prepare('SELECT material_id FROM erp_production_order_material_reservations WHERE production_order_operation_id=? UNION SELECT sm.material_id FROM erp_routing_step_materials sm JOIN erp_production_order_operations opo ON opo.routing_step_id=sm.routing_step_id WHERE opo.id=?');
         $requiredMaterialStmt->execute([$operationId, $operationId]);
@@ -360,25 +387,18 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $flashError = 'Operação inválida para registo de consumos.';
         } elseif ($consumptionError !== '') {
             $flashError = $consumptionError;
-        } elseif (array_diff($requiredMaterialIds, array_keys($consumptionLines))) {
-            $flashError = 'Preencha o consumo de todos os materiais obrigatórios da operação.';
         } else {
-            $pdo->beginTransaction();
             try {
-                $pdo->prepare('DELETE FROM erp_production_consumptions WHERE production_order_operation_id=?')->execute([$operationId]);
-                $materialStmt = $pdo->prepare('SELECT id,average_price FROM erp_raw_materials WHERE id=? AND status="Ativo"');
-                $insertConsumptionStmt = $pdo->prepare('INSERT INTO erp_production_consumptions(production_order_id,production_order_operation_id,product_id,raw_material_id,quantity,unit_cost,created_by) VALUES (?,?,?,?,?,?,?)');
-                foreach ($consumptionLines as $materialId => $quantity) {
-                    $materialStmt->execute([$materialId]);
-                    $material = $materialStmt->fetch(PDO::FETCH_ASSOC);
-                    if (!$material) throw new InvalidArgumentException('Selecione apenas materiais ativos.');
-                    $insertConsumptionStmt->execute([(int)$consumptionOperation['production_order_id'],$operationId,(int)$consumptionOperation['product_id'],$materialId,$quantity,(float)$material['average_price'],$userId]);
+                foreach ($consumptionLines as $consumptionLine) {
+                    $materialId = (int) $consumptionLine[0];
+                    $quantity = (float) $consumptionLine[1];
+                    $index = (int) $consumptionLine[2];
+                    $baseKey=(string)($_POST['idempotency_key']??'');
+                    $operationConsumptionService->direct($operationId,$materialId,$quantity,$userId,$selectedWorkCenterId,$baseKey.'-'.$index);
                 }
-                $pdo->commit();
-                $flashSuccess = 'Consumos da operação guardados com sucesso.';
+                $flashSuccess = 'Consumos diretos e movimentos de stock registados.';
             } catch (Throwable $exception) {
-                if ($pdo->inTransaction()) $pdo->rollBack();
-                $flashError = $exception instanceof InvalidArgumentException ? $exception->getMessage() : 'Não foi possível guardar os consumos da operação.';
+                $flashError = $exception->getMessage();
             }
         }
     }
@@ -1105,7 +1125,7 @@ if ($selectedOfId > 0) {
         $artworkStmt = $pdo->prepare('SELECT id, document_type, title, file_url FROM erp_product_documents WHERE entity_type="finished_product" AND entity_id=? AND status="Ativo" ORDER BY id');
         $artworkStmt->execute([(int) $selectedOf['finished_product_id']]);
         $articleArtwork = ArticleDocument::mainArtwork($artworkStmt->fetchAll(PDO::FETCH_ASSOC));
-        $consumptionMaterialsStmt = $pdo->prepare('SELECT rm.id,rm.code,rm.description,u.code unit_code,am.quantity_per_unit FROM erp_article_materials am JOIN erp_raw_materials rm ON rm.id=am.raw_material_id AND rm.status="Ativo" LEFT JOIN erp_units u ON u.id=rm.primary_unit_id WHERE am.finished_product_id=? ORDER BY rm.code COLLATE NOCASE');
+        $consumptionMaterialsStmt = $pdo->prepare('SELECT rm.id,rm.code,rm.description,rm.roll_controlled,rm.ink_type_id,u.code unit_code,am.quantity_per_unit FROM erp_article_materials am JOIN erp_raw_materials rm ON rm.id=am.raw_material_id AND rm.status="Ativo" LEFT JOIN erp_units u ON u.id=rm.primary_unit_id WHERE am.finished_product_id=? ORDER BY rm.code COLLATE NOCASE');
         $consumptionMaterialsStmt->execute([(int) $selectedOf['finished_product_id']]);
         $ofConsumptionMaterials = $consumptionMaterialsStmt->fetchAll(PDO::FETCH_ASSOC);
     }
@@ -1115,12 +1135,12 @@ if ($selectedOfId > 0) {
     $opsStmt = $pdo->prepare($opsSql);
     $opsStmt->execute($opsParams);
     $ofOperations = $opsStmt->fetchAll(PDO::FETCH_ASSOC);
-    $consumptionMaterialsStmt = $pdo->query('SELECT rm.id,rm.code,rm.description,u.code unit_code FROM erp_raw_materials rm LEFT JOIN erp_units u ON u.id=rm.primary_unit_id WHERE rm.status="Ativo" ORDER BY rm.code COLLATE NOCASE');
+    $consumptionMaterialsStmt = $pdo->query('SELECT rm.id,rm.code,rm.description,rm.roll_controlled,rm.ink_type_id,u.code unit_code FROM erp_raw_materials rm LEFT JOIN erp_units u ON u.id=rm.primary_unit_id WHERE rm.status="Ativo" ORDER BY rm.code COLLATE NOCASE');
     $ofConsumptionMaterials = $consumptionMaterialsStmt ? $consumptionMaterialsStmt->fetchAll(PDO::FETCH_ASSOC) : [];
     $requiredMaterialsStmt = $pdo->prepare('SELECT required.production_order_operation_id,required.material_id,MAX(required.required_qty) required_qty,rm.code,rm.description,u.code unit_code FROM (SELECT r.production_order_operation_id,r.material_id,r.required_qty FROM erp_production_order_material_reservations r UNION ALL SELECT opo.id,sm.material_id,po.planned_quantity*sm.quantity_per_unit FROM erp_production_order_operations opo JOIN erp_production_orders po ON po.id=opo.production_order_id JOIN erp_routing_step_materials sm ON sm.routing_step_id=opo.routing_step_id) required JOIN erp_production_order_operations opo ON opo.id=required.production_order_operation_id JOIN erp_raw_materials rm ON rm.id=required.material_id LEFT JOIN erp_units u ON u.id=rm.primary_unit_id WHERE opo.production_order_id=? GROUP BY required.production_order_operation_id,required.material_id ORDER BY rm.code COLLATE NOCASE');
     $requiredMaterialsStmt->execute([$selectedOfId]);
     foreach ($requiredMaterialsStmt->fetchAll(PDO::FETCH_ASSOC) as $requiredMaterial) $operationRequiredMaterials[(int)$requiredMaterial['production_order_operation_id']][] = $requiredMaterial;
-    $operationConsumptionsStmt = $pdo->prepare('SELECT pc.production_order_operation_id,pc.raw_material_id,pc.quantity,rm.code,rm.description,u.code unit_code FROM erp_production_consumptions pc JOIN erp_raw_materials rm ON rm.id=pc.raw_material_id LEFT JOIN erp_units u ON u.id=rm.primary_unit_id WHERE pc.production_order_id=? AND pc.production_order_operation_id IS NOT NULL ORDER BY pc.id');
+    $operationConsumptionsStmt = $pdo->prepare('SELECT pc.*,rm.code,rm.description,COALESCE(pc.unit_code,u.code) unit_code,CASE pc.stock_unit_type WHEN "ROLL" THEN rl.barcode WHEN "INK" THEN il.barcode END label_number FROM erp_production_consumptions pc JOIN erp_raw_materials rm ON rm.id=pc.raw_material_id LEFT JOIN erp_units u ON u.id=rm.primary_unit_id LEFT JOIN erp_raw_material_roll_labels rl ON pc.stock_unit_type="ROLL" AND rl.id=pc.stock_unit_id LEFT JOIN erp_raw_material_ink_labels il ON pc.stock_unit_type="INK" AND il.id=pc.stock_unit_id WHERE pc.production_order_id=? AND pc.production_order_operation_id IS NOT NULL ORDER BY pc.id');
     $operationConsumptionsStmt->execute([$selectedOfId]);
     foreach ($operationConsumptionsStmt->fetchAll(PDO::FETCH_ASSOC) as $consumption) $operationConsumptions[(int)$consumption['production_order_operation_id']][] = $consumption;
 }
@@ -1307,7 +1327,7 @@ require __DIR__ . '/partials/header.php';
                                 <?php endif; ?>
                                 <div class="small text-secondary"><?= nl2br(h((string)($op['instructions']??''))) ?></div></div>
                         </div>
-                        <div class="shopfloor-operation-state-actions"><span class="shopfloor-operation-status <?= $isOpen ? ($isPaused ? 'is-paused' : 'is-running') : '' ?>"><?= h($op['status']) ?><?php if ((string) $op['status'] === 'Concluída'): ?> · <?= (int) ($op['requires_good_quantity'] ?? 1) === 1 ? h(shopfloor_format_quantity((float) ($op['quantity_good'] ?? 0))) . '/' . h(shopfloor_format_quantity((float) ($selectedOf['planned_quantity'] ?? 0))) : '100%' ?><?php endif; ?><?= $isPaused ? ' · Pausada' : '' ?></span><button type="button" class="btn btn-sm btn-outline-primary" data-bs-toggle="modal" data-bs-target="#materialConsumptionModal-<?= (int)$op['id'] ?>" <?= $ofConsumptionMaterials ? '' : 'disabled title="Não existem materiais ativos"' ?>><i class="bi bi-box-seam me-1"></i><?= !empty($operationConsumptions[(int)$op['id']]) ? 'Editar consumo' : 'Consumo' ?></button></div>
+                        <div class="shopfloor-operation-state-actions"><span class="shopfloor-operation-status <?= $isOpen ? ($isPaused ? 'is-paused' : 'is-running') : '' ?>"><?= h($op['status']) ?><?php if ((string) $op['status'] === 'Concluída'): ?> · <?= (int) ($op['requires_good_quantity'] ?? 1) === 1 ? h(shopfloor_format_quantity((float) ($op['quantity_good'] ?? 0))) . '/' . h(shopfloor_format_quantity((float) ($selectedOf['planned_quantity'] ?? 0))) : '100%' ?><?php endif; ?><?= $isPaused ? ' · Pausada' : '' ?></span><button type="button" class="btn btn-sm btn-outline-primary" data-bs-toggle="modal" data-bs-target="#materialConsumptionModal-<?= (int)$op['id'] ?>" <?= $ofConsumptionMaterials ? '' : 'disabled title="Não existem materiais ativos"' ?>><i class="bi bi-box-seam me-1"></i><?= !empty($operationConsumptions[(int)$op['id']]) ? count($operationConsumptions[(int)$op['id']]).' consumos' : 'Consumo' ?></button></div>
                     </div>
                     <div class="shopfloor-operation-metrics">
                         <div><span>Previsto</span><strong><?= h(number_format((float)($op['planned_minutes']??0),1,',','.')) ?> min</strong></div>
@@ -1336,35 +1356,25 @@ require __DIR__ . '/partials/header.php';
                 <?php
                     $requiredConsumptionRows = $operationRequiredMaterials[(int)$op['id']] ?? [];
                     $savedConsumptionRows = $operationConsumptions[(int)$op['id']] ?? [];
-                    $consumptionRows = $savedConsumptionRows;
-                    $savedMaterialIds = array_map('intval', array_column($savedConsumptionRows, 'raw_material_id'));
-                    foreach ($requiredConsumptionRows as $requiredRow) {
-                        if (!in_array((int)$requiredRow['material_id'], $savedMaterialIds, true)) {
-                            $consumptionRows[] = ['raw_material_id'=>$requiredRow['material_id'],'quantity'=>'','code'=>$requiredRow['code'],'description'=>$requiredRow['description'],'unit_code'=>$requiredRow['unit_code']];
-                        }
-                    }
-                    $requiredConsumptionIds = array_map('intval', array_column($requiredConsumptionRows, 'material_id'));
+                    $suggestRoll=false;$suggestInk=false;
+                    foreach($requiredConsumptionRows as $requiredRow){foreach($ofConsumptionMaterials as $candidate){if((int)$candidate['id']===(int)$requiredRow['material_id']){$suggestRoll=$suggestRoll||!empty($candidate['roll_controlled']);$suggestInk=$suggestInk||!empty($candidate['ink_type_id']);}}}
                 ?>
                 <div class="modal fade" id="materialConsumptionModal-<?= (int)$op['id'] ?>" tabindex="-1" aria-labelledby="materialConsumptionTitle-<?= (int)$op['id'] ?>" aria-hidden="true">
-                    <div class="modal-dialog modal-lg modal-dialog-centered"><div class="modal-content"><form method="post" data-material-consumption-form>
-                        <input type="hidden" name="action" value="register_material_consumption"><input type="hidden" name="po_operation_id" value="<?= (int)$op['id'] ?>">
-                        <div class="modal-header"><div><h2 class="modal-title fs-5" id="materialConsumptionTitle-<?= (int)$op['id'] ?>"><?= $savedConsumptionRows ? 'Editar consumos' : 'Consumo de material' ?></h2><p class="small text-secondary mb-0"><?=h($op['code'].' - '.$op['name'])?></p></div><button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Fechar"></button></div>
+                    <div class="modal-dialog modal-lg modal-dialog-centered modal-dialog-scrollable"><div class="modal-content">
+                        <div class="modal-header"><div><h2 class="modal-title fs-5" id="materialConsumptionTitle-<?= (int)$op['id'] ?>">Registar consumo</h2><p class="small text-secondary mb-0"><?=h($op['code'].' - '.$op['name'])?></p></div><button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Fechar"></button></div>
                         <div class="modal-body">
-                            <?php if (!$requiredConsumptionRows): ?><div class="alert alert-info">Esta operação não tem materiais obrigatórios. Pode adicionar consumos extra.</div><?php endif; ?>
-                            <div class="d-grid gap-2" data-consumption-rows>
-                                <?php foreach($consumptionRows as $consumptionRow): $rowMaterialId=(int)$consumptionRow['raw_material_id'];$rowRequired=in_array($rowMaterialId,$requiredConsumptionIds,true); ?>
-                                    <div class="row g-2 align-items-end" data-consumption-row>
-                                        <div class="col-md-7"><label class="form-label">Material <?= $rowRequired?'<span class="text-danger">*</span>':'' ?></label><select class="form-select" name="raw_material_id[]" data-consumption-material required><option value="">Escolher…</option><?php foreach($ofConsumptionMaterials as $material):?><option value="<?=(int)$material['id']?>" data-unit="<?=h((string)($material['unit_code']?:'un.'))?>" <?= (int)$material['id']===$rowMaterialId?'selected':'' ?>><?=h($material['code'].' · '.$material['description'])?></option><?php endforeach;?></select></div>
-                                        <div class="col-md"><label class="form-label">Quantidade (<span data-consumption-unit><?=h((string)($consumptionRow['unit_code']?:'un.'))?></span>)</label><input class="form-control" type="number" name="quantity[]" value="<?=h((string)$consumptionRow['quantity'])?>" min="0.001" step="0.001" inputmode="decimal" required></div>
-                                        <div class="col-auto"><button type="button" class="btn btn-outline-danger" data-remove-consumption-row <?= $rowRequired?'disabled title="Material obrigatório"':'' ?> aria-label="Remover linha"><i class="bi bi-trash"></i></button></div>
-                                    </div>
-                                <?php endforeach; ?>
+                            <?php if($requiredConsumptionRows):?><div class="alert alert-light border"><strong>Consumo previsto</strong><?php foreach($requiredConsumptionRows as $planned):?><div class="small"><?=h($planned['code'].' · '.$planned['description'])?></div><?php endforeach;?></div><?php endif;?>
+                            <div class="d-grid d-sm-flex gap-2 mb-3" role="tablist">
+                                <button type="button" class="btn <?= $suggestRoll?'btn-primary':'btn-outline-primary' ?> flex-fill" data-consumption-mode="ROLL">📦 Rolo / Bobine<?= $suggestRoll?' · sugerido':''?></button>
+                                <button type="button" class="btn <?= $suggestInk?'btn-primary':'btn-outline-primary' ?> flex-fill" data-consumption-mode="INK">🎨 Lata de tinta<?= $suggestInk?' · sugerido':''?></button>
+                                <button type="button" class="btn <?= !$suggestRoll&&!$suggestInk?'btn-primary':'btn-outline-primary' ?> flex-fill" data-consumption-mode="DIRECT">⚖ Consumo direto</button>
                             </div>
-                            <button type="button" class="btn btn-outline-primary mt-3" data-add-consumption-row><i class="bi bi-plus-lg me-1"></i>Adicionar consumo extra</button>
-                            <template data-consumption-row-template><div class="row g-2 align-items-end" data-consumption-row><div class="col-md-7"><label class="form-label">Material extra</label><select class="form-select" name="raw_material_id[]" data-consumption-material required><option value="">Escolher…</option><?php foreach($ofConsumptionMaterials as $material):?><option value="<?=(int)$material['id']?>" data-unit="<?=h((string)($material['unit_code']?:'un.'))?>"><?=h($material['code'].' · '.$material['description'])?></option><?php endforeach;?></select></div><div class="col-md"><label class="form-label">Quantidade (<span data-consumption-unit>un.</span>)</label><input class="form-control" type="number" name="quantity[]" min="0.001" step="0.001" inputmode="decimal" required></div><div class="col-auto"><button type="button" class="btn btn-outline-danger" data-remove-consumption-row aria-label="Remover linha"><i class="bi bi-trash"></i></button></div></div></template>
+                            <form method="post" data-unit-consumption-form class="border rounded p-3 mb-3 d-none"><input type="hidden" name="action" value="start_unit_consumption"><input type="hidden" name="po_operation_id" value="<?=(int)$op['id']?>"><input type="hidden" name="unit_type"><input type="hidden" name="idempotency_key" value="<?=h(bin2hex(random_bytes(16)))?>"><label class="form-label fw-semibold" data-unit-label>Nº da etiqueta</label><div class="input-group input-group-lg"><input class="form-control" name="label_number" autocomplete="off" enterkeyhint="search" required><button class="btn btn-outline-primary" type="button" data-lookup-unit>Pesquisar</button></div><div class="mt-3" data-unit-result aria-live="polite"></div><button class="btn btn-success btn-lg w-100 mt-3 d-none" data-confirm-unit>Usar esta unidade</button></form>
+                            <form method="post" data-material-consumption-form class="border rounded p-3 mb-3 d-none"><input type="hidden" name="action" value="register_material_consumption"><input type="hidden" name="po_operation_id" value="<?=(int)$op['id']?>"><input type="hidden" name="idempotency_key" value="<?=h(bin2hex(random_bytes(16)))?>"><div data-consumption-rows><div class="row g-2" data-consumption-row><div class="col-md-8"><label class="form-label">Material</label><select class="form-select" name="raw_material_id[]" data-consumption-material required><option value="">Escolher…</option><?php foreach($ofConsumptionMaterials as $material):?><option value="<?=(int)$material['id']?>" data-unit="<?=h((string)($material['unit_code']?:'un.'))?>"><?=h($material['code'].' · '.$material['description'])?></option><?php endforeach;?></select></div><div class="col"><label class="form-label">Quantidade (<span data-consumption-unit>un.</span>)</label><input class="form-control" type="number" name="quantity[]" min="0.001" step="0.001" inputmode="decimal" required></div></div></div><button type="button" class="btn btn-outline-primary mt-3" data-add-consumption-row>+ Adicionar consumo extra</button><template data-consumption-row-template><div class="row g-2 mt-1" data-consumption-row><div class="col-md-8"><select class="form-select" name="raw_material_id[]" data-consumption-material required><option value="">Escolher material…</option><?php foreach($ofConsumptionMaterials as $material):?><option value="<?=(int)$material['id']?>" data-unit="<?=h((string)($material['unit_code']?:'un.'))?>"><?=h($material['code'].' · '.$material['description'])?></option><?php endforeach;?></select></div><div class="col"><input class="form-control" type="number" name="quantity[]" min="0.001" step="0.001" required></div><div class="col-auto"><button type="button" class="btn btn-outline-danger" data-remove-consumption-row aria-label="Remover"><i class="bi bi-trash"></i></button></div></div></template><button class="btn btn-primary btn-lg w-100 mt-3">Registar consumo direto</button></form>
+                            <?php if($savedConsumptionRows):?><h3 class="h6 mt-4">Consumos reais da operação</h3><div class="list-group"><?php foreach($savedConsumptionRows as $used):?><div class="list-group-item"><div class="d-flex justify-content-between gap-2"><div><strong><?=h($used['label_number']?:$used['code'])?></strong><div class="small text-secondary"><?=h($used['description'])?></div></div><strong><?=h(shopfloor_format_quantity((float)$used['quantity']))?> <?=h($used['unit_code']?:'kg')?></strong></div><?php if($used['stock_unit_id']&&!$used['completed_at']):?><form method="post" class="row g-2 align-items-end mt-2"><input type="hidden" name="action" value="finish_unit_consumption"><input type="hidden" name="consumption_id" value="<?=(int)$used['id']?>"><input type="hidden" name="idempotency_key" value="<?=h(bin2hex(random_bytes(16)))?>"><div class="col"><label class="form-label">Restante (inicial: <?=h(shopfloor_format_quantity((float)$used['quantity_before']))?> kg)</label><input class="form-control" type="number" min="0" max="<?=h((string)$used['quantity_before'])?>" step="0.001" name="remaining_quantity" required></div><div class="col-auto"><button class="btn btn-primary">Fechar utilização</button></div><div class="col-auto"><button class="btn btn-outline-danger" name="finished_unit" value="1" formnovalidate>Unidade terminada</button></div></form><?php elseif($used['stock_unit_id']):?><a class="btn btn-sm btn-outline-secondary mt-2" target="_blank" rel="noopener" href="<?=h($used['stock_unit_type']==='ROLL'?'raw_material_roll_label.php':'raw_material_ink_label.php')?>?raw_material_id=<?=(int)$used['raw_material_id']?>&amp;<?= $used['stock_unit_type']==='ROLL'?'printed_label_id':'label_id' ?>=<?=(int)$used['stock_unit_id']?>&amp;print=1">Imprimir etiqueta atualizada</a><?php endif;?></div><?php endforeach;?></div><?php endif;?>
                         </div>
-                        <div class="modal-footer"><button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancelar</button><button class="btn btn-primary">Guardar consumos</button></div>
-                    </form></div></div>
+                        <div class="modal-footer"><button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Fechar</button></div>
+                    </div></div>
                 </div>
             <?php endforeach; ?></div>
             <?php foreach ($ofOperations as $op):
@@ -2152,6 +2162,22 @@ document.querySelectorAll('[data-material-consumption-form]').forEach((form) => 
         const removeButton = event.target.closest('[data-remove-consumption-row]');
         if (removeButton && !removeButton.disabled) removeButton.closest('[data-consumption-row]').remove();
     });
+});
+
+document.querySelectorAll('[id^="materialConsumptionModal-"]').forEach((modal) => {
+    const unitForm=modal.querySelector('[data-unit-consumption-form]');
+    const directForm=modal.querySelector('[data-material-consumption-form]');
+    const choose=(type)=>{
+        const direct=type==='DIRECT'; directForm?.classList.toggle('d-none',!direct); unitForm?.classList.toggle('d-none',direct);
+        if(!direct&&unitForm){unitForm.elements.unit_type.value=type;unitForm.querySelector('[data-unit-label]').textContent=type==='ROLL'?'Nº da etiqueta do rolo':'Nº da lata';unitForm.elements.label_number.focus();}
+    };
+    modal.querySelectorAll('[data-consumption-mode]').forEach(button=>button.addEventListener('click',()=>choose(button.dataset.consumptionMode)));
+    const lookup=async()=>{if(!unitForm)return;const type=unitForm.elements.unit_type.value;const label=unitForm.elements.label_number.value.trim();const result=unitForm.querySelector('[data-unit-result]');const confirm=unitForm.querySelector('[data-confirm-unit]');if(!label)return;
+        result.className='mt-3 alert alert-info';result.textContent='A pesquisar…';confirm.classList.add('d-none');
+        try{const response=await fetch(`shopfloor.php?action=lookup_stock_unit&unit_type=${encodeURIComponent(type)}&label_number=${encodeURIComponent(label)}`,{headers:{Accept:'application/json'}});const data=await response.json();if(!response.ok||!data.ok)throw new Error(data.message||'Etiqueta não encontrada.');const u=data.unit;result.className='mt-3 alert alert-success';result.innerHTML='';const title=document.createElement('strong');title.textContent=`✓ ${type==='ROLL'?'Rolo':'Lata'} ${u.barcode}`;const details=document.createElement('div');details.className='mt-2';details.textContent=`${u.article_code} · ${u.description} — Disponível: ${Number(u.weight_kg).toLocaleString('pt-PT',{maximumFractionDigits:3})} kg${u.metres!==undefined?' · '+Number(u.metres).toLocaleString('pt-PT')+' m':''} · Estado: ${u.status}`;result.append(title,details);confirm.classList.remove('d-none');}catch(error){result.className='mt-3 alert alert-danger';result.textContent=`✕ ${error.message}`;}
+    };
+    unitForm?.querySelector('[data-lookup-unit]')?.addEventListener('click',lookup);
+    unitForm?.elements.label_number?.addEventListener('keydown',event=>{if(event.key==='Enter'){event.preventDefault();lookup();}});
 });
 
 (() => {
