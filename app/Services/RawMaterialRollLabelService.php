@@ -47,9 +47,12 @@ final class RawMaterialRollLabelService
         if($metres<=0||$weight<=0)throw new InvalidArgumentException('Os metros e o peso devem ser superiores a zero.');
         $parsed=DateTimeImmutable::createFromFormat('!Y-m-d',$date);if(!$parsed||$parsed->format('Y-m-d')!==$date)throw new InvalidArgumentException('A data da etiqueta não é válida.');
         if($id>0){$current=$this->find($id);if(!$current||(int)$current['raw_material_id']!==$materialId)throw new RuntimeException('A etiqueta selecionada não pertence a esta matéria-prima.');$stmt=$this->pdo->prepare('UPDATE erp_raw_material_roll_labels SET entry_number=?,supplier_lot=?,metres=?,weight_kg=?,barcode=?,label_date=?,validated_by=?,validated_at=CURRENT_TIMESTAMP,updated_at=CURRENT_TIMESTAMP WHERE id=?');$stmt->execute([$entry,$lot,$metres,$weight,$barcode,$date,$userId,$id]);}
-        else{$stmt=$this->pdo->prepare('INSERT INTO erp_raw_material_roll_labels(raw_material_id,entry_number,supplier_lot,metres,weight_kg,barcode,label_date,validated_by) VALUES (?,?,?,?,?,?,?,?)');$stmt->execute([$materialId,$entry,$lot,$metres,$weight,$barcode,$date,$userId]);$id=(int)$this->pdo->lastInsertId();}
+        else{$stmt=$this->pdo->prepare('INSERT INTO erp_raw_material_roll_labels(raw_material_id,entry_number,supplier_lot,metres,weight_kg,barcode,label_date,validated_by) VALUES (?,?,?,?,?,?,?,?)');$stmt->execute([$materialId,$entry,$lot,$metres,$weight,$barcode,$date,$userId]);$id=(int)$this->pdo->lastInsertId();if($this->hasColumn('initial_metres'))$this->pdo->prepare('UPDATE erp_raw_material_roll_labels SET initial_metres=?,initial_weight_kg=?,status="AVAILABLE" WHERE id=?')->execute([$metres,$weight,$id]);}
         return $this->find($id)?:[];
     }
+
+    private function hasColumn(string $column): bool
+    { foreach($this->pdo->query('PRAGMA table_info(erp_raw_material_roll_labels)')->fetchAll(PDO::FETCH_ASSOC) as $row)if((string)$row['name']===$column)return true;return false; }
 
     public function relabel(int $sourceId,int $orderId,array $values,int $userId): array
     {
