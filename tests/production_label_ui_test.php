@@ -16,6 +16,10 @@ foreach(['roll','ink'] as$type){
  production_label_check(strpos($shopfloor,'id="productionLabelModal-<?= h($labelType) ?>"')!==false,'seletor de matéria-prima em falta');
 }
 production_label_check(strpos($header,'aria-label="Etiquetas de matérias-primas"')!==false,'grupo único de atalhos em falta');
+foreach(['Etiqueta de rolo','Etiqueta de tinta','Calculadora','Previsualizar maquete'] as$shortcutLabel){
+ production_label_check(strpos($header,'aria-label="'.$shortcutLabel.'"')!==false,'nome acessível em falta no atalho: '.$shortcutLabel);
+ production_label_check(strpos($header,'<span class="d-none d-xxl-inline"> '.$shortcutLabel.'</span>')!==false,'texto do atalho ainda aparece na vista de tablet: '.$shortcutLabel);
+}
 production_label_check(strpos($shopfloor,'aria-label="Etiquetas de acerto e reimpressão"')===false,'a faixa informativa da OF ainda apresenta botões de ação');
 production_label_check(strpos($shopfloor,"'action'=>'raw_material_roll_label.php'")!==false&&strpos($shopfloor,"'action'=>'raw_material_ink_label.php'")!==false,'os botões não abrem as etiquetas de matéria-prima');
 production_label_check(strpos($shopfloor,'name="raw_material_id"')!==false,'o popup não envia a matéria-prima');
