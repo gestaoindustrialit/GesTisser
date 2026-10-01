@@ -18,8 +18,9 @@ foreach(['roll','ink'] as$type){
 production_label_check(strpos($header,'aria-label="Atalhos do Shopfloor"')!==false,'grupo único de atalhos em falta');
 foreach(['Etiqueta de rolo','Etiqueta de tinta','Calculadora','Previsualizar maquete'] as$shortcutLabel){
  production_label_check(strpos($header,'aria-label="'.$shortcutLabel.'"')!==false,'nome acessível em falta no atalho: '.$shortcutLabel);
- production_label_check(strpos($header,'<span class="d-none d-xxl-inline"> '.$shortcutLabel.'</span>')!==false,'texto do atalho ainda aparece na vista de tablet: '.$shortcutLabel);
+ production_label_check(strpos($header,'> '.$shortcutLabel.'</span>')===false,'texto do atalho ainda aparece no cabeçalho: '.$shortcutLabel);
 }
+production_label_check(strpos($header,'shopfloor-header-shortcuts')!==false,'estilo dos atalhos apenas com ícones em falta');
 production_label_check(substr_count($header,'data-bs-target="#workCenterModal"')===1,'atalho do centro de trabalho duplicado no cabeçalho');
 $shortcutTargets=['#workCenterModal','#productionLabelModal-roll','#productionLabelModal-ink','#shopfloorCalculatorModal','#articleArtworkModal'];
 $previousShortcutPosition=-1;

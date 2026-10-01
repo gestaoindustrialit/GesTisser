@@ -301,25 +301,25 @@ header('Content-Type: text/html; charset=UTF-8');
                 </div>
             <?php endif; ?>
             <?php if (!empty($showProductionLabelShortcuts)): ?>
-                <div class="d-flex gap-2 me-auto" role="group" aria-label="Atalhos do Shopfloor">
+                <div class="d-flex gap-2 me-auto shopfloor-header-shortcuts" role="group" aria-label="Atalhos do Shopfloor">
                     <?php if ($currentFile === 'shopfloor.php' && isset($selectedWorkCenter)): ?>
                         <button type="button" class="btn btn-sm <?= $selectedWorkCenter ? 'btn-outline-primary' : 'btn-warning' ?> fw-semibold" data-bs-toggle="modal" data-bs-target="#workCenterModal" aria-label="<?= h($selectedWorkCenter ? 'Alterar centro de trabalho: ' . (string) $selectedWorkCenter['code'] . ' · ' . (string) $selectedWorkCenter['name'] : 'Escolher centro de trabalho') ?>" title="<?= h($selectedWorkCenter ? (string) $selectedWorkCenter['code'] . ' · ' . (string) $selectedWorkCenter['name'] : 'Escolher centro de trabalho') ?>">
-                            <i class="bi bi-geo-alt-fill" aria-hidden="true"></i><span class="d-none d-xxl-inline"> <?= $selectedWorkCenter ? h((string) $selectedWorkCenter['code'] . ' · ' . (string) $selectedWorkCenter['name']) : 'Escolher posto' ?></span>
+                            <i class="bi bi-geo-alt-fill" aria-hidden="true"></i>
                         </button>
                     <?php endif; ?>
                     <button type="button" class="btn btn-sm btn-warning fw-semibold" data-bs-toggle="modal" data-bs-target="#productionLabelModal-roll" aria-label="Etiqueta de rolo" title="Etiqueta de rolo">
-                        <i class="bi bi-upc-scan" aria-hidden="true"></i><span class="d-none d-xxl-inline"> Etiqueta de rolo</span>
+                        <i class="bi bi-upc-scan" aria-hidden="true"></i>
                     </button>
                     <button type="button" class="btn btn-sm btn-info fw-semibold" data-bs-toggle="modal" data-bs-target="#productionLabelModal-ink" aria-label="Etiqueta de tinta" title="Etiqueta de tinta">
-                        <i class="bi bi-droplet-fill" aria-hidden="true"></i><span class="d-none d-xxl-inline"> Etiqueta de tinta</span>
+                        <i class="bi bi-droplet-fill" aria-hidden="true"></i>
                     </button>
                     <?php if ($currentFile === 'shopfloor.php'): ?>
                         <button type="button" class="btn btn-sm btn-dark fw-semibold" data-bs-toggle="modal" data-bs-target="#shopfloorCalculatorModal" aria-label="Calculadora" title="Calculadora">
-                            <i class="bi bi-calculator" aria-hidden="true"></i><span class="d-none d-xxl-inline"> Calculadora</span>
+                            <i class="bi bi-calculator" aria-hidden="true"></i>
                         </button>
                         <?php if (!empty($articleArtwork)): ?>
                             <button type="button" class="btn btn-sm btn-outline-primary fw-semibold" data-bs-toggle="modal" data-bs-target="#articleArtworkModal" aria-label="Previsualizar maquete" title="Previsualizar maquete">
-                                <i class="bi bi-image" aria-hidden="true"></i><span class="d-none d-xxl-inline"> Previsualizar maquete</span>
+                                <i class="bi bi-file-earmark-pdf" aria-hidden="true"></i>
                             </button>
                         <?php endif; ?>
                     <?php endif; ?>

@@ -957,6 +957,11 @@ body {
 .shopfloor-operation-card.is-monitor-only { background: #f8fafb; }
 .shopfloor-of-search { min-height: 3rem; font-size: 1rem; }
 .shopfloor-artwork-preview { display: block; width: auto; max-width: 100%; max-height: calc(100vh - 13rem); margin: auto; object-fit: contain; border-radius: .5rem; box-shadow: 0 .25rem 1rem rgba(0,0,0,.12); }
+.shopfloor-artwork-pdf { display: block; width: 100%; height: calc(100vh - 12rem); min-height: 34rem; border: 0; background: #525659; }
+.shopfloor-artwork-loading { display: flex; align-items: center; justify-content: center; gap: .75rem; height: calc(100vh - 12rem); min-height: 34rem; color: #475569; font-weight: 650; }
+.shopfloor-artwork-loading[hidden], .shopfloor-artwork-pdf[hidden] { display: none; }
+.shopfloor-toast-container { z-index: 1090; }
+.shopfloor-header-shortcuts .btn { display: inline-grid; place-items: center; width: 2.75rem; height: 2.75rem; padding: 0; font-size: 1.15rem; }
 .shopfloor-calculator-dialog { max-width: 28rem; }
 .shopfloor-calculator-screen { min-height: 6.5rem; margin-bottom: .75rem; padding: .75rem 1rem; overflow: hidden; border-radius: .75rem; background: #17212b; color: #fff; text-align: right; }
 .shopfloor-calculator-screen div { min-height: 1.5rem; color: #aebdca; font-size: 1rem; overflow-wrap: anywhere; }

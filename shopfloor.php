@@ -1171,11 +1171,15 @@ require __DIR__ . '/partials/header.php';
         </div>
     </div>
 
-    <?php if ($flashSuccess): ?>
-        <div class="alert alert-success mt-3 mb-3"><?= h($flashSuccess) ?></div>
-    <?php endif; ?>
-    <?php if ($flashError): ?>
-        <div class="alert alert-danger mt-3 mb-3"><?= h($flashError) ?></div>
+    <?php if ($flashSuccess || $flashError): ?>
+        <div class="toast-container position-fixed top-0 end-0 p-3 shopfloor-toast-container" aria-live="polite" aria-atomic="true">
+            <div class="toast align-items-center border-0 text-bg-<?= $flashError ? 'danger' : 'success' ?>" role="alert" data-shopfloor-notification data-bs-autohide="true" data-bs-delay="10000">
+                <div class="d-flex">
+                    <div class="toast-body fw-semibold"><?= h((string) ($flashError ?: $flashSuccess)) ?></div>
+                    <button type="button" class="btn-close btn-close-white me-2 m-auto" data-bs-dismiss="toast" aria-label="Fechar"></button>
+                </div>
+            </div>
+        </div>
     <?php endif; ?>
 
     <?php foreach (['roll'=>['title'=>'Etiqueta de rolo','icon'=>'bi-upc-scan','action'=>'raw_material_roll_label.php','materials'=>$labelRollMaterials], 'ink'=>['title'=>'Etiqueta de tinta','icon'=>'bi-droplet-fill','action'=>'raw_material_ink_label.php','materials'=>$labelInkMaterials]] as $labelType => $labelDefinition): ?>
@@ -1943,11 +1947,12 @@ require __DIR__ . '/partials/header.php';
 </section>
 
 <?php if ($articleArtwork): ?>
+<?php $articleArtworkPresentation = ArticleDocument::presentation((string) ($articleArtwork['file_url'] ?? '')); ?>
 <div class="modal fade shopfloor-artwork-modal" id="articleArtworkModal" tabindex="-1" aria-labelledby="articleArtworkModalLabel" aria-hidden="true">
     <div class="modal-dialog modal-fullscreen-lg-down modal-xl modal-dialog-centered">
         <div class="modal-content">
             <div class="modal-header"><div><h2 class="modal-title fs-5" id="articleArtworkModalLabel">Maquete do artigo</h2><p class="small text-secondary mb-0"><?= h((string) ($selectedOf['product_code'] ?? '')) ?> · <?= h((string) ($articleArtwork['title'] ?? 'Maquete de produção')) ?></p></div><button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Fechar"></button></div>
-            <div class="modal-body text-center bg-light"><img src="<?= h(ArticleDocument::thumbnailUrl((int) $articleArtwork['id'])) ?>" class="shopfloor-artwork-preview" alt="Maquete do artigo <?= h((string) ($selectedOf['product_code'] ?? '')) ?>"></div>
+            <div class="modal-body text-center bg-light p-0"><?php if ($articleArtworkPresentation['kind'] === 'pdf'): ?><div class="shopfloor-artwork-loading" data-artwork-pdf-status role="status"><span class="spinner-border text-primary" aria-hidden="true"></span><span>A carregar maquete…</span></div><iframe data-artwork-pdf-frame data-pdf-url="<?= h(ArticleDocument::url((int) $articleArtwork['id'])) ?>" class="shopfloor-artwork-pdf" title="PDF da maquete do artigo <?= h((string) ($selectedOf['product_code'] ?? '')) ?>" hidden></iframe><?php else: ?><img src="<?= h(ArticleDocument::url((int) $articleArtwork['id'])) ?>" class="shopfloor-artwork-preview" alt="Maquete do artigo <?= h((string) ($selectedOf['product_code'] ?? '')) ?>"><?php endif; ?></div>
             <div class="modal-footer"><button type="button" class="btn btn-outline-secondary btn-lg" data-bs-dismiss="modal">Fechar</button><a href="<?= h(ArticleDocument::url((int) $articleArtwork['id'])) ?>" target="_blank" rel="noopener" class="btn btn-primary btn-lg"><i class="bi bi-arrows-fullscreen me-1"></i>Abrir original</a></div>
         </div>
     </div>
@@ -2012,6 +2017,65 @@ require __DIR__ . '/partials/header.php';
         }
     };
     window.setInterval(refresh, 1000);
+    refresh();
+})();
+
+(() => {
+    window.addEventListener('load', () => {
+        const notification = document.querySelector('[data-shopfloor-notification]');
+        if (notification && typeof bootstrap !== 'undefined') {
+            const container = notification.closest('.shopfloor-toast-container');
+            const topbar = document.querySelector('.gt-topbar');
+            const positionBelowHeader = () => {
+                if (!container || !topbar) return;
+                container.style.setProperty('top', `${Math.ceil(topbar.getBoundingClientRect().bottom + 12)}px`, 'important');
+            };
+            // Move the fixed notification outside the zoomed application shell,
+            // then anchor it immediately below the header actions.
+            if (container) document.body.appendChild(container);
+            positionBelowHeader();
+            window.addEventListener('resize', positionBelowHeader);
+            bootstrap.Toast.getOrCreateInstance(notification, { autohide: true, delay: 10000 }).show();
+        }
+    }, { once: true });
+})();
+
+(() => {
+    const modal = document.getElementById('articleArtworkModal');
+    const frame = modal?.querySelector('[data-artwork-pdf-frame]');
+    const status = modal?.querySelector('[data-artwork-pdf-status]');
+    if (!modal || !frame || !status) return;
+    let objectUrl = '';
+    let loading = false;
+
+    modal.addEventListener('show.bs.modal', () => {
+        if (objectUrl || loading) return;
+        loading = true;
+        status.hidden = false;
+        status.lastElementChild.textContent = 'A carregar maquete…';
+        fetch(frame.dataset.pdfUrl, { credentials: 'same-origin', headers: { Accept: 'application/pdf' } })
+            .then((response) => {
+                if (!response.ok) throw new Error('Não foi possível obter a maquete.');
+                return response.blob();
+            })
+            .then((blob) => {
+                objectUrl = URL.createObjectURL(blob);
+                // The blob URL avoids frame-ancestors/X-Frame-Options restrictions
+                // applied to authenticated PHP responses by the server.
+                frame.src = objectUrl + '#view=FitH';
+                frame.hidden = false;
+                status.hidden = true;
+            })
+            .catch((error) => {
+                status.classList.add('text-danger');
+                status.lastElementChild.textContent = error.message || 'Não foi possível apresentar a maquete.';
+            })
+            .finally(() => { loading = false; });
+    });
+
+    window.addEventListener('pagehide', () => {
+        if (objectUrl) URL.revokeObjectURL(objectUrl);
+    }, { once: true });
 })();
 
 (() => {
