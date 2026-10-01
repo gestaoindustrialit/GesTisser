@@ -1133,51 +1133,40 @@ require __DIR__ . '/partials/header.php';
 
 <section class="shopfloor-shell">
     <div class="shopfloor-topbar">
-        <div class="shopfloor-topbar-title">
-            <h1 class="h4 mb-1">Gestão pessoal</h1>
-            <p class="text-secondary mb-0">Pedidos ligados ao módulo de RH e respetivas justificações.</p>
-            <button class="btn <?= $selectedWorkCenter ? 'btn-outline-primary' : 'btn-warning' ?> btn-sm mt-2" type="button" data-bs-toggle="modal" data-bs-target="#workCenterModal">
-                <i class="bi bi-geo-alt-fill me-1" aria-hidden="true"></i>
-                <?= $selectedWorkCenter ? h((string) $selectedWorkCenter['code'] . ' · ' . (string) $selectedWorkCenter['name']) : 'Escolher centro de trabalho' ?>
-            </button>
-            <?php if ($selectedWorkCenter && !empty($selectedWorkCenter['printer_name'])): ?>
-                <span class="badge text-bg-light border ms-1"><i class="bi bi-printer me-1"></i><?= h((string) $selectedWorkCenter['printer_name']) ?></span>
-            <?php endif; ?>
-        </div>
         <div class="shopfloor-topbar-kpis" aria-label="Indicadores diários do colaborador">
             <article class="shopfloor-kpi-card shopfloor-kpi-card-compact">
-                <h2>Balanço de BH</h2>
-                <strong class="<?= $displayedHourBankMinutes < 0 ? 'text-danger' : '' ?>"><?= h($formattedHourBank) ?></strong>
-            </article>
-            <article class="shopfloor-kpi-card shopfloor-kpi-card-compact">
-                <h2>Dias de férias</h2>
-                <strong><?= h(number_format($availableVacationDays, 1, ',', '.')) ?></strong>
-            </article>
-            <article class="shopfloor-kpi-card shopfloor-kpi-card-compact">
-                <h2>Tempo de presença</h2>
+                <h2>T. Presença</h2>
                 <strong data-daily-indicator="presence"><?= h(ShopfloorDailyIndicators::formatDuration($dailyIndicators['presence_seconds'])) ?></strong>
             </article>
             <article class="shopfloor-kpi-card shopfloor-kpi-card-compact">
-                <h2>Tempo trabalhado</h2>
+                <h2>T. Trabalhado</h2>
                 <strong data-daily-indicator="worked"><?= h(ShopfloorDailyIndicators::formatDuration($dailyIndicators['worked_seconds'])) ?></strong>
             </article>
             <article class="shopfloor-kpi-card shopfloor-kpi-card-compact">
-                <h2>Pausas (dia)</h2>
-                <strong data-daily-indicator="pauses"><?= h(ShopfloorDailyIndicators::formatDuration($dailyIndicators['pause_seconds'])) ?></strong>
-                <span class="small text-secondary">(<span data-daily-indicator="pause_count"><?= (int) $dailyIndicators['pause_count'] ?></span>)</span>
-            </article>
-            <article class="shopfloor-kpi-card shopfloor-kpi-card-compact">
-                <h2>Paragens (dia)</h2>
-                <strong data-daily-indicator="stoppages"><?= h(ShopfloorDailyIndicators::formatDuration($dailyIndicators['stoppage_seconds'])) ?></strong>
-                <span class="small text-secondary">(<span data-daily-indicator="stoppage_count"><?= (int) $dailyIndicators['stoppage_count'] ?></span>)</span>
-            </article>
-            <article class="shopfloor-kpi-card shopfloor-kpi-card-compact">
-                <h2>Tempo Morto (dia)</h2>
+                <h2>T. Morto</h2>
                 <strong data-daily-indicator="dead"><?= h(ShopfloorDailyIndicators::formatDuration($dailyIndicators['dead_seconds'])) ?></strong>
             </article>
             <article class="shopfloor-kpi-card shopfloor-kpi-card-compact">
                 <h2>Produção</h2>
-                <strong data-daily-indicator="production"><?= h(shopfloor_format_quantity((float) $dailyIndicators['production_quantity'])) ?></strong>
+                <strong data-daily-indicator="production"><?= h(shopfloor_format_quantity((float) $dailyIndicators['production_quantity'])) ?> un.</strong>
+            </article>
+            <article class="shopfloor-kpi-card shopfloor-kpi-card-compact">
+                <h2>Pausas</h2>
+                <strong data-daily-indicator="pauses"><?= h(ShopfloorDailyIndicators::formatDuration($dailyIndicators['pause_seconds'])) ?></strong>
+                <span class="small text-secondary">(<span data-daily-indicator="pause_count"><?= (int) $dailyIndicators['pause_count'] ?></span>)</span>
+            </article>
+            <article class="shopfloor-kpi-card shopfloor-kpi-card-compact">
+                <h2>Paragens</h2>
+                <strong data-daily-indicator="stoppages"><?= h(ShopfloorDailyIndicators::formatDuration($dailyIndicators['stoppage_seconds'])) ?></strong>
+                <span class="small text-secondary">(<span data-daily-indicator="stoppage_count"><?= (int) $dailyIndicators['stoppage_count'] ?></span>)</span>
+            </article>
+            <article class="shopfloor-kpi-card shopfloor-kpi-card-compact">
+                <h2>BH</h2>
+                <strong class="<?= $displayedHourBankMinutes < 0 ? 'text-danger' : '' ?>"><?= h($formattedHourBank) ?></strong>
+            </article>
+            <article class="shopfloor-kpi-card shopfloor-kpi-card-compact">
+                <h2>Férias</h2>
+                <strong><?= h(number_format($availableVacationDays, 1, ',', '.')) ?></strong>
             </article>
         </div>
     </div>

@@ -14,5 +14,5 @@ echo json_encode([
     'stoppages' => ShopfloorDailyIndicators::formatDuration($indicators['stoppage_seconds']),
     'stoppage_count' => $indicators['stoppage_count'],
     'dead' => ShopfloorDailyIndicators::formatDuration($indicators['dead_seconds']),
-    'production' => rtrim(rtrim(number_format((float) $indicators['production_quantity'], 3, ',', '.'), '0'), ','),
+    'production' => rtrim(rtrim(number_format((float) $indicators['production_quantity'], 3, ',', '.'), '0'), ',') . ' un.',
 ], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);

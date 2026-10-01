@@ -49,37 +49,50 @@ class ShopfloorDailyIndicators
         }
 
         $operationStmt = $this->pdo->prepare(
-            'SELECT id, production_order_operation_id, started_at, ended_at
-             FROM erp_operation_time_entries
-             WHERE user_id = ? AND started_at < ? AND (ended_at IS NULL OR ended_at > ?)'
+            'SELECT te.id, te.production_order_operation_id, te.started_at, te.ended_at
+             FROM erp_operation_time_entries te
+             WHERE (te.user_id = ? OR EXISTS (
+                       SELECT 1 FROM erp_operation_execution_operators execution_operator
+                       WHERE execution_operator.time_entry_id = te.id AND execution_operator.user_id = ?
+                   ))
+               AND te.started_at < ? AND (te.ended_at IS NULL OR te.ended_at > ?)'
         );
-        $operationStmt->execute([$userId, $dayEnd->format('Y-m-d H:i:s'), $dayStart->format('Y-m-d H:i:s')]);
+        $operationStmt->execute([$userId, $userId, $dayEnd->format('Y-m-d H:i:s'), $dayStart->format('Y-m-d H:i:s')]);
         $operations = $operationStmt->fetchAll(PDO::FETCH_ASSOC);
-        $producedSeconds = 0;
+        $workedIntervals = [];
         foreach ($operations as $operation) {
             $sessionEnd = $operation['ended_at'] ? (string) $operation['ended_at'] : $now->format('Y-m-d H:i:s');
-            $sessionSeconds = $this->overlapSeconds((string) $operation['started_at'], $sessionEnd, $dayStart, $now);
+            $sessionStartTimestamp = max((int) strtotime((string) $operation['started_at']), $dayStart->getTimestamp());
+            $sessionEndTimestamp = min((int) strtotime($sessionEnd), $now->getTimestamp());
+            $activeIntervals = $sessionEndTimestamp > $sessionStartTimestamp
+                ? [[$sessionStartTimestamp, $sessionEndTimestamp]]
+                : [];
             $stoppageStmt = $this->pdo->prepare(
                 'SELECT started_at, ended_at FROM erp_operation_stoppages
                  WHERE time_entry_id = ? AND started_at < ? AND (ended_at IS NULL OR ended_at > ?)'
             );
             $stoppageStmt->execute([(int) $operation['id'], $now->format('Y-m-d H:i:s'), $dayStart->format('Y-m-d H:i:s')]);
             foreach ($stoppageStmt->fetchAll(PDO::FETCH_ASSOC) as $stoppage) {
-                $sessionSeconds -= $this->overlapSeconds(
-                    (string) $stoppage['started_at'],
-                    $stoppage['ended_at'] ? (string) $stoppage['ended_at'] : $now->format('Y-m-d H:i:s'),
-                    $dayStart,
-                    $now
-                );
+                $stoppageStart = max((int) strtotime((string) $stoppage['started_at']), $dayStart->getTimestamp());
+                $stoppageEndValue = $stoppage['ended_at'] ? (string) $stoppage['ended_at'] : $now->format('Y-m-d H:i:s');
+                $stoppageEnd = min((int) strtotime($stoppageEndValue), $now->getTimestamp());
+                $activeIntervals = $this->subtractInterval($activeIntervals, $stoppageStart, $stoppageEnd);
             }
-            $producedSeconds += max(0, $sessionSeconds);
+            $workedIntervals = array_merge($workedIntervals, $activeIntervals);
         }
+        // Union all active fragments so simultaneous operations never count the
+        // same chronological second more than once.
+        $workedSeconds = $this->mergedIntervalSeconds($workedIntervals);
 
         $activeOperationStmt = $this->pdo->prepare(
-            'SELECT production_order_operation_id FROM erp_operation_time_entries
-             WHERE user_id = ? AND ended_at IS NULL ORDER BY started_at DESC LIMIT 1'
+            'SELECT te.production_order_operation_id FROM erp_operation_time_entries te
+             WHERE (te.user_id = ? OR EXISTS (
+                       SELECT 1 FROM erp_operation_execution_operators execution_operator
+                       WHERE execution_operator.time_entry_id = te.id AND execution_operator.user_id = ?
+                   ))
+               AND te.ended_at IS NULL ORDER BY te.started_at DESC LIMIT 1'
         );
-        $activeOperationStmt->execute([$userId]);
+        $activeOperationStmt->execute([$userId, $userId]);
         $activeOperationId = (int) ($activeOperationStmt->fetchColumn() ?: 0);
         $productionQuantity = 0.0;
         if ($activeOperationId > 0) {
@@ -95,15 +108,12 @@ class ShopfloorDailyIndicators
         $stoppageSeconds = $breaks['Paragem']['seconds'];
         return [
             'presence_seconds' => $presenceSeconds,
-            // This is the same attendance concept used by payroll/BH: paired
-            // clock intervals, less all registered pauses and stoppages.
-            'worked_seconds' => max(0, $presenceSeconds - $pauseSeconds - $stoppageSeconds),
+            'worked_seconds' => $workedSeconds,
             'pause_seconds' => $pauseSeconds,
             'pause_count' => $breaks['Pausa']['count'],
             'stoppage_seconds' => $stoppageSeconds,
             'stoppage_count' => $breaks['Paragem']['count'],
-            'produced_seconds' => $producedSeconds,
-            'dead_seconds' => max(0, $presenceSeconds - $pauseSeconds - $stoppageSeconds - $producedSeconds),
+            'dead_seconds' => max(0, $presenceSeconds - $workedSeconds - $pauseSeconds - $stoppageSeconds),
             'production_quantity' => $productionQuantity,
             'active_operation_id' => $activeOperationId,
         ];
@@ -142,5 +152,47 @@ class ShopfloorDailyIndicators
         $startTimestamp = max((int) strtotime($start), $floor->getTimestamp());
         $endTimestamp = min((int) strtotime($end), $ceiling->getTimestamp());
         return max(0, $endTimestamp - $startTimestamp);
+    }
+
+    private function subtractInterval(array $intervals, int $cutStart, int $cutEnd): array
+    {
+        if ($cutEnd <= $cutStart) {
+            return $intervals;
+        }
+        $remaining = [];
+        foreach ($intervals as $interval) {
+            if ($cutEnd <= $interval[0] || $cutStart >= $interval[1]) {
+                $remaining[] = $interval;
+                continue;
+            }
+            if ($cutStart > $interval[0]) {
+                $remaining[] = [$interval[0], min($cutStart, $interval[1])];
+            }
+            if ($cutEnd < $interval[1]) {
+                $remaining[] = [max($cutEnd, $interval[0]), $interval[1]];
+            }
+        }
+        return $remaining;
+    }
+
+    private function mergedIntervalSeconds(array $intervals): int
+    {
+        if ($intervals === []) {
+            return 0;
+        }
+        usort($intervals, function ($left, $right) {
+            return $left[0] <=> $right[0];
+        });
+        $seconds = 0;
+        $current = array_shift($intervals);
+        foreach ($intervals as $interval) {
+            if ($interval[0] <= $current[1]) {
+                $current[1] = max($current[1], $interval[1]);
+                continue;
+            }
+            $seconds += $current[1] - $current[0];
+            $current = $interval;
+        }
+        return $seconds + ($current[1] - $current[0]);
     }
 }
