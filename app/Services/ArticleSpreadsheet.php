@@ -8,12 +8,14 @@ final class ArticleSpreadsheet
         return [
             'codigo'=>'code','descricao'=>'description','cliente'=>'customer_name','codigo_cliente'=>'customer_product_code',
             'largura'=>'width','comprimento'=>'length','gramagem'=>'grammage','cores_face'=>'colors_per_face',
-            'stock_minimo'=>'min_stock','preco_venda'=>'sale_price','referencia_prova'=>'proof_reference',
+            'stock_minimo'=>'min_stock','stock_maximo'=>'max_stock','preco_venda'=>'sale_price','referencia_prova'=>'proof_reference',
+            'custo_standard'=>'standard_cost','margem_standard'=>'standard_margin','estado_prova'=>'proof_status','estado'=>'status','observacoes'=>'notes',
             'material'=>'material','cor_saco'=>'bag_color','composicao'=>'composition','peso_teorico'=>'theoretical_weight',
             'tolerancia_largura'=>'width_tolerance','tolerancia_comprimento'=>'length_tolerance',
             'cores_frente'=>'front_colors','cores_verso'=>'back_colors','cor_fio'=>'thread_color',
             'cores_of_frente'=>'of_front_colors','cores_of_verso'=>'of_back_colors',
             'cores_of_iguais_ficha'=>'of_colors_match_technical',
+            'medida_rolo_impressor'=>'printer_roll_measure','tinta_antiderrapante'=>'anti_slip_ink','malha_antiderrapante'=>'anti_slip_mesh',
             'tipo_perfuracao'=>'perforation_type','tipo_costura'=>'seam_type','regra_lote'=>'lot_identification_rule',
             'microperfuracao'=>'microperforation','asa'=>'has_handle','furos'=>'has_holes','fole'=>'has_gusset',
             'fole_centrado'=>'centered_gusset','medida_fole'=>'gusset_length','medidas_palete'=>'pallet_dimensions',
@@ -26,6 +28,28 @@ final class ArticleSpreadsheet
             'analise_friccao_estatica'=>'analysis_static_friction','analise_friccao_dinamica'=>'analysis_dynamic_friction',
             'analise_permeabilidade_ar'=>'analysis_air_permeability'
         ];
+    }
+
+    /**
+     * Builds the matrix used by the article export. Values deliberately remain
+     * strings: specifications such as "60+20" are descriptions, not formulas
+     * or numbers to be evaluated by Excel.
+     */
+    public static function exportRows(PDO $pdo): array
+    {
+        $mapping=self::columns();
+        $headers=array_keys($mapping);
+        $rows=[$headers];
+        $query=$pdo->query('SELECT fp.*,c.name customer_name FROM erp_finished_products fp LEFT JOIN erp_customers c ON c.id=fp.customer_id ORDER BY fp.code');
+        foreach($query->fetchAll(PDO::FETCH_ASSOC) as $article){
+            $row=[];
+            foreach($mapping as $column){
+                $value=$article[$column]??'';
+                $row[]=$value===null?'':(string)$value;
+            }
+            $rows[]=$row;
+        }
+        return $rows;
     }
 
     public static function read(string $path, string $extension): array
