@@ -1,6 +1,7 @@
 <?php
 require_once __DIR__ . '/helpers.php';
 require_once __DIR__ . '/erp_migrations.php';
+require_once __DIR__ . '/erp_work_order_cleanup.php';
 require_login();
 
 $userId = (int) $_SESSION['user_id'];
@@ -142,6 +143,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $id=(int)($_POST['id']??0);$references=['erp_operations'=>'default_work_center_id','erp_machines'=>'work_center_id','erp_article_routing_steps'=>'work_center_id','erp_shift_assignments'=>'work_center_id'];
                 foreach($references as $table=>$column){$stmt=$pdo->prepare("SELECT COUNT(*) FROM $table WHERE $column=?");$stmt->execute([$id]);if((int)$stmt->fetchColumn()>0)throw new DomainException('Não é possível remover um setor que está a ser utilizado.');}
                 $pdo->prepare('DELETE FROM erp_work_centers WHERE id=?')->execute([$id]);gt_erp_audit($pdo,$userId,'delete','erp_work_centers',$id,[],[]);$flashSuccess='Setor de operações removido com sucesso.';
+            } elseif ($action === 'delete_all_work_orders') {
+                if ((string) ($_POST['delete_confirmation'] ?? '') !== 'ELIMINAR') {
+                    throw new InvalidArgumentException('Não foi possível confirmar a eliminação das Ordens de Fabrico.');
+                }
+                $deletedOrders = gt_erp_delete_all_work_orders($pdo);
+                $flashSuccess = $deletedOrders === 1
+                    ? 'Foi eliminada 1 Ordem de Fabrico e todo o respetivo histórico.'
+                    : 'Foram eliminadas '.$deletedOrders.' Ordens de Fabrico e todo o respetivo histórico.';
             } elseif ($action === 'reset_work_order_sequence') {
                 $nextNumber = filter_var($_POST['work_order_next_number'] ?? null, FILTER_VALIDATE_INT, ['options'=>['min_range'=>1]]);
                 if ($nextNumber === false) throw new InvalidArgumentException('Indique um número válido para a próxima OF.');
@@ -328,6 +337,14 @@ require __DIR__ . '/partials/header.php';
     </div></div>
 </form>
 <?php endif; ?>
+
+<form method="post" class="card shadow-sm soft-card border-danger mb-4">
+    <?= csrf_input() ?><input type="hidden" name="action" value="delete_all_work_orders"><input type="hidden" name="delete_confirmation" value="ELIMINAR">
+    <div class="card-body p-4"><div class="row g-3 align-items-center">
+        <div class="col-lg"><h2 class="h5 mb-1 text-danger">Eliminar Ordens de Fabrico e histórico</h2><p class="text-muted mb-0">Elimina permanentemente todas as OF e os respetivos dossiers, operações, tempos, consumos e registos de auditoria. A numeração configurada não será alterada.</p></div>
+        <div class="col-lg-auto"><button class="btn btn-danger w-100" onclick="return confirm('ATENÇÃO: todas as Ordens de Fabrico e o respetivo histórico serão eliminados permanentemente. Esta ação não pode ser anulada. Deseja continuar?')"><i class="bi bi-trash3 me-1"></i>Eliminar todas as OF e histórico</button></div>
+    </div></div>
+</form>
 
 <form method="post" class="card shadow-sm soft-card">
     <?= csrf_input() ?>
