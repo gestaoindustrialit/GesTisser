@@ -6,7 +6,7 @@ final class ArticlePalletWeight
     /**
      * The article theoretical weight is stored in grams; pallet weight is shown in kilograms.
      */
-    public static function kilograms($theoreticalWeight, $palletQuantity): ?float
+    public static function kilograms($theoreticalWeight, $palletQuantity)
     {
         $weight = self::number($theoreticalWeight);
         $quantity = self::number($palletQuantity);
@@ -17,7 +17,7 @@ final class ArticlePalletWeight
         return round(($weight * $quantity) / 1000, 3);
     }
 
-    private static function number($value): ?float
+    private static function number($value)
     {
         $value = str_replace(',', '.', trim((string) $value));
         if ($value === '' || !is_numeric($value)) {
