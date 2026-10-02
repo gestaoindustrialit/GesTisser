@@ -1,5 +1,6 @@
 <?php
 require_once __DIR__ . '/helpers.php';
+require_once __DIR__ . '/app/Services/UserSpreadsheetExport.php';
 require_login();
 
 $userId = (int) $_SESSION['user_id'];
@@ -439,6 +440,27 @@ XML;
 
 if (isset($_GET['download']) && $_GET['download'] === 'bulk-template') {
     output_users_template();
+}
+
+if (isset($_GET['download']) && $_GET['download'] === 'bulk-export') {
+    $exportStmt = $pdo->query(
+        'SELECT u.id, u.user_number, u.name, u.short_name, u.title, u.initials, u.username, u.email, u.personal_email, '
+        . 'u.phone, u.mobile, u.access_profile, u.user_type, u.is_admin, u.is_active, u.must_change_password, '
+        . 'u.pin_only_login, u.crm_enabled, u.award_profile, u.award_eligible, u.email_notifications_active, u.sms_notifications_active, u.send_access_email, '
+        . 'u.department_id, u.department, u.schedule_id, s.name AS schedule_name, u.profession, u.category, u.manager_name, '
+        . 'u.hire_date, u.birth_date, u.termination_date, u.timezone, u.tax_number, u.social_security_number, u.address, '
+        . 'u.postal_code, u.parish, u.municipality, u.district, u.place_of_birth, u.nationality, u.citizen_card_number, '
+        . 'u.citizen_card_expiry_date, u.marital_status, u.dependents_count, u.notes, u.created_at, u.last_login_at '
+        . 'FROM users u LEFT JOIN hr_schedules s ON s.id = u.schedule_id '
+        . 'ORDER BY CASE WHEN u.user_number IS NULL OR TRIM(u.user_number) = "" THEN 1 ELSE 0 END, '
+        . 'CAST(u.user_number AS INTEGER), u.user_number COLLATE NOCASE, u.name COLLATE NOCASE'
+    );
+    $content = UserSpreadsheetExport::build($exportStmt->fetchAll(PDO::FETCH_ASSOC));
+    header('Content-Type: application/vnd.ms-excel; charset=UTF-8');
+    header('Content-Disposition: attachment; filename="utilizadores_' . date('Y-m-d') . '.xls"');
+    header('Content-Length: ' . strlen($content));
+    echo $content;
+    exit;
 }
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
@@ -1226,6 +1248,7 @@ require __DIR__ . '/partials/header.php';
     <div class="card-header bg-white border-0 pt-4 px-4 d-flex justify-content-between align-items-center">
         <h1 class="h4 mb-0">Utilizadores</h1>
         <div class="d-flex gap-2">
+            <a class="btn btn-sm btn-outline-success" href="users.php?download=bulk-export"><i class="bi bi-file-earmark-spreadsheet"></i> Exportar Excel</a>
             <a class="btn btn-sm btn-outline-secondary" href="users.php?download=bulk-template"><i class="bi bi-download"></i> Template Excel</a>
             <button class="btn btn-sm btn-outline-primary" data-bs-toggle="modal" data-bs-target="#bulkImportUsersModal"><i class="bi bi-upload"></i> Importar</button>
             <button class="btn btn-sm btn-primary" data-bs-toggle="modal" data-bs-target="#userModal">Novo utilizador</button>
