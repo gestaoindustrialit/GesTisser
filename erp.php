@@ -161,7 +161,7 @@ function erp_load_order_import_services()
 function erp_raw_material_spreadsheet_columns(): array { return RawMaterialSpreadsheet::columns(); }
 function erp_read_raw_material_spreadsheet(string $path,string $extension): array { return RawMaterialSpreadsheet::read($path,$extension); }
 function erp_article_fields(): array { return ['material','bag_color','width_tolerance','length_tolerance','front_colors','back_colors','of_front_colors','of_back_colors','of_colors_match_technical','printer_roll_measure','pallet_dimensions','pallet_lid','pallet_straps','pallet_film','pallet_weight','pallet_quantity','microperforation','has_handle','has_holes','has_gusset','centered_gusset','gusset_length','composition','theoretical_weight','thread_color','perforation_type','seam_type','lot_identification_rule','analysis_grammage','analysis_total_weight','analysis_apparent_width','analysis_gusset_width','analysis_bag_height','analysis_break_height','analysis_break_length','analysis_seam_strength','analysis_static_friction','analysis_dynamic_friction','analysis_air_permeability']; }
-function erp_colors_per_face($value): ?string {
+function erp_colors_per_face($value) {
     $value=preg_replace('/\s+/', '', trim((string)$value));
     if($value==='')return null;
     if(!preg_match('/^[0-8](?:\+[0-8])?$/',$value))throw new RuntimeException('Indique as cores por face entre 0 e 8, por exemplo 2+0.');

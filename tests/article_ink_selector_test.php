@@ -16,6 +16,7 @@ article_ink_selector_check(strpos($source,'data-color-group="<?=h($group)?>"')!=
 article_ink_selector_check(strpos($source,"face.querySelectorAll('select[data-color-line]')")!==false,'As tintas repetidas não são validadas dentro de cada face.');
 article_ink_selector_check(strpos($source,'Selecione até 8 tintas existentes por cada face.')!==false,'O limite por face não é explicado no formulário.');
 article_ink_selector_check(strpos($source,"preg_match('/^[0-8](?:\\+[0-8])?$/',\$value)")!==false,'O campo de cores por face não valida formatos simples e compostos como 2+0.');
+article_ink_selector_check(strpos($source,'function erp_colors_per_face($value):')===false,'A validação de cores por face usa uma declaração incompatível com PHP 7.0.');
 article_ink_selector_check(strpos($source,'pattern="[0-8](\+[0-8])?"')!==false,'O formulário não aceita cores distintas para frente e verso.');
 article_ink_selector_check(strpos($source,'placeholder="Ex.: 2+0"')!==false,'O formato frente+verso não é explicado no formulário.');
 
