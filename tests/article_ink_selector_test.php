@@ -1,5 +1,6 @@
 <?php
 $source=(string)file_get_contents(__DIR__.'/../erp.php');
+$migrations=(string)file_get_contents(__DIR__.'/../erp_migrations.php');
 
 function article_ink_selector_check($condition,$message)
 {
@@ -19,5 +20,9 @@ article_ink_selector_check(strpos($source,"preg_match('/^[0-8](?:\\+[0-8])?$/',\
 article_ink_selector_check(strpos($source,'function erp_colors_per_face($value):')===false,'A validação de cores por face usa uma declaração incompatível com PHP 7.0.');
 article_ink_selector_check(strpos($source,'pattern="[0-8](\+[0-8])?"')!==false,'O formulário não aceita cores distintas para frente e verso.');
 article_ink_selector_check(strpos($source,'placeholder="Ex.: 2+0"')!==false,'O formato frente+verso não é explicado no formulário.');
+article_ink_selector_check(strpos($source,"preg_match('/^\\d+(?:\\.\\d+)?(?:\\+\\d+(?:\\.\\d+)?)*$/',\$value)")!==false,'A gramagem não valida valores compostos como 60+20.');
+article_ink_selector_check(substr_count($source,"erp_article_grammage(\$_POST['grammage']")===2,'A criação e a edição não preservam a gramagem composta.');
+article_ink_selector_check(strpos($source,'placeholder="Ex.: 60+20"')!==false,'O formato de gramagem composta não é explicado no formulário.');
+article_ink_selector_check(strpos($migrations,'grammage TEXT, colors_per_face TEXT')!==false,'A base de dados não está preparada para guardar gramagem composta.');
 
 echo "article_ink_selector_test: OK\n";
