@@ -307,11 +307,8 @@ header('Content-Type: text/html; charset=UTF-8');
                             <i class="bi bi-geo-alt-fill" aria-hidden="true"></i>
                         </button>
                     <?php endif; ?>
-                    <button type="button" class="btn btn-sm btn-warning fw-semibold" data-bs-toggle="modal" data-bs-target="#productionLabelModal-roll" aria-label="Etiqueta de rolo" title="Etiqueta de rolo">
-                        <i class="bi bi-upc-scan" aria-hidden="true"></i>
-                    </button>
-                    <button type="button" class="btn btn-sm btn-info fw-semibold" data-bs-toggle="modal" data-bs-target="#productionLabelModal-ink" aria-label="Etiqueta de tinta" title="Etiqueta de tinta">
-                        <i class="bi bi-droplet-fill" aria-hidden="true"></i>
+                    <button type="button" class="btn btn-sm btn-warning fw-semibold" data-bs-toggle="modal" data-bs-target="#productionLabelModal" aria-label="Etiquetas" title="Etiquetas">
+                        <i class="bi bi-tags-fill" aria-hidden="true"></i>
                     </button>
                     <?php if ($currentFile === 'shopfloor.php'): ?>
                         <button type="button" class="btn btn-sm btn-dark fw-semibold" data-bs-toggle="modal" data-bs-target="#shopfloorCalculatorModal" aria-label="Calculadora" title="Calculadora">

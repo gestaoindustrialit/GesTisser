@@ -1198,44 +1198,50 @@ require __DIR__ . '/partials/header.php';
         </div>
     <?php endif; ?>
 
-    <?php foreach (['roll'=>['title'=>'Etiqueta de rolo','icon'=>'bi-upc-scan','action'=>'raw_material_roll_label.php','materials'=>$labelRollMaterials], 'ink'=>['title'=>'Etiqueta de tinta','icon'=>'bi-droplet-fill','action'=>'raw_material_ink_label.php','materials'=>$labelInkMaterials]] as $labelType => $labelDefinition): ?>
-        <?php $labelTitle=$labelDefinition['title'];$labelIcon=$labelDefinition['icon'];$labelMaterials=$labelDefinition['materials']; ?>
-        <div class="modal fade" id="productionLabelModal-<?= h($labelType) ?>" tabindex="-1" aria-labelledby="productionLabelModalTitle-<?= h($labelType) ?>" aria-hidden="true">
-            <div class="modal-dialog modal-dialog-centered">
-                <div class="modal-content">
-                    <form method="get" action="<?= h($labelDefinition['action']) ?>">
-                        <div class="modal-header">
-                            <div>
-                                <h2 class="modal-title fs-5" id="productionLabelModalTitle-<?= h($labelType) ?>">
-                                    <i class="bi <?= h($labelIcon) ?> me-1" aria-hidden="true"></i><?= h($labelTitle) ?>
-                                </h2>
-                                <p class="small text-secondary mb-0">Selecione a matéria-prima da etiqueta que pretende preparar e imprimir.</p>
-                            </div>
-                            <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Fechar"></button>
-                        </div>
-                        <div class="modal-body">
-                            <?php if ($labelMaterials): ?>
-                                <label class="form-label" for="productionLabelOrder-<?= h($labelType) ?>">Matéria-prima</label>
-                                <select class="form-select" id="productionLabelOrder-<?= h($labelType) ?>" name="raw_material_id" required>
-                                    <?php foreach ($labelMaterials as $labelMaterial): ?>
-                                        <option value="<?= (int)$labelMaterial['id'] ?>"><?= h($labelMaterial['code'].' · '.$labelMaterial['description']) ?></option>
-                                    <?php endforeach; ?>
-                                </select>
-                            <?php else: ?>
-                                <div class="alert alert-warning mb-0">Ainda não existem matérias-primas elegíveis registadas.</div>
-                            <?php endif; ?>
-                        </div>
-                        <div class="modal-footer">
-                            <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancelar</button>
-                            <button type="submit" class="btn btn-primary" <?= $labelMaterials ? '' : 'disabled' ?>>
-                                <i class="bi bi-printer me-1" aria-hidden="true"></i>Preparar impressão
-                            </button>
-                        </div>
-                    </form>
+    <div class="modal fade" id="productionLabelModal" tabindex="-1" aria-labelledby="productionLabelModalTitle" aria-hidden="true">
+        <div class="modal-dialog modal-dialog-centered">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <div>
+                        <h2 class="modal-title fs-5" id="productionLabelModalTitle"><i class="bi bi-tags-fill me-1" aria-hidden="true"></i>Etiquetas</h2>
+                        <p class="small text-secondary mb-0">Escolha o tipo de etiqueta e a matéria-prima que pretende preparar.</p>
+                    </div>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Fechar"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="d-flex gap-2 mb-4" role="group" aria-label="Tipo de etiqueta">
+                        <button type="button" class="btn btn-primary flex-fill" data-label-type="roll" aria-pressed="true"><i class="bi bi-upc-scan me-1" aria-hidden="true"></i>Rolo / Bobine</button>
+                        <button type="button" class="btn btn-outline-primary flex-fill" data-label-type="ink" aria-pressed="false"><i class="bi bi-droplet-fill me-1" aria-hidden="true"></i>Tinta</button>
+                    </div>
+                    <?php foreach (['roll'=>['title'=>'Rolo / Bobine','action'=>'raw_material_roll_label.php','materials'=>$labelRollMaterials], 'ink'=>['title'=>'Tinta','action'=>'raw_material_ink_label.php','materials'=>$labelInkMaterials]] as $labelType => $labelDefinition): ?>
+                        <?php $labelMaterials=$labelDefinition['materials']; ?>
+                        <section data-label-panel="<?= h($labelType) ?>" <?= $labelType === 'ink' ? 'hidden' : '' ?>>
+                            <form method="get" action="<?= h($labelDefinition['action']) ?>">
+                                <h3 class="h6 mb-3">Etiqueta de <?= h($labelDefinition['title']) ?></h3>
+                                <?php if ($labelMaterials): ?>
+                                    <label class="form-label" for="productionLabelOrder-<?= h($labelType) ?>">Matéria-prima</label>
+                                    <select class="form-select" id="productionLabelOrder-<?= h($labelType) ?>" name="raw_material_id" required>
+                                        <?php foreach ($labelMaterials as $labelMaterial): ?>
+                                            <option value="<?= (int)$labelMaterial['id'] ?>"><?= h($labelMaterial['code'].' · '.$labelMaterial['description']) ?></option>
+                                        <?php endforeach; ?>
+                                    </select>
+                                <?php else: ?>
+                                    <div class="alert alert-warning mb-0">Ainda não existem matérias-primas elegíveis registadas.</div>
+                                <?php endif; ?>
+                                <div class="d-flex justify-content-end gap-2 mt-4">
+                                    <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancelar</button>
+                                    <button type="submit" class="btn btn-primary" <?= $labelMaterials ? '' : 'disabled' ?>>
+                                        <i class="bi bi-printer me-1" aria-hidden="true"></i>Preparar impressão
+                                    </button>
+                                </div>
+                            </form>
+                        </section>
+                    <?php endforeach; ?>
                 </div>
             </div>
         </div>
-    <?php endforeach; ?>
+    </div>
+
 
     <div class="modal fade" id="workCenterModal" tabindex="-1" aria-labelledby="workCenterModalLabel" aria-hidden="true" data-requires-selection="<?= $selectedWorkCenter ? '0' : '1' ?>">
         <div class="modal-dialog modal-dialog-centered modal-dialog-scrollable">
@@ -2157,6 +2163,22 @@ document.querySelectorAll('[id^="materialConsumptionModal-"]').forEach((modal) =
     };
     unitForm?.querySelector('[data-lookup-unit]')?.addEventListener('click',lookup);
     unitForm?.elements.label_number?.addEventListener('keydown',event=>{if(event.key==='Enter'){event.preventDefault();lookup();}});
+});
+
+document.querySelectorAll('#productionLabelModal [data-label-type]').forEach((button) => {
+    button.addEventListener('click', () => {
+        const modal = button.closest('#productionLabelModal');
+        modal.querySelectorAll('[data-label-type]').forEach((option) => {
+            const selected = option === button;
+            option.classList.toggle('btn-primary', selected);
+            option.classList.toggle('btn-outline-primary', !selected);
+            option.setAttribute('aria-pressed', selected ? 'true' : 'false');
+        });
+        modal.querySelectorAll('[data-label-panel]').forEach((panel) => {
+            panel.hidden = panel.dataset.labelPanel !== button.dataset.labelType;
+        });
+        modal.querySelector(`[data-label-panel="${button.dataset.labelType}"] select`)?.focus();
+    });
 });
 
 (() => {
