@@ -9,7 +9,7 @@ final class ProductLabelService
     /** Loads every immutable label value from server-side ERP records. */
     public function data(int $orderId,int $orderOperationId): array
     {
-        $sql='SELECT o.id production_order_id,o.order_number,o.planned_quantity,o.lot,o.delivery_address_snapshot,
+        $sql='SELECT o.id production_order_id,o.order_number,o.planned_quantity,o.delivery_address_snapshot,
             opo.id operation_id,opo.operation_id operation_type_id,op.product_label_enabled,
             c.name customer_name,c.postal_code customer_postal_code,c.city customer_city,
             da.postal_code delivery_postal_code,da.city delivery_city,
@@ -26,6 +26,9 @@ final class ProductLabelService
         $stmt=$this->pdo->prepare($sql);$stmt->execute([$orderId,$orderOperationId]);$row=$stmt->fetch(PDO::FETCH_ASSOC);
         if(!$row)throw new RuntimeException('A operação não pertence à Ordem de Fabrico indicada.');
         if((int)$row['product_label_enabled']!==1)throw new RuntimeException('Esta operação não permite imprimir etiquetas de produto.');
+        $lotStmt=$this->pdo->prepare('SELECT snapshot_json FROM erp_production_order_snapshots WHERE production_order_id=? UNION ALL SELECT snapshot_json FROM erp_technical_sheets WHERE production_order_id=? LIMIT 1');
+        $lotStmt->execute([$orderId,$orderId]);$orderSnapshot=json_decode((string)$lotStmt->fetchColumn(),true)?:[];
+        $row['lot']=trim((string)($orderSnapshot['_order']['lot']??''));
         $snapshot=json_decode((string)($row['delivery_address_snapshot']??''),true)?:[];
         $first=function(array $values):string{foreach($values as$value){$value=trim((string)$value);if($value!=='')return $value;}return '';};
         $postal=$first([$snapshot['postal_code']??'',$row['delivery_postal_code']??'',$row['customer_postal_code']??'']);

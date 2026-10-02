@@ -1090,7 +1090,7 @@ $formattedHourBank = sprintf('%s%02dh%02dm', $displayedHourBankMinutes < 0 ? '-'
 // article routing become usable without rewriting production history.
 (new RoutingService($pdo))->syncPendingOrderOperations();
 ProductionOrderStatusService::syncAll($pdo,$userId);
-$ofSql = 'SELECT o.id, o.order_number, o.product_id, fp.id AS finished_product_id, o.planned_quantity, o.status, o.lot, c.name AS customer_name, TRIM(COALESCE(c.postal_code,"") || " " || COALESCE(c.city,"")) AS customer_locality, COALESCE(fp.code,p.code) AS product_code, COALESCE(fp.description,p.description) AS product_description FROM erp_production_orders o JOIN erp_products p ON p.id = o.product_id LEFT JOIN erp_finished_products fp ON fp.id=o.finished_product_id OR (o.finished_product_id IS NULL AND fp.code=p.code) LEFT JOIN erp_customers c ON c.id=o.customer_id WHERE o.status IN ("Por iniciar", "Em Produção", "Em Pausa", "Planeada", "Em curso")';
+$ofSql = 'SELECT o.id, o.order_number, o.product_id, fp.id AS finished_product_id, o.planned_quantity, o.status, c.name AS customer_name, TRIM(COALESCE(c.postal_code,"") || " " || COALESCE(c.city,"")) AS customer_locality, COALESCE(fp.code,p.code) AS product_code, COALESCE(fp.description,p.description) AS product_description FROM erp_production_orders o JOIN erp_products p ON p.id = o.product_id LEFT JOIN erp_finished_products fp ON fp.id=o.finished_product_id OR (o.finished_product_id IS NULL AND fp.code=p.code) LEFT JOIN erp_customers c ON c.id=o.customer_id WHERE o.status IN ("Por iniciar", "Em Produção", "Em Pausa", "Planeada", "Em curso")';
 $ofParams = [];
 if ($selectedWorkCenterId > 0) {
     $ofSql .= ' AND EXISTS (SELECT 1 FROM erp_production_order_operations center_op WHERE center_op.production_order_id = o.id AND (center_op.work_center_id = ? OR EXISTS (SELECT 1 FROM json_each(CASE WHEN json_valid(center_op.allowed_work_center_ids_json) THEN center_op.allowed_work_center_ids_json ELSE "[]" END) allowed_center WHERE CAST(allowed_center.value AS INTEGER) = ?) OR (? > 0 AND center_op.machine_required = 1 AND EXISTS (SELECT 1 FROM json_each(CASE WHEN json_valid(center_op.allowed_machine_ids_json) THEN center_op.allowed_machine_ids_json ELSE "[]" END) allowed_machine WHERE CAST(allowed_machine.value AS INTEGER) = ?))))';
@@ -1110,6 +1110,14 @@ $labelInkMaterials=array_values(array_filter($labelRawMaterials,function($row){r
 $selectedOfId = (int) ($_GET['of_id'] ?? ($productionOrders[0]['id'] ?? 0));
 $selectedOf = null;
 foreach ($productionOrders as $ofRow) { if ((int)$ofRow['id'] === $selectedOfId) { $selectedOf = $ofRow; break; } }
+if ($selectedOf) {
+    // The production lot is frozen in the OF snapshot; it is intentionally not
+    // duplicated on erp_production_orders.
+    $lotSnapshotStmt=$pdo->prepare('SELECT snapshot_json FROM erp_production_order_snapshots WHERE production_order_id=? UNION ALL SELECT snapshot_json FROM erp_technical_sheets WHERE production_order_id=? LIMIT 1');
+    $lotSnapshotStmt->execute([$selectedOfId,$selectedOfId]);
+    $lotSnapshot=json_decode((string)$lotSnapshotStmt->fetchColumn(),true)?:[];
+    $selectedOf['lot']=trim((string)($lotSnapshot['_order']['lot']??''));
+}
 $ofDocuments = $ofOperations = $ofConsumptionMaterials = [];
 $operationRequiredMaterials = $operationConsumptions = [];
 $articleArtwork = null;
