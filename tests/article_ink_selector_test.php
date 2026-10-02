@@ -15,7 +15,9 @@ article_ink_selector_check(strpos($source,'array_slice($selected,0,8)')!==false,
 article_ink_selector_check(strpos($source,'data-color-group="<?=h($group)?>"')!==false,'Os grupos de cores da ficha e da OF não estão identificados.');
 article_ink_selector_check(strpos($source,"face.querySelectorAll('select[data-color-line]')")!==false,'As tintas repetidas não são validadas dentro de cada face.');
 article_ink_selector_check(strpos($source,'Selecione até 8 tintas existentes por cada face.')!==false,'O limite por face não é explicado no formulário.');
-article_ink_selector_check(strpos($source,"\$values['colors_per_face']>8")!==false,'O campo de número de cores por face não aceita o intervalo de 0 a 8 no servidor.');
-article_ink_selector_check(strpos($source,'min="0" max="8" step="1"')!==false,'O campo de número de cores por face não aceita o intervalo de 0 a 8 no formulário.');
+article_ink_selector_check(strpos($source,"preg_match('/^[0-8](?:\\+[0-8])?$/',\$value)")!==false,'O campo de cores por face não valida formatos simples e compostos como 2+0.');
+article_ink_selector_check(strpos($source,'function erp_colors_per_face($value):')===false,'A validação de cores por face usa uma declaração incompatível com PHP 7.0.');
+article_ink_selector_check(strpos($source,'pattern="[0-8](\+[0-8])?"')!==false,'O formulário não aceita cores distintas para frente e verso.');
+article_ink_selector_check(strpos($source,'placeholder="Ex.: 2+0"')!==false,'O formato frente+verso não é explicado no formulário.');
 
 echo "article_ink_selector_test: OK\n";
