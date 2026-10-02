@@ -10,19 +10,18 @@ $migrations=(string)file_get_contents(__DIR__.'/../erp_migrations.php');
 function production_label_check($condition,$message){if(!$condition)throw new RuntimeException($message);}
 production_label_check(strpos($dossier,'production_label.php')===false,'o dossier ainda liga etiquetas a uma OF');
 production_label_check(strpos($shopfloor,'production_label.php?id=')===false,'o Shopfloor ainda envia etiquetas com uma OF');
-foreach(['roll','ink'] as$type){
- production_label_check(strpos($header,'data-bs-target="#productionLabelModal-'.$type.'"')!==false,'atalho de '.$type.' em falta no cabeçalho');
- production_label_check(substr_count($header,'data-bs-target="#productionLabelModal-'.$type.'"')===1,'atalho de '.$type.' duplicado no cabeçalho');
- production_label_check(strpos($shopfloor,'id="productionLabelModal-<?= h($labelType) ?>"')!==false,'seletor de matéria-prima em falta');
-}
+production_label_check(substr_count($header,'data-bs-target="#productionLabelModal"')===1,'deve existir um único atalho de etiquetas no cabeçalho');
+production_label_check(strpos($shopfloor,'id="productionLabelModal"')!==false,'seletor unificado de etiquetas em falta');
+production_label_check(strpos($shopfloor,'data-label-type="roll"')!==false&&strpos($shopfloor,'data-label-type="ink"')!==false,'escolha entre rolo/bobine e tinta em falta');
+production_label_check(strpos($shopfloor,'data-label-panel="<?= h($labelType) ?>"')!==false,'painéis de matéria-prima por tipo em falta');
 production_label_check(strpos($header,'aria-label="Atalhos do Shopfloor"')!==false,'grupo único de atalhos em falta');
-foreach(['Etiqueta de rolo','Etiqueta de tinta','Calculadora','Previsualizar maquete'] as$shortcutLabel){
+foreach(['Etiquetas','Calculadora','Previsualizar maquete'] as$shortcutLabel){
  production_label_check(strpos($header,'aria-label="'.$shortcutLabel.'"')!==false,'nome acessível em falta no atalho: '.$shortcutLabel);
  production_label_check(strpos($header,'> '.$shortcutLabel.'</span>')===false,'texto do atalho ainda aparece no cabeçalho: '.$shortcutLabel);
 }
 production_label_check(strpos($header,'shopfloor-header-shortcuts')!==false,'estilo dos atalhos apenas com ícones em falta');
 production_label_check(substr_count($header,'data-bs-target="#workCenterModal"')===1,'atalho do centro de trabalho duplicado no cabeçalho');
-$shortcutTargets=['#workCenterModal','#productionLabelModal-roll','#productionLabelModal-ink','#shopfloorCalculatorModal','#articleArtworkModal'];
+$shortcutTargets=['#workCenterModal','#productionLabelModal','#shopfloorCalculatorModal','#articleArtworkModal'];
 $previousShortcutPosition=-1;
 foreach($shortcutTargets as$shortcutTarget){
  $shortcutPosition=strpos($header,'data-bs-target="'.$shortcutTarget.'"');
