@@ -857,12 +857,6 @@ $absenceRequestsStmt = $pdo->prepare('SELECT a.id, a.request_type, a.duration_ty
 $absenceRequestsStmt->execute([$userId]);
 $absenceRequests = $absenceRequestsStmt->fetchAll(PDO::FETCH_ASSOC);
 
-$pendingChiefValidations = [];
-if ($isAdmin || $isChief) {
-    $pendingChiefStmt = $pdo->query('SELECT a.id, a.start_date, a.end_date, a.request_type, a.duration_type, a.duration_hours, a.start_time, a.end_time, a.reason, a.status, u.name AS user_name FROM shopfloor_absence_requests a INNER JOIN users u ON u.id = a.user_id WHERE a.status = "Pendente Nível 1" ORDER BY a.created_at ASC LIMIT 20');
-    $pendingChiefValidations = $pendingChiefStmt->fetchAll(PDO::FETCH_ASSOC);
-}
-
 $rhFilter = trim((string) ($_GET['rh_filter'] ?? 'todos'));
 if (!in_array($rhFilter, ['todos', 'pendentes', 'aprovados'], true)) {
     $rhFilter = 'todos';
@@ -1407,40 +1401,23 @@ require __DIR__ . '/partials/header.php';
             <?php endforeach; ?>
         <?php endif; ?>
     </div>
-    <div class="shopfloor-panel mb-4">
-        <div class="shopfloor-panel-header flex-wrap gap-2">
-            <h2 class="h4 mb-0">Pausas e paragens</h2>
-            <?php if ($isAdmin || $isRh): ?>
-                <a href="shopfloor_break_reasons.php" class="btn btn-outline-primary btn-sm fw-semibold">Configurar tipos</a>
-            <?php endif; ?>
-        </div>
-        <?php if ($activeBreakEntry): ?>
-            <div class="small text-secondary mt-1 mb-3">Em curso: <?= h((string) ($activeBreakEntry['break_type'] ?? 'Pausa')) ?> · <?= h((string) ($activeBreakEntry['code'] ?? '')) ?> | <?= h((string) ($activeBreakEntry['label'] ?? '')) ?> (<?= h((string) ($activeBreakEntry['started_at'] ?? '')) ?>)</div>
-        <?php endif; ?>
-        <div class="table-responsive">
-            <table class="table table-sm shopfloor-table mb-0">
-                <thead>
-                    <tr><th>Tipo</th><th>Código</th><th>Nome</th><th>Contagem</th><th>Tempo</th></tr>
-                </thead>
-                <tbody>
-                    <?php if ($dailyBreakByReason): ?>
-                        <?php foreach ($dailyBreakByReason as $dailyBreakReason): ?>
-                            <tr>
-                                <td><?= h((string) ($dailyBreakReason['break_type'] ?? '')) ?></td>
-                                <td><?= h((string) ($dailyBreakReason['code'] ?? '')) ?></td>
-                                <td><?= h((string) ($dailyBreakReason['label'] ?? '')) ?></td>
-                                <td><?= (int) ($dailyBreakReason['total_count'] ?? 0) ?></td>
-                                <td><?= h(format_minutes((int) ($dailyBreakReason['total_seconds'] ?? 0))) ?></td>
-                            </tr>
-                        <?php endforeach; ?>
-                    <?php else: ?>
-                        <tr><td colspan="5" class="text-secondary">Sem pausas/paragens registadas hoje.</td></tr>
-                    <?php endif; ?>
-                </tbody>
-            </table>
-        </div>
-    </div>
 
+    <section class="shopfloor-panel mb-4" aria-labelledby="humanResourcesHeading">
+        <button
+            class="shopfloor-panel-header shopfloor-collapsible-trigger w-100 border-0 bg-transparent p-0 text-start"
+            type="button"
+            data-bs-toggle="collapse"
+            data-bs-target="#humanResourcesPanel"
+            aria-expanded="false"
+            aria-controls="humanResourcesPanel"
+        >
+            <span>
+                <span class="d-block h4 mb-1" id="humanResourcesHeading">Recursos humanos</span>
+                <span class="small text-secondary fw-normal">Comunicação, gestão de ausências e pedidos de férias</span>
+            </span>
+            <i class="bi bi-chevron-down shopfloor-collapse-icon" aria-hidden="true"></i>
+        </button>
+        <div class="collapse mt-4" id="humanResourcesPanel">
     <div class="shopfloor-panel mb-4">
         <div class="shopfloor-panel-header">
             <h2 class="h4 mb-0">Pedidos de ausência</h2>
@@ -1618,53 +1595,6 @@ require __DIR__ . '/partials/header.php';
         </div>
     </div>
 
-    <?php if ($isAdmin || $isChief): ?>
-        <div class="shopfloor-panel mb-4">
-            <div class="shopfloor-panel-header">
-                <h2 class="h5 mb-0">Validação Nível 1 (Chefe do departamento)</h2>
-                <span class="badge text-bg-light border"><?= (int) count($pendingChiefValidations) ?> pendente(s)</span>
-            </div>
-            <div class="table-responsive">
-                <table class="table table-sm shopfloor-table mb-0">
-                    <thead><tr><th>Colaborador</th><th>Motivo</th><th>Data</th><th>Estado</th><th class="text-end">Ações</th></tr></thead>
-                    <tbody>
-                    <?php if ($pendingChiefValidations): foreach ($pendingChiefValidations as $pendingAbsence): ?>
-                        <tr>
-                            <td><?= h((string) $pendingAbsence['user_name']) ?></td>
-                            <td><?= h((string) $pendingAbsence['reason']) ?></td>
-                            <td>
-                                <?php if (($pendingAbsence['request_type'] ?? 'Dias inteiros') === 'Intervalo de tempo'): ?>
-                                    <?= h((string) $pendingAbsence['start_date']) ?> · <?= h((string) ($pendingAbsence['start_time'] ?? '')) ?> → <?= h((string) ($pendingAbsence['end_time'] ?? '')) ?>
-                                <?php else: ?>
-                                    <?= h((string) $pendingAbsence['start_date']) ?><?= $pendingAbsence['end_date'] !== $pendingAbsence['start_date'] ? ' → ' . h((string) $pendingAbsence['end_date']) : '' ?>
-                                <?php endif; ?>
-                            </td>
-                            <td><span class="badge shopfloor-status-pill"><?= h((string) $pendingAbsence['status']) ?></span></td>
-                            <td class="text-end">
-                                <div class="d-inline-flex gap-2">
-                                    <form method="post">
-                                        <input type="hidden" name="action" value="review_absence">
-                                        <input type="hidden" name="absence_id" value="<?= (int) $pendingAbsence['id'] ?>">
-                                        <input type="hidden" name="decision" value="approve">
-                                        <button class="btn btn-sm btn-outline-success">Aprovar</button>
-                                    </form>
-                                    <form method="post">
-                                        <input type="hidden" name="action" value="review_absence">
-                                        <input type="hidden" name="absence_id" value="<?= (int) $pendingAbsence['id'] ?>">
-                                        <input type="hidden" name="decision" value="reject">
-                                        <button class="btn btn-sm btn-outline-danger">Rejeitar</button>
-                                    </form>
-                                </div>
-                            </td>
-                        </tr>
-                    <?php endforeach; else: ?>
-                        <tr><td colspan="5" class="text-secondary">Sem pedidos pendentes para validação de Nível 1.</td></tr>
-                    <?php endif; ?>
-                    </tbody>
-                </table>
-            </div>
-        </div>
-    <?php endif; ?>
 
     <?php if ($isAdmin || $isRh): ?>
         <div class="shopfloor-panel mb-4">
@@ -1816,27 +1746,8 @@ require __DIR__ . '/partials/header.php';
     </div>
 
     <div class="row g-3">
-        <div class="col-xl-6">
-            <div class="shopfloor-panel h-100">
-                <h2 class="h5 mb-3">Histórico do dia (ponto)</h2>
-                <ul class="list-group list-group-flush">
-                    <?php if ($todayEntries): foreach ($todayEntries as $entry): ?>
-                        <li class="list-group-item shopfloor-list-item">
-                            <?php $entryOccurredAt = (string) ($entry['occurred_at'] ?? ($entry['created_at'] ?? '')); ?>
-                            <span class="fw-semibold"><?= $entry['entry_type'] === 'entrada' ? 'Entrada' : 'Saída' ?></span>
-                            <span class="text-secondary small ms-2"><?= $entryOccurredAt !== '' ? h(date('H:i:s', strtotime($entryOccurredAt))) : '-' ?></span>
-                            <?php if (!empty($entry['note'])): ?>
-                                <div class="small text-secondary mt-1"><?= h((string) $entry['note']) ?></div>
-                            <?php endif; ?>
-                        </li>
-                    <?php endforeach; else: ?>
-                        <li class="list-group-item shopfloor-list-item text-secondary">Sem registos de ponto hoje.</li>
-                    <?php endif; ?>
-                </ul>
-            </div>
-        </div>
-        <div class="col-xl-6">
-            <div class="shopfloor-panel h-100">
+        <div class="col-12">
+            <div class="shopfloor-panel">
                 <h2 class="h5 mb-3">Comunicados da chefia / RH</h2>
                 <ul class="list-group list-group-flush mb-3">
                     <?php if ($announcements): foreach ($announcements as $announcement): ?>
@@ -1954,6 +1865,57 @@ require __DIR__ . '/partials/header.php';
             </div>
         </div>
     </div>
+        </div>
+    </section>
+
+    <section class="mb-4" aria-labelledby="dailyHistoryHeading">
+        <div class="d-flex align-items-center gap-2 mb-3">
+            <i class="bi bi-clock-history text-primary" aria-hidden="true"></i>
+            <h2 class="h4 mb-0" id="dailyHistoryHeading">Histórico do dia</h2>
+        </div>
+        <div class="row g-3">
+            <div class="col-xl-6">
+                <div class="shopfloor-panel h-100">
+                    <h3 class="h5 mb-3">Histórico de pontos</h3>
+                    <ul class="list-group list-group-flush">
+                        <?php if ($todayEntries): foreach ($todayEntries as $entry): ?>
+                            <li class="list-group-item shopfloor-list-item">
+                                <?php $entryOccurredAt = (string) ($entry['occurred_at'] ?? ($entry['created_at'] ?? '')); ?>
+                                <span class="fw-semibold"><?= $entry['entry_type'] === 'entrada' ? 'Entrada' : 'Saída' ?></span>
+                                <span class="text-secondary small ms-2"><?= $entryOccurredAt !== '' ? h(date('H:i:s', strtotime($entryOccurredAt))) : '-' ?></span>
+                                <?php if (!empty($entry['note'])): ?><div class="small text-secondary mt-1"><?= h((string) $entry['note']) ?></div><?php endif; ?>
+                            </li>
+                        <?php endforeach; else: ?>
+                            <li class="list-group-item shopfloor-list-item text-secondary">Sem registos de ponto hoje.</li>
+                        <?php endif; ?>
+                    </ul>
+                </div>
+            </div>
+            <div class="col-xl-6">
+                <div class="shopfloor-panel h-100">
+                    <div class="shopfloor-panel-header flex-wrap gap-2">
+                        <h3 class="h5 mb-0">Histórico de pausas e paragens</h3>
+                        <?php if ($isAdmin || $isRh): ?><a href="shopfloor_break_reasons.php" class="btn btn-outline-primary btn-sm fw-semibold">Configurar tipos</a><?php endif; ?>
+                    </div>
+                    <?php if ($activeBreakEntry): ?>
+                        <div class="small text-secondary mt-1 mb-3">Em curso: <?= h((string) ($activeBreakEntry['break_type'] ?? 'Pausa')) ?> · <?= h((string) ($activeBreakEntry['code'] ?? '')) ?> | <?= h((string) ($activeBreakEntry['label'] ?? '')) ?> (<?= h((string) ($activeBreakEntry['started_at'] ?? '')) ?>)</div>
+                    <?php endif; ?>
+                    <div class="table-responsive">
+                        <table class="table table-sm shopfloor-table mb-0">
+                            <thead><tr><th>Tipo</th><th>Código</th><th>Nome</th><th>Contagem</th><th>Tempo</th></tr></thead>
+                            <tbody>
+                                <?php if ($dailyBreakByReason): foreach ($dailyBreakByReason as $dailyBreakReason): ?>
+                                    <tr><td><?= h((string) ($dailyBreakReason['break_type'] ?? '')) ?></td><td><?= h((string) ($dailyBreakReason['code'] ?? '')) ?></td><td><?= h((string) ($dailyBreakReason['label'] ?? '')) ?></td><td><?= (int) ($dailyBreakReason['total_count'] ?? 0) ?></td><td><?= h(format_minutes((int) ($dailyBreakReason['total_seconds'] ?? 0))) ?></td></tr>
+                                <?php endforeach; else: ?>
+                                    <tr><td colspan="5" class="text-secondary">Sem pausas/paragens registadas hoje.</td></tr>
+                                <?php endif; ?>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
     </div>
 
 </section>
