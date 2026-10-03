@@ -1,3 +1,7 @@
 /database.sqlite
 
 /reports_sent.log
+/storage/backups/
+/storage/backup-settings.json
+/storage/backup.lock
+/storage/recovery.token
