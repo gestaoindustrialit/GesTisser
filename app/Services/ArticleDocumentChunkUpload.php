@@ -71,7 +71,7 @@ final class ArticleDocumentChunkUpload
         return true;
     }
 
-    public static function persist(int $userId, string $uploadId): array
+    public static function persist(int $userId, string $uploadId, int $articleId): array
     {
         if (!preg_match('/^[a-f0-9]{32}$/', $uploadId)) throw new RuntimeException('Documento temporário inválido.');
         $directory = self::directory($userId, $uploadId);
@@ -89,7 +89,7 @@ final class ArticleDocumentChunkUpload
             throw new RuntimeException('Utilize apenas documentos PDF, JPG, PNG ou WEBP.');
         }
         $safeName = bin2hex(random_bytes(12)) . '.' . $extensions[$mime];
-        $uploadDirectory = (string) app_config('paths.uploads');
+        $uploadDirectory = ArticleFolderSync::directory($articleId);
         if (!is_dir($uploadDirectory) && !mkdir($uploadDirectory, 0750, true) && !is_dir($uploadDirectory)) {
             throw new RuntimeException('Não foi possível preparar a pasta de documentos.');
         }
@@ -97,7 +97,7 @@ final class ArticleDocumentChunkUpload
             throw new RuntimeException('Não foi possível guardar o documento.');
         }
         self::removeDirectory($directory);
-        return ['name' => $name, 'url' => 'storage/uploads/' . $safeName];
+        return ['name' => $name, 'url' => ArticleFolderSync::fileUrl($articleId, $safeName)];
     }
 
     private static function directory(int $userId, string $uploadId): string
