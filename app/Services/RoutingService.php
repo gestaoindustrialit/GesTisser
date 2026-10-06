@@ -183,7 +183,42 @@ final class RoutingService
     private function editableVersion(int$id):array{$v=$this->existingVersion($id);if($v['status']!=='draft')throw new DomainException('Apenas versões em rascunho podem ser ativadas.');return$v;}
     private function existingVersion(int$id):array{$v=$this->one('SELECT * FROM erp_article_routing_versions WHERE id=?',[$id]);if(!$v)throw new InvalidArgumentException('Versão inválida.');return$v;}
     private function audit(int$u,string$a,string$e,int$id,array$b,array$n,string$r=''){$this->pdo->prepare('INSERT INTO erp_routing_audit(user_id,action,entity_type,entity_id,before_json,after_json,reason) VALUES (?,?,?,?,?,?,?)')->execute([$u,$a,$e,$id,json_encode($b,JSON_UNESCAPED_UNICODE),json_encode($n,JSON_UNESCAPED_UNICODE),$r]);}
-    private function transaction(callable$f){$own=!$this->pdo->inTransaction();if($own)$this->pdo->beginTransaction();try{$r=$f();if($own)$this->pdo->commit();return$r;}catch(Throwable$e){if($own&&$this->pdo->inTransaction())$this->pdo->rollBack();throw$e;}}
+    /**
+     * Run a write transaction without SQLite's deferred read-to-write upgrade.
+     *
+     * A deferred transaction can read a routing snapshot and then fail
+     * immediately with SQLITE_BUSY when it is upgraded for the UPDATE, even
+     * though busy_timeout is configured. BEGIN IMMEDIATE acquires the write
+     * reservation before the callback reads and a short retry covers another
+     * request which is just finishing its commit.
+     */
+    private function transaction(callable $callback)
+    {
+        if ($this->pdo->inTransaction()) return $callback();
+
+        $attempt = 0;
+        while (true) {
+            try {
+                $this->pdo->exec('BEGIN IMMEDIATE');
+                $result = $callback();
+                $this->pdo->commit();
+                return $result;
+            } catch (Throwable $exception) {
+                if ($this->pdo->inTransaction()) $this->pdo->rollBack();
+                $attempt++;
+                if ($attempt >= 3 || !$this->isDatabaseBusy($exception)) throw $exception;
+                usleep($attempt * 100000);
+            }
+        }
+    }
+
+    private function isDatabaseBusy(Throwable $exception): bool
+    {
+        $message = strtolower($exception->getMessage());
+        return (int) $exception->getCode() === 5
+            || strpos($message, 'database is locked') !== false
+            || strpos($message, 'database table is locked') !== false;
+    }
     public function sanitizeInstructionHtml(string $html): string
     {
         $html=strip_tags($html,'<p><br><strong><b><em><i><u><ul><ol><li><h2><h3><blockquote>');
