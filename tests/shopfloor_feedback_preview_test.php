@@ -16,8 +16,9 @@ shopfloor_feedback_check(strpos($styles, '100dvh') !== false, 'O visualizador PD
 shopfloor_feedback_check(strpos($shopfloor, 'data-artwork-zoom-in') !== false && strpos($shopfloor, 'data-artwork-zoom-out') !== false && strpos($shopfloor, 'data-artwork-zoom-reset') !== false, 'Os controlos de zoom da maquete estão em falta.');
 shopfloor_feedback_check(strpos($shopfloor, 'Math.min(4') !== false && strpos($shopfloor, "image.style.width=(zoom*100)+'%'") !== false, 'O zoom da maquete não está limitado ou não atualiza a imagem.');
 shopfloor_feedback_check(strpos($styles, '.shopfloor-artwork-stage') !== false && strpos($styles, 'overflow: auto') !== false, 'A maquete ampliada não permite deslocação dentro do modal.');
-shopfloor_feedback_check(strpos($shopfloor, 'data-artwork-tablet-src') !== false && strpos($shopfloor, 'data-artwork-hd-src') !== false, 'O Shopfloor não disponibiliza resoluções específicas para PC e tablet.');
+shopfloor_feedback_check(strpos($shopfloor, 'data-artwork-tablet-src') === false && strpos($shopfloor, 'data-artwork-hd-src') !== false, 'O tablet ainda tenta carregar automaticamente uma imagem pesada.');
 shopfloor_feedback_check(strpos($shopfloor, 'const enhancedImage=new Image()') !== false && strpos($shopfloor, 'enhancedImage.onload=()=>{image.src=preferredSource;}') !== false, 'A imagem HD não é pré-carregada antes de substituir a alternativa leve.');
+shopfloor_feedback_check(strpos($shopfloor, 'navigator.maxTouchPoints') !== false && strpos($shopfloor, 'if(preferredSource&&!touchDevice)') !== false, 'Os dispositivos táteis não são protegidos do carregamento HD automático.');
 $erp = (string) file_get_contents(__DIR__ . '/../erp.php');
 shopfloor_feedback_check(strpos($erp, "[4800, 3600]") !== false && strpos($erp, "[2400, 1800]") !== false, 'As resoluções específicas para PC e tablet não foram configuradas.');
 echo "shopfloor feedback and preview ok\n";

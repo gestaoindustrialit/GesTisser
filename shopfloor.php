@@ -1944,7 +1944,7 @@ require __DIR__ . '/partials/header.php';
     <div class="modal-dialog modal-fullscreen-lg-down modal-xl modal-dialog-centered">
         <div class="modal-content">
             <div class="modal-header"><div><h2 class="modal-title fs-5" id="articleArtworkModalLabel">Maquete do artigo</h2><p class="small text-secondary mb-0"><?= h((string) ($selectedOf['product_code'] ?? '')) ?> · <?= h((string) ($articleArtwork['title'] ?? 'Maquete de produção')) ?></p></div><button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Fechar"></button></div>
-            <div class="modal-body text-center bg-light p-0"><?php if ($articleArtworkPresentation['kind'] === 'pdf'): ?><?php $artworkPreviewUrl=ArticleDocument::thumbnailUrl((int)$articleArtwork['id']); ?><div class="shopfloor-artwork-pdf-preview" data-artwork-viewer><div class="shopfloor-artwork-zoom" role="toolbar" aria-label="Controlos de ampliação da maquete"><button type="button" class="btn btn-light" data-artwork-zoom-out aria-label="Reduzir"><i class="bi bi-zoom-out"></i></button><output data-artwork-zoom-value aria-live="polite">100%</output><button type="button" class="btn btn-light" data-artwork-zoom-in aria-label="Ampliar"><i class="bi bi-zoom-in"></i></button><button type="button" class="btn btn-light" data-artwork-zoom-reset>Repor</button></div><div class="shopfloor-artwork-stage" data-artwork-stage><img src="<?=h($artworkPreviewUrl)?>" data-artwork-tablet-src="<?=h($artworkPreviewUrl.'&preview=tablet')?>" data-artwork-hd-src="<?=h($artworkPreviewUrl.'&preview=high')?>" class="shopfloor-artwork-preview" data-artwork-image alt="Primeira página do PDF da maquete do artigo <?= h((string) ($selectedOf['product_code'] ?? '')) ?>"></div><p>Pré-visualização em alta definição. Use os controlos para ampliar sem sair do Shopfloor.</p></div><?php else: ?><img src="<?= h(ArticleDocument::url((int) $articleArtwork['id'])) ?>" class="shopfloor-artwork-preview" alt="Maquete do artigo <?= h((string) ($selectedOf['product_code'] ?? '')) ?>"><?php endif; ?></div>
+            <div class="modal-body text-center bg-light p-0"><?php if ($articleArtworkPresentation['kind'] === 'pdf'): ?><?php $artworkPreviewUrl=ArticleDocument::thumbnailUrl((int)$articleArtwork['id']); ?><div class="shopfloor-artwork-pdf-preview" data-artwork-viewer><div class="shopfloor-artwork-zoom" role="toolbar" aria-label="Controlos de ampliação da maquete"><button type="button" class="btn btn-light" data-artwork-zoom-out aria-label="Reduzir"><i class="bi bi-zoom-out"></i></button><output data-artwork-zoom-value aria-live="polite">100%</output><button type="button" class="btn btn-light" data-artwork-zoom-in aria-label="Ampliar"><i class="bi bi-zoom-in"></i></button><button type="button" class="btn btn-light" data-artwork-zoom-reset>Repor</button></div><div class="shopfloor-artwork-stage" data-artwork-stage><img src="<?=h($artworkPreviewUrl)?>" data-artwork-hd-src="<?=h($artworkPreviewUrl.'&preview=high')?>" class="shopfloor-artwork-preview" data-artwork-image alt="Primeira página do PDF da maquete do artigo <?= h((string) ($selectedOf['product_code'] ?? '')) ?>"></div><p>Use os controlos para ampliar a maquete sem sair do Shopfloor.</p></div><?php else: ?><img src="<?= h(ArticleDocument::url((int) $articleArtwork['id'])) ?>" class="shopfloor-artwork-preview" alt="Maquete do artigo <?= h((string) ($selectedOf['product_code'] ?? '')) ?>"><?php endif; ?></div>
             <div class="modal-footer"><button type="button" class="btn btn-outline-secondary btn-lg" data-bs-dismiss="modal">Fechar</button><a href="<?= h(ArticleDocument::url((int) $articleArtwork['id'])) ?>" target="_blank" rel="noopener" class="btn btn-primary btn-lg"><i class="bi bi-arrows-fullscreen me-1"></i>Abrir original</a></div>
         </div>
     </div>
@@ -2415,12 +2415,13 @@ document.querySelectorAll('#productionLabelModal [data-label-type]').forEach((bu
     const image=viewer.querySelector('[data-artwork-image]');
     const stage=viewer.querySelector('[data-artwork-stage]');
     const value=viewer.querySelector('[data-artwork-zoom-value]');
-    const tabletDevice=window.matchMedia('(max-width: 1199.98px), (hover: none) and (pointer: coarse)').matches;
-    const preferredSource=image.getAttribute(tabletDevice?'data-artwork-tablet-src':'data-artwork-hd-src');
-    if(preferredSource){
+    const touchDevice=(navigator.maxTouchPoints||0)>0||window.matchMedia('(hover: none), (pointer: coarse)').matches;
+    const preferredSource=image.getAttribute('data-artwork-hd-src');
+    if(preferredSource&&!touchDevice){
         const enhancedImage=new Image();
         enhancedImage.onload=()=>{image.src=preferredSource;};
-        enhancedImage.src=preferredSource;
+        const loadEnhanced=()=>{enhancedImage.src=preferredSource;};
+        if(image.complete&&image.naturalWidth>0)loadEnhanced();else image.addEventListener('load',loadEnhanced,{once:true});
     }
     let zoom=1;
     const render=()=>{image.style.width=(zoom*100)+'%';image.style.maxWidth=zoom===1?'100%':'none';value.value=Math.round(zoom*100)+'%';};
