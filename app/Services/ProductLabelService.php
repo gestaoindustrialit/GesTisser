@@ -9,7 +9,7 @@ final class ProductLabelService
     /** Loads every immutable label value from server-side ERP records. */
     public function data(int $orderId,int $orderOperationId): array
     {
-        $sql='SELECT o.id production_order_id,o.order_number,o.planned_quantity,o.lot,o.delivery_address_snapshot,
+        $sql='SELECT o.id production_order_id,o.order_number,o.planned_quantity,COALESCE(NULLIF(json_extract(pos.snapshot_json,"$._order.lot"),""),NULLIF(json_extract(ts.snapshot_json,"$._order.lot"),""),o.order_number) lot,o.delivery_address_snapshot,
             opo.id operation_id,opo.operation_id operation_type_id,op.product_label_enabled,
             c.name customer_name,c.postal_code customer_postal_code,c.city customer_city,
             da.postal_code delivery_postal_code,da.city delivery_city,
@@ -22,6 +22,8 @@ final class ProductLabelService
             LEFT JOIN erp_customer_delivery_addresses da ON da.id=o.delivery_address_id
             LEFT JOIN erp_finished_products fp ON fp.id=o.finished_product_id
             LEFT JOIN erp_products p ON p.id=o.product_id
+            LEFT JOIN erp_production_order_snapshots pos ON pos.production_order_id=o.id
+            LEFT JOIN erp_technical_sheets ts ON ts.production_order_id=o.id
             WHERE o.id=? AND opo.id=? LIMIT 1';
         $stmt=$this->pdo->prepare($sql);$stmt->execute([$orderId,$orderOperationId]);$row=$stmt->fetch(PDO::FETCH_ASSOC);
         if(!$row)throw new RuntimeException('A operação não pertence à Ordem de Fabrico indicada.');

@@ -9,8 +9,11 @@ shopfloor_feedback_check(strpos($shopfloor, 'position-fixed shopfloor-toast-cont
 shopfloor_feedback_check(strpos($styles, 'bottom: calc(20px + env(safe-area-inset-bottom, 0px))') !== false, 'A notificação não fica a 20 píxeis do fundo do ecrã.');
 shopfloor_feedback_check(strpos($styles, 'left: 50%') !== false && strpos($styles, 'translateX(-50%)') !== false, 'A notificação não está centrada horizontalmente.');
 shopfloor_feedback_check(strpos($styles, 'translateY(2rem) scale(.96)') !== false && strpos($styles, '.toast.show') !== false, 'A animação da notificação não foi configurada.');
-shopfloor_feedback_check(strpos($shopfloor, '<iframe src="<?= h(ArticleDocument::url') !== false, 'O PDF da maquete não abre diretamente no visualizador.');
-shopfloor_feedback_check(strpos($shopfloor, 'ArticleDocument::thumbnailUrl((int) $articleArtwork[\'id\'])') !== false, 'A alternativa de visualização do PDF para tablets está em falta.');
-shopfloor_feedback_check(strpos($styles, '.shopfloor-artwork-pdf') !== false, 'O visualizador PDF não ocupa a área útil da janela.');
-shopfloor_feedback_check(strpos($styles, '.shopfloor-artwork-pdf-tablet') !== false, 'O visualizador PDF para tablets não foi configurado.');
+shopfloor_feedback_check(strpos($shopfloor, '<iframe') === false, 'O PDF continua dependente de um iframe bloqueado pelas políticas de segurança.');
+shopfloor_feedback_check(strpos($shopfloor, 'ArticleDocument::thumbnailUrl((int) $articleArtwork[\'id\'])') !== false, 'A pré-visualização segura do PDF está em falta.');
+shopfloor_feedback_check(strpos($styles, '.shopfloor-artwork-pdf-preview') !== false, 'O visualizador PDF não ocupa a área útil da janela.');
+shopfloor_feedback_check(strpos($styles, '100dvh') !== false, 'O visualizador PDF não foi adaptado aos ecrãs dos tablets.');
+shopfloor_feedback_check(strpos($shopfloor, 'data-artwork-zoom-in') !== false && strpos($shopfloor, 'data-artwork-zoom-out') !== false && strpos($shopfloor, 'data-artwork-zoom-reset') !== false, 'Os controlos de zoom da maquete estão em falta.');
+shopfloor_feedback_check(strpos($shopfloor, 'Math.min(4') !== false && strpos($shopfloor, "image.style.width=(zoom*100)+'%'") !== false, 'O zoom da maquete não está limitado ou não atualiza a imagem.');
+shopfloor_feedback_check(strpos($styles, '.shopfloor-artwork-stage') !== false && strpos($styles, 'overflow: auto') !== false, 'A maquete ampliada não permite deslocação dentro do modal.');
 echo "shopfloor feedback and preview ok\n";
