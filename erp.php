@@ -49,7 +49,15 @@ $userId = (int) $_SESSION['user_id'];
 $user = current_user($pdo) ?: [];
 $isAdmin = is_admin($pdo, $userId);
 $profile = (string) ($user['access_profile'] ?? 'Utilizador');
-if (!gt_erp_user_can($pdo, $user, 'erp.view')) { http_response_code(403); exit('Acesso reservado ao ERP.'); }
+$canViewErp = gt_erp_user_can($pdo, $user, 'erp.view');
+$isArticleDocumentRequest = in_array($requestedPage, ['article_document', 'article_document_thumbnail'], true);
+$canViewShopfloorArtwork = $isArticleDocumentRequest
+    && in_array($profile, ['Utilizador', 'Produção', 'Chefias', 'RH'], true);
+// Article artwork is also part of the Shopfloor. In particular, PIN-only
+// operators normally use the "Utilizador" profile and deliberately have no
+// access to the rest of the ERP; blocking these two authenticated endpoints
+// made Android Chrome receive a 403 instead of the preview image/PDF.
+if (!$canViewErp && !$canViewShopfloorArtwork) { http_response_code(403); exit('Acesso reservado ao ERP.'); }
 
 if ($requestedPage === 'machine_attachment') {
     $attachmentId = filter_input(INPUT_GET, 'id', FILTER_VALIDATE_INT);
