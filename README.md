@@ -22,8 +22,9 @@ Aplicação de gestão de trabalho inspirada no ClickUp, desenvolvida em **PHP +
 
 ## Requisitos
 
-- PHP 8.1+
+- PHP 7.0+ (todo o código da aplicação deve manter compatibilidade com esta versão)
 - Extensão `pdo_sqlite` ativa
+- Extensão `zip` ativa (necessária para criar e descarregar backups completos)
 
 ## Instalação
 
@@ -67,6 +68,18 @@ Recomendado em produção (execução automática a cada minuto):
 ```bash
 * * * * * php /caminho/GesTisser/cron_hr_alerts.php >/dev/null 2>&1
 ```
+
+### Backups automáticos
+
+O administrador pode criar, programar e descarregar cópias completas em **Administração → Backups**. Para executar a programação, configure:
+
+```bash
+*/5 * * * * php /caminho/GesTisser/cron_backups.php >> /var/log/gestisser-backups.log 2>&1
+```
+
+Em alojamentos sem `cron`, o primeiro acesso web depois da hora programada também executa o backup. Se a hora guardada já tiver passado, a primeira cópia é criada imediatamente.
+
+Consulte [`docs/RECUPERACAO_BACKUPS.md`](docs/RECUPERACAO_BACKUPS.md) antes de uma recuperação, incluindo quando a interface não arranca.
 
 Se `mail()` não estiver configurado no ambiente, os relatórios/alertas ficam registados em `reports_sent.log`.
 
