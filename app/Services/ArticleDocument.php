@@ -199,18 +199,38 @@ final class ArticleDocument
     public static function absolutePath(string $root, string $fileUrl): string
     {
         $urlPath = rawurldecode((string) (parse_url($fileUrl, PHP_URL_PATH) ?: $fileUrl));
-        $relativePath = ltrim(str_replace('\\', '/', $urlPath), '/');
-        if (strpos($relativePath, 'storage/uploads/') !== 0 || strpos($relativePath, "\0") !== false) {
+        $normalisedUrlPath = ltrim(str_replace('\\', '/', $urlPath), '/');
+        $uploadMarker = 'storage/uploads/';
+        $markerPosition = strpos($normalisedUrlPath, $uploadMarker);
+        if ($markerPosition === false || ($markerPosition > 0 && $normalisedUrlPath[$markerPosition - 1] !== '/')
+            || strpos($normalisedUrlPath, "\0") !== false) {
             return '';
         }
+        $relativeUploadPath = substr($normalisedUrlPath, $markerPosition + strlen($uploadMarker));
+        $segments = explode('/', $relativeUploadPath);
+        if ($relativeUploadPath === '' || in_array('', $segments, true)
+            || in_array('.', $segments, true) || in_array('..', $segments, true)) return '';
 
-        $uploadRoot = realpath(rtrim($root, '/\\') . '/storage/uploads');
-        $candidate = realpath(rtrim($root, '/\\') . '/' . $relativePath);
-        if ($uploadRoot === false || $candidate === false || !is_file($candidate)) return '';
+        $roots = [rtrim($root, '/\\') . '/storage/uploads'];
+        if (function_exists('app_config')) {
+            $applicationRoot = realpath((string) app_config('paths.root'));
+            $requestedRoot = realpath($root);
+            $configuredUploads = (string) app_config('paths.uploads');
+            if ($applicationRoot !== false && $requestedRoot === $applicationRoot && $configuredUploads !== '') {
+                $roots[] = $configuredUploads;
+            }
+        }
 
-        $prefix = rtrim(str_replace('\\', '/', $uploadRoot), '/') . '/';
-        $normalisedCandidate = str_replace('\\', '/', $candidate);
-        return strpos($normalisedCandidate, $prefix) === 0 ? $candidate : '';
+        foreach (array_unique($roots) as $allowedRoot) {
+            $realUploadRoot = realpath($allowedRoot);
+            if ($realUploadRoot === false || !is_dir($realUploadRoot)) continue;
+            $candidate = realpath(rtrim($realUploadRoot, '/\\') . '/' . $relativeUploadPath);
+            if ($candidate === false || !is_file($candidate)) continue;
+            $prefix = rtrim(str_replace('\\', '/', $realUploadRoot), '/') . '/';
+            $normalisedCandidate = str_replace('\\', '/', $candidate);
+            if (strpos($normalisedCandidate, $prefix) === 0) return $candidate;
+        }
+        return '';
     }
 
     /** Return the presentation data used for an article attachment. */
