@@ -16,4 +16,7 @@ shopfloor_feedback_check(strpos($styles, '100dvh') !== false, 'O visualizador PD
 shopfloor_feedback_check(strpos($shopfloor, 'data-artwork-zoom-in') !== false && strpos($shopfloor, 'data-artwork-zoom-out') !== false && strpos($shopfloor, 'data-artwork-zoom-reset') !== false, 'Os controlos de zoom da maquete estão em falta.');
 shopfloor_feedback_check(strpos($shopfloor, 'Math.min(4') !== false && strpos($shopfloor, "image.style.width=(zoom*100)+'%'") !== false, 'O zoom da maquete não está limitado ou não atualiza a imagem.');
 shopfloor_feedback_check(strpos($styles, '.shopfloor-artwork-stage') !== false && strpos($styles, 'overflow: auto') !== false, 'A maquete ampliada não permite deslocação dentro do modal.');
+shopfloor_feedback_check(strpos($shopfloor, "thumbnailUrl((int) \$articleArtwork['id']).'&preview=high'") !== false, 'O Shopfloor não solicita a maquete em alta definição.');
+$erp = (string) file_get_contents(__DIR__ . '/../erp.php');
+shopfloor_feedback_check(strpos($erp, 'ArticleDocument::thumbnail($absolutePath, 4800, 3600)') !== false, 'A imagem de alta definição não tem resolução suficiente para o zoom.');
 echo "shopfloor feedback and preview ok\n";
