@@ -72,9 +72,10 @@ final class ArticleDocument
      * Create a printable first-page preview. Images are normalised with GD and
      * PDFs use Imagick when the server has the PDF delegate enabled.
      */
-    public static function thumbnail(string $absolutePath, int $maxWidth = 1200, int $maxHeight = 900): string
+    public static function thumbnail(string $absolutePath, int $maxWidth = 1200, int $maxHeight = 900, int $page = 0): string
     {
         if ($absolutePath === '' || !is_file($absolutePath)) return '';
+        $page = max(0, $page);
         $extension = strtolower((string) pathinfo($absolutePath, PATHINFO_EXTENSION));
         $image = null;
 
@@ -82,7 +83,7 @@ final class ArticleDocument
             try {
                 $imagick = new Imagick();
                 $imagick->setResolution(144, 144);
-                $imagick->readImage($absolutePath . '[0]');
+                $imagick->readImage($absolutePath . '[' . $page . ']');
                 $imagick->setImageBackgroundColor('white');
                 $imagick->setImageAlphaChannel(Imagick::ALPHACHANNEL_REMOVE);
                 $imagick->thumbnailImage($maxWidth, $maxHeight, true, true);
@@ -98,7 +99,7 @@ final class ArticleDocument
         }
 
         if ($extension === 'pdf') {
-            $blob = self::rasterisePdf($absolutePath, $maxWidth, $maxHeight);
+            $blob = self::rasterisePdf($absolutePath, $maxWidth, $maxHeight, $page);
             if ($blob !== '') return $blob;
         } elseif (function_exists('imagecreatefromstring')) {
             $source = @file_get_contents($absolutePath);
@@ -119,15 +120,16 @@ final class ArticleDocument
     }
 
     /** Rasterise page one with Poppler or Ghostscript (compatible with PHP 7). */
-    private static function rasterisePdf(string $absolutePath, int $maxWidth, int $maxHeight): string
+    private static function rasterisePdf(string $absolutePath, int $maxWidth, int $maxHeight, int $page): string
     {
         if (!function_exists('proc_open')) return '';
         $temporaryBase = tempnam(sys_get_temp_dir(), 'gt-artwork-');
         if ($temporaryBase === false) return '';
         @unlink($temporaryBase);
+        $pdfPage = $page + 1;
         $commands = [
-            ['pdftoppm', '-f', '1', '-singlefile', '-jpeg', '-jpegopt', 'quality=90', '-scale-to-x', (string) $maxWidth, '-scale-to-y', (string) $maxHeight, $absolutePath, $temporaryBase],
-            ['gs', '-q', '-dSAFER', '-dBATCH', '-dNOPAUSE', '-dFirstPage=1', '-dLastPage=1', '-sDEVICE=jpeg', '-dJPEGQ=90', '-r144', '-dPDFFitPage', '-g' . $maxWidth . 'x' . $maxHeight, '-sOutputFile=' . $temporaryBase . '.jpg', $absolutePath],
+            ['pdftoppm', '-f', (string) $pdfPage, '-l', (string) $pdfPage, '-singlefile', '-jpeg', '-jpegopt', 'quality=90', '-scale-to-x', (string) $maxWidth, '-scale-to-y', (string) $maxHeight, $absolutePath, $temporaryBase],
+            ['gs', '-q', '-dSAFER', '-dBATCH', '-dNOPAUSE', '-dFirstPage=' . $pdfPage, '-dLastPage=' . $pdfPage, '-sDEVICE=jpeg', '-dJPEGQ=90', '-r144', '-dPDFFitPage', '-g' . $maxWidth . 'x' . $maxHeight, '-sOutputFile=' . $temporaryBase . '.jpg', $absolutePath],
         ];
         foreach ($commands as $command) {
             $pipes = [];
@@ -144,6 +146,36 @@ final class ArticleDocument
             @unlink($output);
         }
         return '';
+    }
+
+    /** Return the PDF page count without sending the document to the browser. */
+    public static function pageCount(string $absolutePath): int
+    {
+        if ($absolutePath === '' || !is_file($absolutePath)
+            || strtolower((string) pathinfo($absolutePath, PATHINFO_EXTENSION)) !== 'pdf') return 1;
+        if (class_exists('Imagick')) {
+            try {
+                $imagick = new Imagick();
+                $imagick->pingImage($absolutePath);
+                $count = $imagick->getNumberImages();
+                $imagick->clear();
+                if ($count > 0) return $count;
+            } catch (Throwable $exception) {
+                // Fall through to pdfinfo when ImageMagick cannot read PDFs.
+            }
+        }
+        if (function_exists('proc_open')) {
+            $pipes = [];
+            $process = @proc_open('pdfinfo ' . escapeshellarg($absolutePath), [['pipe', 'r'], ['pipe', 'w'], ['pipe', 'w']], $pipes);
+            if (is_resource($process)) {
+                fclose($pipes[0]);
+                $output = (string) stream_get_contents($pipes[1]); fclose($pipes[1]);
+                stream_get_contents($pipes[2]); fclose($pipes[2]);
+                $status = proc_close($process);
+                if ($status === 0 && preg_match('/^Pages:\s+(\d+)/mi', $output, $match)) return max(1, (int) $match[1]);
+            }
+        }
+        return 1;
     }
 
     private static function placeholderThumbnail(string $label): string
