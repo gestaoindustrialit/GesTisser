@@ -1,6 +1,7 @@
 <?php
 require_once __DIR__ . '/helpers.php';
 require_once __DIR__ . '/erp_migrations.php';
+require_once __DIR__ . '/article_document.php';
 require_once __DIR__ . '/production_dossier_service.php';
 
 require_login();

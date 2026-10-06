@@ -1,57 +1,33 @@
-/* PDF.js renders PDFs in-app because Chrome Android does not consistently
- * provide a native PDF viewer. The server thumbnail remains visible if the
- * library, network, fetch, or PDF parsing fails. */
-const pdfJsUrl = 'https://cdn.jsdelivr.net/npm/pdfjs-dist@5.4.624/legacy/build/pdf.min.mjs';
-const pdfJsWorkerUrl = 'https://cdn.jsdelivr.net/npm/pdfjs-dist@5.4.624/legacy/build/pdf.worker.min.mjs';
-
-const viewer = document.querySelector('[data-artwork-viewer][data-pdf-url]');
+/* Tablet-safe artwork navigation. Each PDF page is rendered on the server,
+ * avoiding native Android PDF support, external CDNs and session/path issues. */
+const viewer = document.querySelector('[data-artwork-viewer][data-page-url]');
 
 if (viewer) {
     const image = viewer.querySelector('[data-artwork-image]');
-    const pages = viewer.querySelector('[data-artwork-pages]');
     const status = viewer.querySelector('[data-artwork-status]');
+    const current = viewer.querySelector('[data-artwork-page-current]');
+    const previous = viewer.querySelector('[data-artwork-page-previous]');
+    const next = viewer.querySelector('[data-artwork-page-next]');
+    const pageCount = Math.max(1, Number(viewer.dataset.pageCount) || 1);
+    let page = 1;
 
-    const showFallback = (message) => {
-        pages.hidden = true;
-        image.hidden = false;
-        status.textContent = message;
+    const refresh = () => {
+        current.textContent = `${page} / ${pageCount}`;
+        previous.disabled = page <= 1;
+        next.disabled = page >= pageCount;
+        status.textContent = `A carregar página ${page}…`;
+        const url = new URL(viewer.dataset.pageUrl, window.location.href);
+        url.searchParams.set('page', String(page));
+        image.src = url.toString();
     };
 
-    const renderDocument = async () => {
-        const pdfjsLib = await import(pdfJsUrl);
-        pdfjsLib.GlobalWorkerOptions.workerSrc = pdfJsWorkerUrl;
-        const response = await fetch(viewer.dataset.pdfUrl, { credentials: 'same-origin' });
-        if (!response.ok) throw new Error(`HTTP ${response.status}`);
-
-        const data = await response.arrayBuffer();
-        const documentTask = pdfjsLib.getDocument({ data });
-        const pdf = await documentTask.promise;
-        const fragment = document.createDocumentFragment();
-
-        for (let pageNumber = 1; pageNumber <= pdf.numPages; pageNumber += 1) {
-            status.textContent = `A preparar página ${pageNumber} de ${pdf.numPages}…`;
-            const page = await pdf.getPage(pageNumber);
-            const naturalViewport = page.getViewport({ scale: 1 });
-            const availableWidth = Math.max(320, viewer.clientWidth - 32);
-            const cssScale = availableWidth / naturalViewport.width;
-            const outputScale = Math.min(window.devicePixelRatio || 1, 2);
-            const viewport = page.getViewport({ scale: cssScale * outputScale });
-            const canvas = document.createElement('canvas');
-            canvas.className = 'shopfloor-artwork-page';
-            canvas.width = Math.floor(viewport.width);
-            canvas.height = Math.floor(viewport.height);
-            canvas.setAttribute('aria-label', `Página ${pageNumber} de ${pdf.numPages}`);
-            await page.render({ canvasContext: canvas.getContext('2d'), viewport }).promise;
-            fragment.appendChild(canvas);
-        }
-
-        pages.replaceChildren(fragment);
-        pages.hidden = false;
-        image.hidden = true;
-        status.textContent = `${pdf.numPages} página${pdf.numPages === 1 ? '' : 's'} · documento apresentado com PDF.js`;
-    };
-
-    renderDocument().catch(() => {
-        showFallback('Não foi possível carregar o PDF completo. A apresentar a primeira página.');
+    image.addEventListener('load', () => {
+        status.textContent = `Página ${page} de ${pageCount}`;
     });
+    image.addEventListener('error', () => {
+        status.textContent = 'Não foi possível apresentar esta página da maquete.';
+    });
+    previous.addEventListener('click', () => { if (page > 1) { page -= 1; refresh(); } });
+    next.addEventListener('click', () => { if (page < pageCount) { page += 1; refresh(); } });
+    refresh();
 }

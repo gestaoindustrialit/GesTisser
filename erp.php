@@ -16,6 +16,7 @@ require_once __DIR__ . '/app/Services/ArticleDocumentChunkUpload.php';
 require_once __DIR__ . '/app/Services/ArticleFolderSync.php';
 require_once __DIR__ . '/app/Services/ArticlePalletWeight.php';
 require_once __DIR__ . '/app/Services/ArticleTheoreticalWeight.php';
+require_once __DIR__ . '/article_document.php';
 require_once __DIR__ . '/production_dossier_service.php';
 require_once __DIR__ . '/app/Services/InventoryService.php';
 require_once __DIR__ . '/app/Services/StockTransferService.php';
