@@ -2415,11 +2415,13 @@ document.querySelectorAll('#productionLabelModal [data-label-type]').forEach((bu
     const image=viewer.querySelector('[data-artwork-image]');
     const stage=viewer.querySelector('[data-artwork-stage]');
     const value=viewer.querySelector('[data-artwork-zoom-value]');
-    const fallbackSource=image.getAttribute('src');
     const tabletDevice=window.matchMedia('(max-width: 1199.98px), (hover: none) and (pointer: coarse)').matches;
     const preferredSource=image.getAttribute(tabletDevice?'data-artwork-tablet-src':'data-artwork-hd-src');
-    if(preferredSource)image.src=preferredSource;
-    image.addEventListener('error',()=>{if(image.src!==new URL(fallbackSource,document.baseURI).href)image.src=fallbackSource;},{once:true});
+    if(preferredSource){
+        const enhancedImage=new Image();
+        enhancedImage.onload=()=>{image.src=preferredSource;};
+        enhancedImage.src=preferredSource;
+    }
     let zoom=1;
     const render=()=>{image.style.width=(zoom*100)+'%';image.style.maxWidth=zoom===1?'100%':'none';value.value=Math.round(zoom*100)+'%';};
     const setZoom=(next)=>{zoom=Math.max(1,Math.min(4,Math.round(next*4)/4));render();};

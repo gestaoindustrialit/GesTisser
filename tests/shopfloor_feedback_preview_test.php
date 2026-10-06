@@ -17,7 +17,7 @@ shopfloor_feedback_check(strpos($shopfloor, 'data-artwork-zoom-in') !== false &&
 shopfloor_feedback_check(strpos($shopfloor, 'Math.min(4') !== false && strpos($shopfloor, "image.style.width=(zoom*100)+'%'") !== false, 'O zoom da maquete não está limitado ou não atualiza a imagem.');
 shopfloor_feedback_check(strpos($styles, '.shopfloor-artwork-stage') !== false && strpos($styles, 'overflow: auto') !== false, 'A maquete ampliada não permite deslocação dentro do modal.');
 shopfloor_feedback_check(strpos($shopfloor, 'data-artwork-tablet-src') !== false && strpos($shopfloor, 'data-artwork-hd-src') !== false, 'O Shopfloor não disponibiliza resoluções específicas para PC e tablet.');
-shopfloor_feedback_check(strpos($shopfloor, "image.addEventListener('error'") !== false && strpos($shopfloor, 'image.src=fallbackSource') !== false, 'A imagem não possui alternativa leve para tablets com pouca memória.');
+shopfloor_feedback_check(strpos($shopfloor, 'const enhancedImage=new Image()') !== false && strpos($shopfloor, 'enhancedImage.onload=()=>{image.src=preferredSource;}') !== false, 'A imagem HD não é pré-carregada antes de substituir a alternativa leve.');
 $erp = (string) file_get_contents(__DIR__ . '/../erp.php');
 shopfloor_feedback_check(strpos($erp, "[4800, 3600]") !== false && strpos($erp, "[2400, 1800]") !== false, 'As resoluções específicas para PC e tablet não foram configuradas.');
 echo "shopfloor feedback and preview ok\n";
