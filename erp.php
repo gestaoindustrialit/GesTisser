@@ -130,10 +130,12 @@ if ($requestedPage === 'article_document_thumbnail') {
     $document = $stmt->fetch(PDO::FETCH_ASSOC);
     $absolutePath = $document ? ArticleDocument::absolutePath(__DIR__, (string) ($document['file_url'] ?? '')) : '';
     if (!$document || $absolutePath === '') { http_response_code(404); exit('O ficheiro deste documento não existe no servidor.'); }
-    $thumbnail = ArticleDocument::thumbnail($absolutePath);
+    $previewSize = (string) ($_GET['preview'] ?? '');
+    $previewDimensions = $previewSize === 'high' ? [4800, 3600] : ($previewSize === 'tablet' ? [2400, 1800] : [1200, 900]);
+    $thumbnail = ArticleDocument::thumbnail($absolutePath, $previewDimensions[0], $previewDimensions[1]);
     header('Content-Type: image/jpeg');
     header('Content-Length: ' . strlen($thumbnail));
-    header('Content-Disposition: inline; filename="maqueta-artigo.jpg"');
+    header('Content-Disposition: inline; filename="maqueta-artigo' . ($previewSize !== '' ? '-' . $previewSize : '') . '.jpg"');
     header('X-Content-Type-Options: nosniff');
     header('Cache-Control: private, max-age=3600');
     echo $thumbnail;
