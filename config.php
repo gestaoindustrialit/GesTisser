@@ -1739,3 +1739,21 @@ if ($currentTimeStorageVersion === 'minutes') {
         }
     }
 }
+
+// Shared hosting nem sempre permite configurar cron. Nesses ambientes, o
+// primeiro pedido web após a hora programada executa a cópia em segurança.
+if (PHP_SAPI !== 'cli') {
+    $backupServiceFile = __DIR__ . '/app/Services/BackupManager.php';
+    // Uma publicação parcial nunca deve deixar toda a aplicação indisponível.
+    // O require só é feito depois de confirmar que o novo serviço foi enviado.
+    if (is_file($backupServiceFile) && is_readable($backupServiceFile)) {
+        try {
+            require_once $backupServiceFile;
+            if (class_exists('BackupScheduler', false)) {
+                BackupScheduler::runDue($pdo, __DIR__);
+            }
+        } catch (Throwable $backupSchedulerException) {
+            error_log('[GesTisser] Falha no agendador web de backups: ' . $backupSchedulerException->getMessage());
+        }
+    }
+}
