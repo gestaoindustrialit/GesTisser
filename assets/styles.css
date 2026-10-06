@@ -977,6 +977,10 @@ body {
 .shopfloor-artwork-zoom output { min-width: 4rem; font-weight: 700; }
 .shopfloor-artwork-stage { min-height: 0; overflow: auto; overscroll-behavior: contain; border-radius: .5rem; background: #dfe3e5; }
 .shopfloor-artwork-stage .shopfloor-artwork-preview { max-height: none; border-radius: 0; box-shadow: none; }
+.shopfloor-artwork-stage [data-artwork-content] { width: 100%; margin: 0 auto; }
+.shopfloor-artwork-pages { display: grid; gap: .75rem; padding: .75rem; }
+.shopfloor-artwork-pages[hidden] { display: none; }
+.shopfloor-artwork-page { display: block; width: 100%; height: auto; margin: 0 auto; background: #fff; box-shadow: 0 .2rem .6rem rgba(0,0,0,.18); }
 .shopfloor-toast-container { right: auto; bottom: calc(20px + env(safe-area-inset-bottom, 0px)); left: 50%; z-index: 1090; width: min(44rem, calc(100vw - 2rem)); padding: 0; transform: translateX(-50%); }
 .shopfloor-toast-container .toast { width: 100%; max-width: none; opacity: 0; transform: translateY(2rem) scale(.96); box-shadow: 0 .8rem 2rem rgba(15, 23, 42, .24); transition: opacity .42s ease, transform .52s cubic-bezier(.22, 1, .36, 1), box-shadow .52s ease; will-change: opacity, transform; }
 .shopfloor-toast-container .toast.show { opacity: 1; transform: translateY(0) scale(1); box-shadow: 0 .45rem 1.4rem rgba(15, 23, 42, .18); }

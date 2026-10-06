@@ -14,8 +14,14 @@ shopfloor_feedback_check(strpos($shopfloor, 'ArticleDocument::thumbnailUrl((int)
 shopfloor_feedback_check(strpos($styles, '.shopfloor-artwork-pdf-preview') !== false, 'O visualizador PDF não ocupa a área útil da janela.');
 shopfloor_feedback_check(strpos($styles, '100dvh') !== false, 'O visualizador PDF não foi adaptado aos ecrãs dos tablets.');
 shopfloor_feedback_check(strpos($shopfloor, 'data-artwork-zoom-in') !== false && strpos($shopfloor, 'data-artwork-zoom-out') !== false && strpos($shopfloor, 'data-artwork-zoom-reset') !== false, 'Os controlos de zoom da maquete estão em falta.');
-shopfloor_feedback_check(strpos($shopfloor, 'Math.min(4') !== false && strpos($shopfloor, "image.style.width=(zoom*100)+'%'") !== false, 'O zoom da maquete não está limitado ou não atualiza a imagem.');
+shopfloor_feedback_check(strpos($shopfloor, 'Math.min(4') !== false && strpos($shopfloor, "content.style.width=(zoom*100)+'%'") !== false, 'O zoom da maquete não está limitado ou não atualiza o documento.');
 shopfloor_feedback_check(strpos($styles, '.shopfloor-artwork-stage') !== false && strpos($styles, 'overflow: auto') !== false, 'A maquete ampliada não permite deslocação dentro do modal.');
+$pdfViewer = (string) file_get_contents(__DIR__ . '/../assets/artwork-pdf-viewer.js');
+shopfloor_feedback_check(strpos($shopfloor, 'assets/artwork-pdf-viewer.js') !== false && strpos($shopfloor, 'data-pdf-url=') !== false, 'O visualizador PDF.js não foi ligado à maquete.');
+shopfloor_feedback_check(strpos($pdfViewer, 'pdfjs-dist@5.4.624/legacy/build/pdf.min.mjs') !== false, 'A versão legacy do PDF.js não foi configurada para o Chrome Android.');
+shopfloor_feedback_check(strpos($pdfViewer, "fetch(viewer.dataset.pdfUrl, { credentials: 'same-origin' })") !== false, 'O PDF.js não carrega o documento autenticado.');
+shopfloor_feedback_check(strpos($pdfViewer, 'for (let pageNumber = 1; pageNumber <= pdf.numPages; pageNumber += 1)') !== false, 'O visualizador não apresenta todas as páginas da maquete.');
+shopfloor_feedback_check(strpos($pdfViewer, 'showFallback(') !== false, 'A miniatura de segurança não é mantida quando o PDF.js falha.');
 shopfloor_feedback_check(strpos($shopfloor, 'data-artwork-tablet-src') === false && strpos($shopfloor, 'data-artwork-hd-src') !== false, 'O tablet ainda tenta carregar automaticamente uma imagem pesada.');
 shopfloor_feedback_check(strpos($shopfloor, 'const enhancedImage=new Image()') !== false && strpos($shopfloor, 'enhancedImage.onload=()=>{image.src=preferredSource;}') !== false, 'A imagem HD não é pré-carregada antes de substituir a alternativa leve.');
 shopfloor_feedback_check(strpos($shopfloor, 'navigator.maxTouchPoints') !== false && strpos($shopfloor, 'if(preferredSource&&!touchDevice)') !== false, 'Os dispositivos táteis não são protegidos do carregamento HD automático.');
