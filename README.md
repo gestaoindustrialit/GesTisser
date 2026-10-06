@@ -77,6 +77,8 @@ O administrador pode criar, programar e descarregar cópias completas em **Admin
 */5 * * * * php /caminho/GesTisser/cron_backups.php >> /var/log/gestisser-backups.log 2>&1
 ```
 
+Em alojamentos sem `cron`, o primeiro acesso web depois da hora programada também executa o backup. Se a hora guardada já tiver passado, a primeira cópia é criada imediatamente.
+
 Consulte [`docs/RECUPERACAO_BACKUPS.md`](docs/RECUPERACAO_BACKUPS.md) antes de uma recuperação, incluindo quando a interface não arranca.
 
 Se `mail()` não estiver configurado no ambiente, os relatórios/alertas ficam registados em `reports_sent.log`.

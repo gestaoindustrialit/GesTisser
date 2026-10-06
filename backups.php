@@ -25,6 +25,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && validate_csrf_or_abort(false)) {
         if ($action === 'settings') {
             $manager->saveSettings((string) ($_POST['schedule'] ?? ''), (string) ($_POST['time'] ?? ''), (int) ($_POST['retention'] ?? 14));
             $success = 'Programação guardada.';
+            if ($manager->isDue()) {
+                $manager->create('scheduled', (int) $_SESSION['user_id']);
+                $success = 'Programação guardada e primeiro backup automático criado.';
+            }
         } elseif ($action === 'create') {
             $result = $manager->create('manual', (int) $_SESSION['user_id']);
             log_app_event($pdo, (int) $_SESSION['user_id'], 'backup.created', 'Backup manual criado.', ['filename' => $result['filename']]);
@@ -44,7 +48,7 @@ require __DIR__ . '/partials/header.php';
 <?php if ($success): ?><div class="alert alert-success"><?= h($success) ?></div><?php endif; ?>
 <?php if ($error): ?><div class="alert alert-danger"><strong>Não foi possível criar o backup:</strong> <?= h($error) ?></div><?php endif; ?>
 <div class="row g-4 mb-4">
- <div class="col-lg-5"><div class="card shadow-sm h-100"><div class="card-body"><h2 class="h5">Programação automática</h2><p class="text-muted small">O cron deve ser executado a cada 5 minutos; apenas será criada uma cópia quando estiver vencida.</p>
+ <div class="col-lg-5"><div class="card shadow-sm h-100"><div class="card-body"><h2 class="h5">Programação automática</h2><p class="text-muted small">Ao guardar uma hora já vencida, a primeira cópia é criada imediatamente. Depois, o primeiro acesso ao sistema após a hora programada inicia a cópia. O cron a cada 5 minutos continua recomendado para garantir backups mesmo sem visitas.</p>
   <form method="post" class="row g-3"><?= csrf_input() ?><input type="hidden" name="action" value="settings">
    <div class="col-12"><label class="form-label" for="schedule">Periodicidade</label><select class="form-select" id="schedule" name="schedule"><?php foreach (['disabled'=>'Desativada','daily'=>'Diária','weekly'=>'Semanal (segunda-feira)','monthly'=>'Mensal (dia 1)'] as $value=>$label): ?><option value="<?= h($value) ?>" <?= $settings['schedule']===$value?'selected':'' ?>><?= h($label) ?></option><?php endforeach; ?></select></div>
    <div class="col-sm-6"><label class="form-label" for="time">Hora</label><input class="form-control" type="time" id="time" name="time" value="<?= h($settings['time']) ?>" required></div>

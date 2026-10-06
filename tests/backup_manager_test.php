@@ -1,6 +1,7 @@
 <?php
 declare(strict_types=1);
 require_once dirname(__DIR__) . '/app/Services/BackupManager.php';
+require_once dirname(__DIR__) . '/app/Services/BackupScheduler.php';
 
 function backup_assert(bool $condition, string $message)
 {
@@ -40,6 +41,12 @@ file_put_contents($restored, $zip->getFromName('database.sqlite'));
 $zip->close();
 $restoredPdo = new PDO('sqlite:' . $restored);
 backup_assert($restoredPdo->query('SELECT value FROM sample')->fetchColumn() === 'preservado', 'A cópia SQLite não preservou os dados.');
+
+$manager->saveSettings('daily', '00:00', 3);
+backup_assert(BackupScheduler::runDue($pdo, $root), 'O agendador web não criou o backup diário vencido.');
+$scheduledCount = (int) $pdo->query("SELECT COUNT(*) FROM backup_runs WHERE status='success' AND trigger_type='scheduled'")->fetchColumn();
+backup_assert($scheduledCount === 1, 'O agendador não registou exatamente uma execução automática.');
+backup_assert(!BackupScheduler::runDue($pdo, $root), 'O agendador repetiu um backup já executado no mesmo dia.');
 
 $iterator = new RecursiveIteratorIterator(new RecursiveDirectoryIterator($root, FilesystemIterator::SKIP_DOTS), RecursiveIteratorIterator::CHILD_FIRST);
 foreach ($iterator as $entry) $entry->isDir() ? rmdir($entry->getPathname()) : unlink($entry->getPathname());

@@ -1739,3 +1739,14 @@ if ($currentTimeStorageVersion === 'minutes') {
         }
     }
 }
+
+// Shared hosting nem sempre permite configurar cron. Nesses ambientes, o
+// primeiro pedido web após a hora programada executa a cópia em segurança.
+if (PHP_SAPI !== 'cli') {
+    try {
+        require_once __DIR__ . '/app/Services/BackupScheduler.php';
+        BackupScheduler::runDue($pdo, __DIR__);
+    } catch (Throwable $backupSchedulerException) {
+        error_log('[GesTisser] Falha no agendador web de backups: ' . $backupSchedulerException->getMessage());
+    }
+}

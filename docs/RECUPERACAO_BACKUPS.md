@@ -12,6 +12,8 @@ Configure a periodicidade, hora e retenção em **Administração → Backups**.
 
 O comando só cria uma cópia quando a programação estiver vencida. Uma execução com falha devolve código diferente de zero, adequado para monitorização. A retenção elimina apenas os arquivos mais antigos depois de uma nova cópia ter sido concluída.
 
+Sem acesso a `cron`, a aplicação também verifica a programação no primeiro pedido web após a hora escolhida. Se a hora já tiver passado quando guardar a programação, cria imediatamente a primeira cópia. Como não há processos PHP ativos quando ninguém visita o sistema, o `cron` continua a ser a opção recomendada para garantir a hora mesmo em períodos sem utilização.
+
 ## Recuperação normal ou após falha fatal
 
 Estes passos não dependem de a interface web funcionar.
