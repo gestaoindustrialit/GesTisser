@@ -88,6 +88,13 @@ if (ArticleDocument::absolutePath($root, 'storage/uploads/missing.pdf') !== '') 
 if (ArticleDocument::absolutePath($root, 'storage/uploads/../../../etc/passwd') !== '') {
     throw new RuntimeException('O resolvedor permitiu sair da pasta de uploads.');
 }
+
+$erpSource = (string) file_get_contents(__DIR__ . '/../erp.php');
+if (strpos($erpSource, "['article_document', 'article_document_thumbnail']") === false
+    || strpos($erpSource, "['Utilizador', 'Produção', 'Chefias', 'RH']") === false
+    || strpos($erpSource, 'if (!$canViewErp && !$canViewShopfloorArtwork)') === false) {
+    throw new RuntimeException('Os operadores autenticados do Shopfloor não conseguem abrir a maquete.');
+}
 unlink($root . '/storage/uploads/test.pdf');
 rmdir($root . '/storage/uploads');
 rmdir($root . '/storage');
