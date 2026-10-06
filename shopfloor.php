@@ -1090,7 +1090,7 @@ $formattedHourBank = sprintf('%s%02dh%02dm', $displayedHourBankMinutes < 0 ? '-'
 // article routing become usable without rewriting production history.
 (new RoutingService($pdo))->syncPendingOrderOperations();
 ProductionOrderStatusService::syncAll($pdo,$userId);
-$ofSql = 'SELECT o.id, o.order_number, o.product_id, fp.id AS finished_product_id, o.planned_quantity, o.status, o.lot, c.name AS customer_name, TRIM(COALESCE(c.postal_code,"") || " " || COALESCE(c.city,"")) AS customer_locality, COALESCE(fp.code,p.code) AS product_code, COALESCE(fp.description,p.description) AS product_description FROM erp_production_orders o JOIN erp_products p ON p.id = o.product_id LEFT JOIN erp_finished_products fp ON fp.id=o.finished_product_id OR (o.finished_product_id IS NULL AND fp.code=p.code) LEFT JOIN erp_customers c ON c.id=o.customer_id WHERE o.status IN ("Por iniciar", "Em Produção", "Em Pausa", "Planeada", "Em curso")';
+$ofSql = 'SELECT o.id, o.order_number, o.product_id, fp.id AS finished_product_id, o.planned_quantity, o.status, COALESCE(NULLIF(json_extract(pos.snapshot_json,"$._order.lot"),""),NULLIF(json_extract(ts.snapshot_json,"$._order.lot"),""),o.order_number) AS lot, c.name AS customer_name, TRIM(COALESCE(c.postal_code,"") || " " || COALESCE(c.city,"")) AS customer_locality, COALESCE(fp.code,p.code) AS product_code, COALESCE(fp.description,p.description) AS product_description FROM erp_production_orders o JOIN erp_products p ON p.id = o.product_id LEFT JOIN erp_finished_products fp ON fp.id=o.finished_product_id OR (o.finished_product_id IS NULL AND fp.code=p.code) LEFT JOIN erp_customers c ON c.id=o.customer_id LEFT JOIN erp_production_order_snapshots pos ON pos.production_order_id=o.id LEFT JOIN erp_technical_sheets ts ON ts.production_order_id=o.id WHERE o.status IN ("Por iniciar", "Em Produção", "Em Pausa", "Planeada", "Em curso")';
 $ofParams = [];
 if ($selectedWorkCenterId > 0) {
     $ofSql .= ' AND EXISTS (SELECT 1 FROM erp_production_order_operations center_op WHERE center_op.production_order_id = o.id AND (center_op.work_center_id = ? OR EXISTS (SELECT 1 FROM json_each(CASE WHEN json_valid(center_op.allowed_work_center_ids_json) THEN center_op.allowed_work_center_ids_json ELSE "[]" END) allowed_center WHERE CAST(allowed_center.value AS INTEGER) = ?) OR (? > 0 AND center_op.machine_required = 1 AND EXISTS (SELECT 1 FROM json_each(CASE WHEN json_valid(center_op.allowed_machine_ids_json) THEN center_op.allowed_machine_ids_json ELSE "[]" END) allowed_machine WHERE CAST(allowed_machine.value AS INTEGER) = ?))))';
@@ -1944,7 +1944,7 @@ require __DIR__ . '/partials/header.php';
     <div class="modal-dialog modal-fullscreen-lg-down modal-xl modal-dialog-centered">
         <div class="modal-content">
             <div class="modal-header"><div><h2 class="modal-title fs-5" id="articleArtworkModalLabel">Maquete do artigo</h2><p class="small text-secondary mb-0"><?= h((string) ($selectedOf['product_code'] ?? '')) ?> · <?= h((string) ($articleArtwork['title'] ?? 'Maquete de produção')) ?></p></div><button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Fechar"></button></div>
-            <div class="modal-body text-center bg-light p-0"><?php if ($articleArtworkPresentation['kind'] === 'pdf'): ?><iframe src="<?= h(ArticleDocument::url((int) $articleArtwork['id'])) ?>#view=FitH" class="shopfloor-artwork-pdf" title="PDF da maquete do artigo <?= h((string) ($selectedOf['product_code'] ?? '')) ?>"></iframe><div class="shopfloor-artwork-pdf-tablet"><img src="<?= h(ArticleDocument::thumbnailUrl((int) $articleArtwork['id'])) ?>" class="shopfloor-artwork-preview" alt="Primeira página do PDF da maquete do artigo <?= h((string) ($selectedOf['product_code'] ?? '')) ?>"><p>Pré-visualização da primeira página. Use <strong>Abrir original</strong> para consultar o PDF completo.</p></div><?php else: ?><img src="<?= h(ArticleDocument::url((int) $articleArtwork['id'])) ?>" class="shopfloor-artwork-preview" alt="Maquete do artigo <?= h((string) ($selectedOf['product_code'] ?? '')) ?>"><?php endif; ?></div>
+            <div class="modal-body text-center bg-light p-0"><?php if ($articleArtworkPresentation['kind'] === 'pdf'): ?><?php $artworkPreviewUrl=ArticleDocument::thumbnailUrl((int)$articleArtwork['id']); ?><div class="shopfloor-artwork-pdf-preview" data-artwork-viewer><div class="shopfloor-artwork-zoom" role="toolbar" aria-label="Controlos de ampliação da maquete"><button type="button" class="btn btn-light" data-artwork-zoom-out aria-label="Reduzir"><i class="bi bi-zoom-out"></i></button><output data-artwork-zoom-value aria-live="polite">100%</output><button type="button" class="btn btn-light" data-artwork-zoom-in aria-label="Ampliar"><i class="bi bi-zoom-in"></i></button><button type="button" class="btn btn-light" data-artwork-zoom-reset>Repor</button></div><div class="shopfloor-artwork-stage" data-artwork-stage><img src="<?=h($artworkPreviewUrl)?>" data-artwork-tablet-src="<?=h($artworkPreviewUrl.'&preview=tablet')?>" data-artwork-hd-src="<?=h($artworkPreviewUrl.'&preview=high')?>" class="shopfloor-artwork-preview" data-artwork-image alt="Primeira página do PDF da maquete do artigo <?= h((string) ($selectedOf['product_code'] ?? '')) ?>"></div><p>Pré-visualização em alta definição. Use os controlos para ampliar sem sair do Shopfloor.</p></div><?php else: ?><img src="<?= h(ArticleDocument::url((int) $articleArtwork['id'])) ?>" class="shopfloor-artwork-preview" alt="Maquete do artigo <?= h((string) ($selectedOf['product_code'] ?? '')) ?>"><?php endif; ?></div>
             <div class="modal-footer"><button type="button" class="btn btn-outline-secondary btn-lg" data-bs-dismiss="modal">Fechar</button><a href="<?= h(ArticleDocument::url((int) $articleArtwork['id'])) ?>" target="_blank" rel="noopener" class="btn btn-primary btn-lg"><i class="bi bi-arrows-fullscreen me-1"></i>Abrir original</a></div>
         </div>
     </div>
@@ -2408,6 +2408,29 @@ document.querySelectorAll('#productionLabelModal [data-label-type]').forEach((bu
     if(!modal)return;
     modal.addEventListener('show.bs.modal',(event)=>{const button=event.relatedTarget;document.getElementById('productLabelOperationId').value=button?.dataset.productLabelOperation||'';document.getElementById('productLabelQuantity').value=button?.dataset.productLabelQuantity||'';});
     modal.querySelectorAll('[data-copy-step]').forEach((button)=>button.addEventListener('click',()=>{const input=document.getElementById('productLabelCopies');input.value=Math.max(1,Math.min(99,Number(input.value||1)+Number(button.dataset.copyStep)));}));
+})();
+(() => {
+    const viewer=document.querySelector('[data-artwork-viewer]');
+    if(!viewer)return;
+    const image=viewer.querySelector('[data-artwork-image]');
+    const stage=viewer.querySelector('[data-artwork-stage]');
+    const value=viewer.querySelector('[data-artwork-zoom-value]');
+    const tabletDevice=window.matchMedia('(max-width: 1199.98px), (hover: none) and (pointer: coarse)').matches;
+    const preferredSource=image.getAttribute(tabletDevice?'data-artwork-tablet-src':'data-artwork-hd-src');
+    if(preferredSource){
+        const enhancedImage=new Image();
+        enhancedImage.onload=()=>{image.src=preferredSource;};
+        enhancedImage.src=preferredSource;
+    }
+    let zoom=1;
+    const render=()=>{image.style.width=(zoom*100)+'%';image.style.maxWidth=zoom===1?'100%':'none';value.value=Math.round(zoom*100)+'%';};
+    const setZoom=(next)=>{zoom=Math.max(1,Math.min(4,Math.round(next*4)/4));render();};
+    viewer.querySelector('[data-artwork-zoom-in]').addEventListener('click',()=>setZoom(zoom+.25));
+    viewer.querySelector('[data-artwork-zoom-out]').addEventListener('click',()=>setZoom(zoom-.25));
+    viewer.querySelector('[data-artwork-zoom-reset]').addEventListener('click',()=>{setZoom(1);stage.scrollTo({top:0,left:0});});
+    image.addEventListener('dblclick',()=>setZoom(zoom===1?2:1));
+    document.getElementById('articleArtworkModal')?.addEventListener('hidden.bs.modal',()=>{setZoom(1);stage.scrollTo({top:0,left:0});});
+    render();
 })();
 </script>
 
