@@ -5,7 +5,7 @@ require_admin();
 
 $manager = new BackupManager($pdo, __DIR__);
 $manager->ensureSchema();
-$success = $error = '';
+$success = $warning = $error = '';
 
 if (isset($_GET['download'])) {
     $path = $manager->pathFor((string) $_GET['download']);
@@ -25,8 +25,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && validate_csrf_or_abort(false)) {
             $manager->saveSettings((string) ($_POST['schedule'] ?? ''), (string) ($_POST['time'] ?? ''), (int) ($_POST['retention'] ?? 14));
             $success = 'Programação guardada.';
             if ($manager->isDue()) {
-                $manager->create('scheduled', (int) $_SESSION['user_id']);
-                $success = 'Programação guardada e primeiro backup automático criado.';
+                try {
+                    $manager->create('scheduled', (int) $_SESSION['user_id']);
+                    $success = 'Programação guardada e primeiro backup automático criado.';
+                } catch (Throwable $backupException) {
+                    $warning = 'A programação foi guardada, mas a base de dados estava ocupada. O sistema voltará a tentar automaticamente: ' . $backupException->getMessage();
+                }
             }
         } elseif ($action === 'create') {
             $result = $manager->create('manual', (int) $_SESSION['user_id']);
@@ -45,6 +49,7 @@ require __DIR__ . '/partials/header.php';
   <form method="post"><?= csrf_input() ?><input type="hidden" name="action" value="create"><button class="btn btn-primary"><i class="bi bi-cloud-arrow-up me-1"></i>Criar backup agora</button></form>
 </div>
 <?php if ($success): ?><div class="alert alert-success"><?= h($success) ?></div><?php endif; ?>
+<?php if ($warning): ?><div class="alert alert-warning"><strong>Atenção:</strong> <?= h($warning) ?></div><?php endif; ?>
 <?php if ($error): ?><div class="alert alert-danger"><strong>Não foi possível criar o backup:</strong> <?= h($error) ?></div><?php endif; ?>
 <div class="row g-4 mb-4">
  <div class="col-lg-5"><div class="card shadow-sm h-100"><div class="card-body"><h2 class="h5">Programação automática</h2><p class="text-muted small">Ao guardar uma hora já vencida, a primeira cópia é criada imediatamente. Depois, o primeiro acesso ao sistema após a hora programada inicia a cópia. O cron a cada 5 minutos continua recomendado para garantir backups mesmo sem visitas.</p>
