@@ -1,11 +1,9 @@
 <?php
-declare(strict_types=1);
-
 require_once __DIR__ . '/BackupManager.php';
 
 final class BackupScheduler
 {
-    public static function runDue(PDO $pdo, string $root)
+    public static function runDue(PDO $pdo, $root)
     {
         $schedule = $pdo->query("SELECT setting_value FROM app_settings WHERE setting_key='backup_schedule' LIMIT 1")->fetchColumn();
         if (!in_array($schedule, ['daily', 'weekly', 'monthly'], true)) {

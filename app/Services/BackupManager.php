@@ -1,13 +1,11 @@
 <?php
-declare(strict_types=1);
-
 final class BackupManager
 {
     private $pdo;
     private $root;
     private $backupDirectory;
 
-    public function __construct(PDO $pdo, string $root, $backupDirectory = null)
+    public function __construct(PDO $pdo, $root, $backupDirectory = null)
     {
         $this->pdo = $pdo;
         $this->root = rtrim($root, '/\\');
@@ -34,7 +32,7 @@ final class BackupManager
         }
     }
 
-    public function settings(): array
+    public function settings()
     {
         $this->ensureSchema();
         $rows = $this->pdo->query("SELECT setting_key, setting_value FROM app_settings WHERE setting_key IN ('backup_schedule','backup_time','backup_retention')")->fetchAll(PDO::FETCH_KEY_PAIR);
@@ -45,7 +43,7 @@ final class BackupManager
         ];
     }
 
-    public function saveSettings(string $schedule, string $time, int $retention)
+    public function saveSettings($schedule, $time, $retention)
     {
         if (!in_array($schedule, ['disabled', 'daily', 'weekly', 'monthly'], true)) {
             throw new InvalidArgumentException('Periodicidade inválida.');
@@ -55,12 +53,16 @@ final class BackupManager
         }
         $retention = max(1, min(365, $retention));
         foreach (['backup_schedule' => $schedule, 'backup_time' => $time, 'backup_retention' => (string) $retention] as $key => $value) {
-            $stmt = $this->pdo->prepare('INSERT INTO app_settings(setting_key, setting_value, updated_at) VALUES (?, ?, CURRENT_TIMESTAMP) ON CONFLICT(setting_key) DO UPDATE SET setting_value=excluded.setting_value, updated_at=CURRENT_TIMESTAMP');
-            $stmt->execute([$key, $value]);
+            $stmt = $this->pdo->prepare('UPDATE app_settings SET setting_value=?, updated_at=CURRENT_TIMESTAMP WHERE setting_key=?');
+            $stmt->execute([$value, $key]);
+            if ($stmt->rowCount() === 0) {
+                $insert = $this->pdo->prepare('INSERT OR IGNORE INTO app_settings(setting_key, setting_value, updated_at) VALUES (?, ?, CURRENT_TIMESTAMP)');
+                $insert->execute([$key, $value]);
+            }
         }
     }
 
-    public function isDue($now = null): bool
+    public function isDue($now = null)
     {
         $settings = $this->settings();
         if ($settings['schedule'] === 'disabled') return false;
@@ -76,7 +78,7 @@ final class BackupManager
         return $lastDate->format('Y-m') !== $now->format('Y-m');
     }
 
-    public function create(string $trigger = 'manual', $userId = null): array
+    public function create($trigger = 'manual', $userId = null)
     {
         $this->ensureStorage();
         $this->ensureSchema();
@@ -87,8 +89,7 @@ final class BackupManager
         $snapshot = $this->backupDirectory . '/' . $base . '.sqlite.tmp';
         $archive = $this->backupDirectory . '/' . $base . '.zip';
         try {
-            $quoted = $this->pdo->quote($snapshot);
-            $this->pdo->exec('VACUUM INTO ' . $quoted);
+            $this->createDatabaseSnapshot($snapshot);
             $check = new PDO('sqlite:' . $snapshot);
             if ((string) $check->query('PRAGMA integrity_check')->fetchColumn() !== 'ok') {
                 throw new RuntimeException('A verificação de integridade da cópia falhou.');
@@ -123,13 +124,13 @@ final class BackupManager
         }
     }
 
-    public function listRuns(int $limit = 100): array
+    public function listRuns($limit = 100)
     {
         $this->ensureSchema();
         return $this->pdo->query('SELECT * FROM backup_runs ORDER BY id DESC LIMIT ' . max(1, min(500, $limit)))->fetchAll(PDO::FETCH_ASSOC);
     }
 
-    public function pathFor(string $filename)
+    public function pathFor($filename)
     {
         if (!preg_match('/^gestisser_\d{8}_\d{6}_[a-f0-9]{8}\.zip$/', $filename)) return null;
         $path = $this->backupDirectory . '/' . $filename;
@@ -145,7 +146,7 @@ final class BackupManager
         @file_put_contents($this->backupDirectory . '/index.html', '');
     }
 
-    private function addDirectory(ZipArchive $zip, string $directory, string $prefix, array &$included)
+    private function addDirectory(ZipArchive $zip, $directory, $prefix, array &$included)
     {
         $iterator = new RecursiveIteratorIterator(new RecursiveDirectoryIterator($directory, FilesystemIterator::SKIP_DOTS));
         foreach ($iterator as $file) {
@@ -157,7 +158,46 @@ final class BackupManager
         }
     }
 
-    private function prune(int $keep)
+    private function createDatabaseSnapshot($snapshot)
+    {
+        $databasePath = null;
+        foreach ($this->pdo->query('PRAGMA database_list')->fetchAll(PDO::FETCH_ASSOC) as $database) {
+            if ($database['name'] === 'main') {
+                $databasePath = $database['file'];
+                break;
+            }
+        }
+        if (!$databasePath || !is_file($databasePath)) {
+            throw new RuntimeException('Não foi possível localizar a base de dados SQLite.');
+        }
+
+        if (class_exists('SQLite3') && method_exists('SQLite3', 'backup')) {
+            $source = new SQLite3($databasePath, SQLITE3_OPEN_READONLY);
+            $destination = new SQLite3($snapshot, SQLITE3_OPEN_READWRITE | SQLITE3_OPEN_CREATE);
+            if (!$source->backup($destination)) {
+                $destination->close();
+                $source->close();
+                throw new RuntimeException('Não foi possível copiar a base de dados SQLite.');
+            }
+            $destination->close();
+            $source->close();
+            return;
+        }
+
+        // Fallback para instalações PHP 7.0 sem a extensão SQLite3: bloqueia
+        // escritas enquanto copia o ficheiro já consolidado pelo checkpoint.
+        $this->pdo->exec('PRAGMA wal_checkpoint(FULL)');
+        $this->pdo->exec('BEGIN IMMEDIATE');
+        try {
+            if (!copy($databasePath, $snapshot)) {
+                throw new RuntimeException('Não foi possível copiar a base de dados SQLite.');
+            }
+        } finally {
+            $this->pdo->exec('ROLLBACK');
+        }
+    }
+
+    private function prune($keep)
     {
         $files = glob($this->backupDirectory . '/gestisser_*.zip') ?: [];
         usort($files, static function ($a, $b) { return filemtime($b) <=> filemtime($a); });

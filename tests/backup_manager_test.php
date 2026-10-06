@@ -1,9 +1,8 @@
 <?php
-declare(strict_types=1);
 require_once dirname(__DIR__) . '/app/Services/BackupManager.php';
 require_once dirname(__DIR__) . '/app/Services/BackupScheduler.php';
 
-function backup_assert(bool $condition, string $message)
+function backup_assert($condition, $message)
 {
     if (!$condition) throw new RuntimeException($message);
 }
@@ -18,9 +17,13 @@ $pdo->exec('CREATE TABLE app_settings (setting_key TEXT PRIMARY KEY, setting_val
 $pdo->exec('CREATE TABLE sample (value TEXT); INSERT INTO sample VALUES ("preservado")');
 
 $managerSource = file_get_contents(dirname(__DIR__) . '/app/Services/BackupManager.php');
-backup_assert(strpos($managerSource, ': void') === false, 'O serviço não pode usar retornos void, incompatíveis com PHP 7.0.');
-backup_assert(!preg_match('/[,(]\s*\?[A-Za-z_]/', $managerSource), 'O serviço não pode usar parâmetros nullable, incompatíveis com PHP 7.0.');
-backup_assert(!preg_match('/\)\s*:\s*\?[A-Za-z_]/', $managerSource), 'O serviço não pode usar retornos nullable, incompatíveis com PHP 7.0.');
+$schedulerSource = file_get_contents(dirname(__DIR__) . '/app/Services/BackupScheduler.php');
+$backupSources = $managerSource . "\n" . $schedulerSource;
+backup_assert(strpos($backupSources, ': void') === false, 'Os serviços não podem usar retornos void, incompatíveis com PHP 7.0.');
+backup_assert(!preg_match('/[,(]\s*\?[A-Za-z_]/', $backupSources), 'Os serviços não podem usar parâmetros nullable, incompatíveis com PHP 7.0.');
+backup_assert(!preg_match('/\)\s*:\s*\?[A-Za-z_]/', $backupSources), 'Os serviços não podem usar retornos nullable, incompatíveis com PHP 7.0.');
+backup_assert(!preg_match('/function\s+\w+\s*\([^)]*\b(?:string|int|float|bool)\s+\$/', $backupSources), 'Os serviços de backup devem evitar assinaturas que já causaram incompatibilidades no alojamento PHP 7.0.');
+backup_assert(!preg_match('/\)\s*:\s*[A-Za-z_]/', $backupSources), 'Os serviços de backup devem evitar tipos de retorno para máxima compatibilidade com PHP 7.0.');
 
 $manager = new BackupManager($pdo, $root);
 $manager->ensureSchema();

@@ -22,7 +22,7 @@ Aplicação de gestão de trabalho inspirada no ClickUp, desenvolvida em **PHP +
 
 ## Requisitos
 
-- PHP 8.1+
+- PHP 7.0+ (todo o código da aplicação deve manter compatibilidade com esta versão)
 - Extensão `pdo_sqlite` ativa
 - Extensão `zip` ativa (necessária para criar e descarregar backups completos)
 
