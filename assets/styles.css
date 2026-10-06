@@ -957,8 +957,16 @@ body {
 .shopfloor-operation-card.is-monitor-only { background: #f8fafb; }
 .shopfloor-of-search { min-height: 3rem; font-size: 1rem; }
 .shopfloor-artwork-preview { display: block; width: auto; max-width: 100%; max-height: calc(100vh - 13rem); margin: auto; object-fit: contain; border-radius: .5rem; box-shadow: 0 .25rem 1rem rgba(0,0,0,.12); }
-.shopfloor-artwork-pdf { display: block; width: 100%; height: calc(100vh - 12rem); min-height: 34rem; border: 0; background: #525659; }
-.shopfloor-artwork-pdf-tablet { display: none; }
+.shopfloor-artwork-pdf-preview { display: grid; height: calc(100vh - 12rem); height: calc(100dvh - 12rem); grid-template-rows: auto minmax(0,1fr) auto; gap: .75rem; padding: 1rem; }
+.shopfloor-artwork-pdf-preview p { margin: 0; color: #66747d; font-size: .85rem; }
+.shopfloor-artwork-zoom { display: flex; align-items: center; justify-content: center; gap: .5rem; }
+.shopfloor-artwork-zoom .btn { min-width: 3rem; min-height: 3rem; border: 1px solid #d6dde1; font-weight: 700; touch-action: manipulation; }
+.shopfloor-artwork-zoom output { min-width: 4rem; font-weight: 700; }
+.shopfloor-artwork-stage { min-height: 0; overflow: auto; overscroll-behavior: contain; border-radius: .5rem; background: #dfe3e5; }
+.shopfloor-artwork-stage .shopfloor-artwork-preview { max-height: none; border-radius: 0; box-shadow: none; }
+.shopfloor-artwork-debug { max-height: 12rem; overflow: auto; padding: .75rem; border: 1px solid #d39e00; border-radius: .5rem; background: #fff8dc; color: #332701; }
+.shopfloor-artwork-debug > div { display: flex; align-items: center; justify-content: space-between; gap: .5rem; }
+.shopfloor-artwork-debug pre { margin: .5rem 0 0; white-space: pre-wrap; overflow-wrap: anywhere; color: inherit; font-size: .72rem; }
 .shopfloor-toast-container { right: auto; bottom: calc(20px + env(safe-area-inset-bottom, 0px)); left: 50%; z-index: 1090; width: min(44rem, calc(100vw - 2rem)); padding: 0; transform: translateX(-50%); }
 .shopfloor-toast-container .toast { width: 100%; max-width: none; opacity: 0; transform: translateY(2rem) scale(.96); box-shadow: 0 .8rem 2rem rgba(15, 23, 42, .24); transition: opacity .42s ease, transform .52s cubic-bezier(.22, 1, .36, 1), box-shadow .52s ease; will-change: opacity, transform; }
 .shopfloor-toast-container .toast.show { opacity: 1; transform: translateY(0) scale(1); box-shadow: 0 .45rem 1.4rem rgba(15, 23, 42, .18); }
@@ -973,10 +981,8 @@ body {
 .shopfloor-calculator-keys .is-zero { grid-column: span 2; }
 @media (max-width: 767.98px) { .shopfloor-calculator-dialog { max-width: none; margin: .5rem; } .shopfloor-calculator-keys .btn { min-height: 4.25rem; } }
 @media (max-width: 1199.98px), (hover: none) and (pointer: coarse) {
-    .shopfloor-artwork-modal .shopfloor-artwork-pdf { display: none; }
-    .shopfloor-artwork-pdf-tablet { display: grid; min-height: calc(100vh - 10rem); min-height: calc(100dvh - 10rem); align-content: center; gap: .75rem; padding: 1rem; }
-    .shopfloor-artwork-pdf-tablet .shopfloor-artwork-preview { max-height: calc(100vh - 15rem); max-height: calc(100dvh - 15rem); }
-    .shopfloor-artwork-pdf-tablet p { margin: 0; color: #66747d; font-size: .85rem; }
+    .shopfloor-artwork-pdf-preview { height: calc(100vh - 10rem); height: calc(100dvh - 10rem); }
+    .shopfloor-artwork-zoom .btn { min-width: 3.5rem; min-height: 3.5rem; }
 }
 .shopfloor-operation-card-header { display: flex; justify-content: space-between; align-items: flex-start; gap: .65rem; }
 .shopfloor-operation-card h4 { margin: .1rem 0 .25rem; font-size: .98rem; overflow-wrap: anywhere; }
