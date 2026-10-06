@@ -132,7 +132,10 @@ final class BackupManager
             $this->prune($this->settings()['retention']);
             return ['filename' => basename($archive), 'size_bytes' => $size, 'checksum' => $checksum];
         } catch (Throwable $exception) {
-            @unlink($snapshot); @unlink($archive);
+            @unlink($snapshot);
+            @unlink($snapshot . '-wal');
+            @unlink($snapshot . '-shm');
+            @unlink($archive);
             $failed = $this->pdo->prepare("UPDATE backup_runs SET status='failed', message=?, finished_at=CURRENT_TIMESTAMP WHERE id=?");
             $failed->execute([$exception->getMessage(), $runId]);
             $failed->closeCursor();
@@ -190,37 +193,34 @@ final class BackupManager
             throw new RuntimeException('Não foi possível localizar a base de dados SQLite.');
         }
 
-        if (class_exists('SQLite3') && method_exists('SQLite3', 'backup')) {
-            $source = new SQLite3($databasePath, SQLITE3_OPEN_READONLY);
-            $destination = new SQLite3($snapshot, SQLITE3_OPEN_READWRITE | SQLITE3_OPEN_CREATE);
-            $source->busyTimeout(30000);
-            $destination->busyTimeout(30000);
-            if (!$source->backup($destination)) {
-                $destination->close();
-                $source->close();
-                throw new RuntimeException('Não foi possível copiar a base de dados SQLite.');
-            }
-            $destination->close();
-            $source->close();
-            return;
-        }
-
-        // Fallback para instalações PHP 7.0 sem a extensão SQLite3: bloqueia
-        // escritas enquanto copia o ficheiro já consolidado pelo checkpoint.
-        $checkpoint = $this->pdo->query('PRAGMA wal_checkpoint(FULL)');
-        $checkpointResult = $checkpoint->fetch(PDO::FETCH_NUM);
-        $checkpoint->closeCursor();
-        if ($checkpointResult && (int) $checkpointResult[0] !== 0) {
-            throw new RuntimeException('A base de dados está ocupada; tente novamente dentro de alguns segundos.');
-        }
-        $this->pdo->exec('BEGIN IMMEDIATE');
+        // Usa uma ligação dedicada para não herdar cursores do pedido web.
+        // BEGIN IMMEDIATE impede novas escritas durante a curta cópia. Em modo
+        // WAL copiamos também o WAL e consolidamo-lo apenas na cópia, evitando
+        // executar wal_checkpoint na base em produção (que causava SQLITE_LOCKED).
+        $source = new PDO('sqlite:' . $databasePath);
+        $source->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
+        $source->setAttribute(PDO::ATTR_TIMEOUT, 30);
+        $source->exec('PRAGMA busy_timeout = 30000');
+        $source->exec('BEGIN IMMEDIATE');
         try {
             if (!copy($databasePath, $snapshot)) {
                 throw new RuntimeException('Não foi possível copiar a base de dados SQLite.');
             }
+            if (is_file($databasePath . '-wal') && !copy($databasePath . '-wal', $snapshot . '-wal')) {
+                throw new RuntimeException('Não foi possível copiar o WAL da base de dados SQLite.');
+            }
         } finally {
-            $this->pdo->exec('ROLLBACK');
+            $source->exec('ROLLBACK');
+            $source = null;
         }
+
+        $snapshotPdo = new PDO('sqlite:' . $snapshot);
+        $snapshotPdo->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
+        $snapshotPdo->exec('PRAGMA busy_timeout = 30000');
+        $snapshotPdo->exec('PRAGMA wal_checkpoint(TRUNCATE)');
+        $snapshotPdo = null;
+        @unlink($snapshot . '-wal');
+        @unlink($snapshot . '-shm');
     }
 
     private function createDatabaseSnapshotWithRetry($snapshot)
@@ -228,6 +228,8 @@ final class BackupManager
         $lastException = null;
         for ($attempt = 1; $attempt <= 3; $attempt++) {
             @unlink($snapshot);
+            @unlink($snapshot . '-wal');
+            @unlink($snapshot . '-shm');
             try {
                 $this->createDatabaseSnapshot($snapshot);
                 return;

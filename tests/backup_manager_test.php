@@ -12,6 +12,8 @@ file_put_contents($root . '/uploads/prova.txt', 'anexo');
 $database = $root . '/database.sqlite';
 $pdo = new PDO('sqlite:' . $database);
 $pdo->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
+$pdo->exec('PRAGMA journal_mode=WAL');
+$pdo->exec('PRAGMA wal_autocheckpoint=0');
 $pdo->exec('CREATE TABLE app_settings (setting_key TEXT PRIMARY KEY, setting_value TEXT, updated_at DATETIME DEFAULT CURRENT_TIMESTAMP)');
 $pdo->exec('CREATE TABLE sample (value TEXT); INSERT INTO sample VALUES ("preservado")');
 
