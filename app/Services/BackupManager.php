@@ -7,14 +7,14 @@ final class BackupManager
     private $root;
     private $backupDirectory;
 
-    public function __construct(PDO $pdo, string $root, ?string $backupDirectory = null)
+    public function __construct(PDO $pdo, string $root, $backupDirectory = null)
     {
         $this->pdo = $pdo;
         $this->root = rtrim($root, '/\\');
         $this->backupDirectory = $backupDirectory ?: $this->root . '/storage/backups';
     }
 
-    public function ensureSchema(): void
+    public function ensureSchema()
     {
         $this->pdo->exec('CREATE TABLE IF NOT EXISTS backup_runs (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -45,7 +45,7 @@ final class BackupManager
         ];
     }
 
-    public function saveSettings(string $schedule, string $time, int $retention): void
+    public function saveSettings(string $schedule, string $time, int $retention)
     {
         if (!in_array($schedule, ['disabled', 'daily', 'weekly', 'monthly'], true)) {
             throw new InvalidArgumentException('Periodicidade inválida.');
@@ -60,7 +60,7 @@ final class BackupManager
         }
     }
 
-    public function isDue(?DateTimeImmutable $now = null): bool
+    public function isDue($now = null): bool
     {
         $settings = $this->settings();
         if ($settings['schedule'] === 'disabled') return false;
@@ -76,7 +76,7 @@ final class BackupManager
         return $lastDate->format('Y-m') !== $now->format('Y-m');
     }
 
-    public function create(string $trigger = 'manual', ?int $userId = null): array
+    public function create(string $trigger = 'manual', $userId = null): array
     {
         $this->ensureStorage();
         $this->ensureSchema();
@@ -129,14 +129,14 @@ final class BackupManager
         return $this->pdo->query('SELECT * FROM backup_runs ORDER BY id DESC LIMIT ' . max(1, min(500, $limit)))->fetchAll(PDO::FETCH_ASSOC);
     }
 
-    public function pathFor(string $filename): ?string
+    public function pathFor(string $filename)
     {
         if (!preg_match('/^gestisser_\d{8}_\d{6}_[a-f0-9]{8}\.zip$/', $filename)) return null;
         $path = $this->backupDirectory . '/' . $filename;
         return is_file($path) ? $path : null;
     }
 
-    private function ensureStorage(): void
+    private function ensureStorage()
     {
         if (!is_dir($this->backupDirectory) && !mkdir($this->backupDirectory, 0750, true) && !is_dir($this->backupDirectory)) {
             throw new RuntimeException('Não foi possível criar a pasta segura de backups.');
@@ -145,7 +145,7 @@ final class BackupManager
         @file_put_contents($this->backupDirectory . '/index.html', '');
     }
 
-    private function addDirectory(ZipArchive $zip, string $directory, string $prefix, array &$included): void
+    private function addDirectory(ZipArchive $zip, string $directory, string $prefix, array &$included)
     {
         $iterator = new RecursiveIteratorIterator(new RecursiveDirectoryIterator($directory, FilesystemIterator::SKIP_DOTS));
         foreach ($iterator as $file) {
@@ -157,7 +157,7 @@ final class BackupManager
         }
     }
 
-    private function prune(int $keep): void
+    private function prune(int $keep)
     {
         $files = glob($this->backupDirectory . '/gestisser_*.zip') ?: [];
         usort($files, static function ($a, $b) { return filemtime($b) <=> filemtime($a); });

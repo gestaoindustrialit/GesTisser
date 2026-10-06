@@ -2,7 +2,7 @@
 declare(strict_types=1);
 require_once dirname(__DIR__) . '/app/Services/BackupManager.php';
 
-function backup_assert(bool $condition, string $message): void
+function backup_assert(bool $condition, string $message)
 {
     if (!$condition) throw new RuntimeException($message);
 }
@@ -15,6 +15,11 @@ $pdo = new PDO('sqlite:' . $database);
 $pdo->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
 $pdo->exec('CREATE TABLE app_settings (setting_key TEXT PRIMARY KEY, setting_value TEXT, updated_at DATETIME DEFAULT CURRENT_TIMESTAMP)');
 $pdo->exec('CREATE TABLE sample (value TEXT); INSERT INTO sample VALUES ("preservado")');
+
+$managerSource = file_get_contents(dirname(__DIR__) . '/app/Services/BackupManager.php');
+backup_assert(strpos($managerSource, ': void') === false, 'O serviço não pode usar retornos void, incompatíveis com PHP 7.0.');
+backup_assert(!preg_match('/[,(]\s*\?[A-Za-z_]/', $managerSource), 'O serviço não pode usar parâmetros nullable, incompatíveis com PHP 7.0.');
+backup_assert(!preg_match('/\)\s*:\s*\?[A-Za-z_]/', $managerSource), 'O serviço não pode usar retornos nullable, incompatíveis com PHP 7.0.');
 
 $manager = new BackupManager($pdo, $root);
 $manager->ensureSchema();
