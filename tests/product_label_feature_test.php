@@ -26,5 +26,7 @@ $operationUi=file_get_contents(__DIR__.'/../erp_operations.php');$shopfloor=file
 product_feature_assert(strpos($operationUi,'product_label_enabled')!==false,'configuração no admin em falta');
 product_feature_assert(strpos($shopfloor,"!empty(\$op['product_label_enabled'])")!==false,'visibilidade do botão não depende da flag');
 product_feature_assert(strpos($endpoint,'ProductLabelService')!==false&&strpos($endpoint,'production_order_id')!==false&&strpos($endpoint,'operation_id')!==false,'endpoint seguro em falta');
-product_feature_assert(strpos($endpoint,'@page{size:A5 landscape')!==false&&strpos($endpoint,'@media print')!==false,'CSS de impressão em falta');
+product_feature_assert(strpos($endpoint,'@page{size:A4 portrait')!==false&&strpos($endpoint,'@media print')!==false,'impressão A4 vertical em falta');
+product_feature_assert(strpos($endpoint,'top:80mm')!==false&&strpos($endpoint,'border-top:.5mm dashed')!==false,'guia tracejada a 8 cm em falta');
+product_feature_assert(strpos($endpoint,'height:297mm')!==false&&strpos($endpoint,'class="label-sheet"')!==false,'uma folha A4 por etiqueta em falta');
 echo "product_label_feature_test: OK\n";
