@@ -194,33 +194,45 @@ final class BackupManager
         }
 
         // Usa uma ligação dedicada para não herdar cursores do pedido web.
-        // BEGIN IMMEDIATE impede novas escritas durante a curta cópia. Em modo
-        // WAL copiamos também o WAL e consolidamo-lo apenas na cópia, evitando
-        // executar wal_checkpoint na base em produção (que causava SQLITE_LOCKED).
+        // VACUUM INTO cria um snapshot consistente através de uma transação de
+        // leitura. Ao contrário do antigo BEGIN IMMEDIATE + copy, não reserva o
+        // writer lock durante a cópia e, em WAL, a navegação pode continuar a
+        // executar as pequenas escritas de sessão/auditoria em paralelo.
         $source = new PDO('sqlite:' . $databasePath);
         $source->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
         $source->setAttribute(PDO::ATTR_TIMEOUT, 30);
         $source->exec('PRAGMA busy_timeout = 30000');
-        $source->exec('BEGIN IMMEDIATE');
-        try {
-            if (!copy($databasePath, $snapshot)) {
-                throw new RuntimeException('Não foi possível copiar a base de dados SQLite.');
+        $sqliteVersion = (string) $source->query('SELECT sqlite_version()')->fetchColumn();
+        if (version_compare($sqliteVersion, '3.27.0', '<')) {
+            // VACUUM INTO foi introduzido no SQLite 3.27. Preserve a criação de
+            // backups em alojamentos muito antigos, ainda que aí não seja
+            // possível garantir a mesma concorrência sem a API de backup.
+            $source->exec('BEGIN IMMEDIATE');
+            try {
+                if (!copy($databasePath, $snapshot)) {
+                    throw new RuntimeException('Não foi possível copiar a base de dados SQLite.');
+                }
+                if (is_file($databasePath . '-wal') && !copy($databasePath . '-wal', $snapshot . '-wal')) {
+                    throw new RuntimeException('Não foi possível copiar o WAL da base de dados SQLite.');
+                }
+            } finally {
+                $source->exec('ROLLBACK');
+                $source = null;
             }
-            if (is_file($databasePath . '-wal') && !copy($databasePath . '-wal', $snapshot . '-wal')) {
-                throw new RuntimeException('Não foi possível copiar o WAL da base de dados SQLite.');
-            }
-        } finally {
-            $source->exec('ROLLBACK');
-            $source = null;
+            $snapshotPdo = new PDO('sqlite:' . $snapshot);
+            $snapshotPdo->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
+            $snapshotPdo->exec('PRAGMA wal_checkpoint(TRUNCATE)');
+            $snapshotPdo = null;
+            @unlink($snapshot . '-wal');
+            @unlink($snapshot . '-shm');
+            return;
         }
-
-        $snapshotPdo = new PDO('sqlite:' . $snapshot);
-        $snapshotPdo->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
-        $snapshotPdo->exec('PRAGMA busy_timeout = 30000');
-        $snapshotPdo->exec('PRAGMA wal_checkpoint(TRUNCATE)');
-        $snapshotPdo = null;
-        @unlink($snapshot . '-wal');
-        @unlink($snapshot . '-shm');
+        $quotedSnapshot = $source->quote($snapshot);
+        if ($quotedSnapshot === false) {
+            throw new RuntimeException('Não foi possível preparar o destino da cópia SQLite.');
+        }
+        $source->exec('VACUUM main INTO ' . $quotedSnapshot);
+        $source = null;
     }
 
     private function createDatabaseSnapshotWithRetry($snapshot)

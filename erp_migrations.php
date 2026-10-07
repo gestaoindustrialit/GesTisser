@@ -182,7 +182,10 @@ function gt_erp_run_phase1_migrations(PDO $pdo)
     if ($ran) {
         return;
     }
-    $ran = true;
+    if (gt_erp_schema_is_current($pdo)) {
+        $ran = true;
+        return;
+    }
 
     if (gt_erp_schema_is_current($pdo)) {
         return;
@@ -454,6 +457,7 @@ function gt_erp_run_phase1_migrations(PDO $pdo)
         $marker = $pdo->prepare('INSERT OR IGNORE INTO gestisser_erp_schema_migrations(version) VALUES (?)');
         $marker->execute([GESTISSER_ERP_SCHEMA_VERSION]);
         $pdo->commit();
+        $ran = true;
     } catch (Throwable $e) {
         $pdo->rollBack();
         throw $e;
