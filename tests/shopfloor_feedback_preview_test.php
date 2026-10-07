@@ -23,6 +23,8 @@ shopfloor_feedback_check(strpos($shopfloor, 'data-artwork-page-previous') !== fa
 shopfloor_feedback_check(strpos($shopfloor, '<canvas class="shopfloor-artwork-canvas"') !== false && strpos($shopfloor, 'data-artwork-image') === false, 'O preview não usa exclusivamente canvas.');
 shopfloor_feedback_check(strpos($pdfViewer, "fetch(pdfUrl, { credentials: 'same-origin'") !== false && strpos($pdfViewer, 'response.arrayBuffer()') !== false, 'O PDF não é carregado de forma autenticada para memória.');
 shopfloor_feedback_check(strpos($pdfViewer, "../node_modules/pdfjs-dist/legacy/build/pdf.min.mjs") !== false && strpos($pdfViewer, "../node_modules/pdfjs-dist/legacy/build/pdf.worker.min.mjs") !== false, 'O PDF.js ou o worker local não foi configurado.');
+shopfloor_feedback_check(strpos($pdfViewer, 'loadPdfJsWithTimeout().then((pdfjsLib)') !== false && strpos($pdfViewer, 'reportStartupError') !== false, 'Uma falha ao carregar o módulo deixa o preview eternamente em preparação.');
+shopfloor_feedback_check(strpos($pdfViewer, 'pdfjs-dist@4.10.38/legacy/build/pdf.mjs') !== false && strpos($pdfViewer, 'pdfjs-dist@4.10.38/legacy/build/pdf.worker.mjs') !== false, 'O fallback de arranque do PDF.js está em falta ou usa versões incompatíveis.');
 shopfloor_feedback_check(strpos($pdfViewer, 'disableWorker: true') !== false, 'O fallback sem worker do PDF.js está em falta.');
 shopfloor_feedback_check(strpos($pdfViewer, 'Math.min(window.devicePixelRatio || 1, 2)') !== false, 'O devicePixelRatio do canvas não está limitado.');
 shopfloor_feedback_check(strpos($pdfViewer, 'maxCanvasDimension = 4096') !== false && strpos($pdfViewer, 'maxCanvasPixels = 16777216') !== false, 'Os limites de dimensão do canvas estão em falta.');

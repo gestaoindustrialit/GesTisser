@@ -1,8 +1,37 @@
-import * as pdfjsLib from '../node_modules/pdfjs-dist/legacy/build/pdf.min.mjs';
-
 const viewer = document.querySelector('[data-artwork-viewer][data-pdf-url]');
+const localPdfJsUrl = new URL('../node_modules/pdfjs-dist/legacy/build/pdf.min.mjs', import.meta.url).href;
+const localWorkerUrl = new URL('../node_modules/pdfjs-dist/legacy/build/pdf.worker.min.mjs', import.meta.url).href;
+const fallbackPdfJsUrl = 'https://cdn.jsdelivr.net/npm/pdfjs-dist@4.10.38/legacy/build/pdf.mjs';
+const fallbackWorkerUrl = 'https://cdn.jsdelivr.net/npm/pdfjs-dist@4.10.38/legacy/build/pdf.worker.mjs';
+let activeWorkerUrl = localWorkerUrl;
+
+const reportStartupError = (error) => {
+    console.error('[PDF Preview] startup error', {
+        name: error && error.name,
+        message: error && error.message,
+        stack: error && error.stack,
+        error
+    });
+    if (viewer) viewer.querySelector('[data-artwork-status]').textContent = 'Não foi possível iniciar o visualizador PDF.';
+};
+
+const loadPdfJs = async () => {
+    try {
+        return await import(localPdfJsUrl);
+    } catch (localError) {
+        console.warn('[PDF Preview] local PDF.js unavailable; loading fallback', localError);
+        activeWorkerUrl = fallbackWorkerUrl;
+        return import(fallbackPdfJsUrl);
+    }
+};
+
+const loadPdfJsWithTimeout = () => Promise.race([
+    loadPdfJs(),
+    new Promise((resolve, reject) => window.setTimeout(() => reject(new Error('Tempo limite ao carregar PDF.js.')), 15000))
+]);
 
 if (viewer) {
+loadPdfJsWithTimeout().then((pdfjsLib) => {
     const modal = document.getElementById('articleArtworkModal');
     const stage = viewer.querySelector('[data-artwork-stage]');
     const canvas = viewer.querySelector('[data-artwork-canvas]');
@@ -15,7 +44,6 @@ if (viewer) {
     const zoomIn = viewer.querySelector('[data-artwork-zoom-in]');
     const zoomReset = viewer.querySelector('[data-artwork-zoom-reset]');
     const pdfUrl = new URL(viewer.dataset.pdfUrl, window.location.href).href;
-    const workerUrl = new URL('../node_modules/pdfjs-dist/legacy/build/pdf.worker.min.mjs', import.meta.url).href;
     const maxCanvasDimension = 4096;
     const maxCanvasPixels = 16777216;
     let pdfDocument = null;
@@ -30,7 +58,7 @@ if (viewer) {
     let fetchController = null;
     let resizeTimer = null;
 
-    pdfjsLib.GlobalWorkerOptions.workerSrc = workerUrl;
+    pdfjsLib.GlobalWorkerOptions.workerSrc = activeWorkerUrl;
 
     const logError = (error) => {
         console.error('[PDF Preview] error', {
@@ -173,4 +201,5 @@ if (viewer) {
         resizeTimer = window.setTimeout(() => { renderPage().catch(logError); }, 120);
     }).observe(stage);
     updateControls();
+}).catch(reportStartupError);
 }
