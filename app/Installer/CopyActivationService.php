@@ -174,8 +174,10 @@ class CopyActivationService
         $backup = $this->createVerifiedBackup();
         $pdo = $this->connect(false);
         $applied = array();
+        $transactionStarted = false;
         try {
             $pdo->exec('BEGIN IMMEDIATE');
+            $transactionStarted = true;
             $pdo->exec('CREATE TABLE IF NOT EXISTS gestisser_schema_migrations (version INTEGER PRIMARY KEY, name TEXT NOT NULL UNIQUE, status TEXT NOT NULL, started_at DATETIME NOT NULL, finished_at DATETIME, error_message TEXT)');
             $exists = $pdo->query('SELECT COUNT(*) FROM gestisser_schema_migrations WHERE version=1 AND status="completed"')->fetchColumn();
             if (!(int) $exists) {
@@ -192,9 +194,10 @@ class CopyActivationService
                 if ($this->tableExists($pdo, 'integrations')) { $pdo->exec('UPDATE integrations SET is_active=0,status="off"'); }
                 if ($this->tableExists($pdo, 'integration_flows')) { $pdo->exec('UPDATE integration_flows SET is_active=0'); }
             }
-            $pdo->commit();
+            $pdo->exec('COMMIT');
+            $transactionStarted = false;
         } catch (Throwable $exception) {
-            if ($pdo->inTransaction()) { $pdo->rollBack(); }
+            if ($transactionStarted) { $pdo->exec('ROLLBACK'); }
             throw new RuntimeException('A ativação falhou; nenhuma migração posterior foi executada. O backup foi mantido.');
         }
         $after = $this->snapshot();
@@ -295,6 +298,7 @@ class CopyActivationService
     private function probeRealLock()
     {
         $pdo = null;
+        $transactionStarted = false;
         try {
             $pdo = $this->connect(false);
             $pdo->setAttribute(PDO::ATTR_TIMEOUT, 0);
@@ -302,10 +306,12 @@ class CopyActivationService
             // BEGIN IMMEDIATE only tests whether another connection currently
             // owns the SQLite write lock. It does not write schema or data.
             $pdo->exec('BEGIN IMMEDIATE');
-            $pdo->rollBack();
+            $transactionStarted = true;
+            $pdo->exec('ROLLBACK');
+            $transactionStarted = false;
             return array('locked' => false, 'error' => null);
         } catch (Throwable $exception) {
-            if ($pdo instanceof PDO && $pdo->inTransaction()) { $pdo->rollBack(); }
+            if ($pdo instanceof PDO && $transactionStarted) { $pdo->exec('ROLLBACK'); }
             $message = strtolower($exception->getMessage());
             if (strpos($message, 'database is locked') !== false || strpos($message, 'database table is locked') !== false || (int) $exception->getCode() === 5) {
                 return array('locked' => true, 'error' => null);
