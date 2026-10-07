@@ -10,8 +10,6 @@ if (!is_admin($pdo, $userId)) {
 }
 
 gt_erp_run_phase1_migrations($pdo);
-erp_migrate_ink_types($pdo);
-gt_erp_migrate_production_cost_settings($pdo);
 $flashSuccess = null;
 $flashError = null;
 $administrativeCostFields = [
