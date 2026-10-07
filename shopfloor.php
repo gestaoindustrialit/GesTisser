@@ -1,7 +1,7 @@
 <?php
 require_once __DIR__ . '/helpers.php';
 require_once __DIR__ . '/app/Services/ShopfloorAttachment.php';
-require_once __DIR__ . '/app/Services/ArticleDocument.php';
+require_once __DIR__ . '/article_document.php';
 require_once __DIR__ . '/app/Services/OperationChecklistService.php';
 require_once __DIR__ . '/app/Services/RoutingService.php';
 require_once __DIR__ . '/app/Services/ShopfloorDailyIndicators.php';
@@ -1957,13 +1957,19 @@ require __DIR__ . '/partials/header.php';
 </section>
 
 <?php if ($articleArtwork): ?>
-<?php $articleArtworkPresentation = ArticleDocument::presentation((string) ($articleArtwork['file_url'] ?? '')); ?>
+<?php
+$articleArtworkPresentation = ArticleDocument::presentation((string) ($articleArtwork['file_url'] ?? ''));
+$articleArtworkId = (int) $articleArtwork['id'];
+$articleArtworkPageUrl = 'article_artwork.php?id=' . $articleArtworkId;
+$articleArtworkPath = ArticleDocument::absolutePath(__DIR__, (string) ($articleArtwork['file_url'] ?? ''));
+$articleArtworkPageCount = $articleArtworkPresentation['kind'] === 'pdf' ? ArticleDocument::pageCount($articleArtworkPath) : 1;
+?>
 <div class="modal fade shopfloor-artwork-modal" id="articleArtworkModal" tabindex="-1" aria-labelledby="articleArtworkModalLabel" aria-hidden="true">
     <div class="modal-dialog modal-fullscreen-lg-down modal-xl modal-dialog-centered">
         <div class="modal-content">
             <div class="modal-header"><div><h2 class="modal-title fs-5" id="articleArtworkModalLabel">Maquete do artigo</h2><p class="small text-secondary mb-0"><?= h((string) ($selectedOf['product_code'] ?? '')) ?> · <?= h((string) ($articleArtwork['title'] ?? 'Maquete de produção')) ?></p></div><button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Fechar"></button></div>
-            <div class="modal-body text-center bg-light p-0"><?php if ($articleArtworkPresentation['kind'] === 'pdf'): ?><?php $artworkPreviewUrl=ArticleDocument::thumbnailUrl((int)$articleArtwork['id']); ?><div class="shopfloor-artwork-pdf-preview" data-artwork-viewer><div class="shopfloor-artwork-zoom" role="toolbar" aria-label="Controlos de ampliação da maquete"><button type="button" class="btn btn-light" data-artwork-zoom-out aria-label="Reduzir"><i class="bi bi-zoom-out"></i></button><output data-artwork-zoom-value aria-live="polite">100%</output><button type="button" class="btn btn-light" data-artwork-zoom-in aria-label="Ampliar"><i class="bi bi-zoom-in"></i></button><button type="button" class="btn btn-light" data-artwork-zoom-reset>Repor</button></div><div class="shopfloor-artwork-stage" data-artwork-stage><img src="<?=h($artworkPreviewUrl)?>" data-artwork-hd-src="<?=h($artworkPreviewUrl.'&preview=high')?>" class="shopfloor-artwork-preview" data-artwork-image alt="Primeira página do PDF da maquete do artigo <?= h((string) ($selectedOf['product_code'] ?? '')) ?>"></div><p>Use os controlos para ampliar a maquete sem sair do Shopfloor.</p></div><?php else: ?><img src="<?= h(ArticleDocument::url((int) $articleArtwork['id'])) ?>" class="shopfloor-artwork-preview" alt="Maquete do artigo <?= h((string) ($selectedOf['product_code'] ?? '')) ?>"><?php endif; ?></div>
-            <div class="modal-footer"><button type="button" class="btn btn-outline-secondary btn-lg" data-bs-dismiss="modal">Fechar</button><a href="<?= h(ArticleDocument::url((int) $articleArtwork['id'])) ?>" target="_blank" rel="noopener" class="btn btn-primary btn-lg"><i class="bi bi-arrows-fullscreen me-1"></i>Abrir original</a></div>
+            <div class="modal-body text-center bg-light p-0"><?php if ($articleArtworkPresentation['kind'] === 'pdf'): ?><div class="shopfloor-artwork-pdf-preview" data-artwork-viewer data-pdf-url="<?=h($articleArtworkPageUrl.'&original=1')?>" data-page-count="<?=$articleArtworkPageCount?>"><div class="shopfloor-artwork-toolbar" role="toolbar" aria-label="Controlos da maquete"><button type="button" class="btn btn-light" data-artwork-page-previous aria-label="Página anterior"><i class="bi bi-chevron-left"></i></button><output data-artwork-page-current aria-live="polite">1 / <?=$articleArtworkPageCount?></output><button type="button" class="btn btn-light" data-artwork-page-next aria-label="Página seguinte"><i class="bi bi-chevron-right"></i></button><span class="shopfloor-artwork-toolbar-divider"></span><button type="button" class="btn btn-light" data-artwork-zoom-out aria-label="Reduzir"><i class="bi bi-zoom-out"></i></button><output data-artwork-zoom-value aria-live="polite">100%</output><button type="button" class="btn btn-light" data-artwork-zoom-in aria-label="Ampliar"><i class="bi bi-zoom-in"></i></button><button type="button" class="btn btn-light" data-artwork-zoom-reset>Repor</button></div><div class="shopfloor-artwork-stage" data-artwork-stage><div data-artwork-content><canvas class="shopfloor-artwork-canvas" data-artwork-canvas aria-label="Página da maquete do artigo <?= h((string) ($selectedOf['product_code'] ?? '')) ?>"></canvas></div></div><p data-artwork-status aria-live="polite">A preparar PDF…</p></div><?php else: ?><img src="<?= h($articleArtworkPageUrl.'&original=1') ?>" class="shopfloor-artwork-preview" alt="Maquete do artigo <?= h((string) ($selectedOf['product_code'] ?? '')) ?>"><?php endif; ?></div>
+            <div class="modal-footer"><button type="button" class="btn btn-outline-secondary btn-lg" data-bs-dismiss="modal">Fechar</button><a href="<?= h($articleArtworkPageUrl.'&original=1') ?>" target="_blank" rel="noopener" class="btn btn-primary btn-lg"><i class="bi bi-download me-1"></i>Abrir PDF original</a></div>
         </div>
     </div>
 </div>
@@ -2427,30 +2433,7 @@ document.querySelectorAll('#productionLabelModal [data-label-type]').forEach((bu
     modal.addEventListener('show.bs.modal',(event)=>{const button=event.relatedTarget;document.getElementById('productLabelOperationId').value=button?.dataset.productLabelOperation||'';document.getElementById('productLabelQuantity').value=button?.dataset.productLabelQuantity||'';});
     modal.querySelectorAll('[data-copy-step]').forEach((button)=>button.addEventListener('click',()=>{const input=document.getElementById('productLabelCopies');input.value=Math.max(1,Math.min(99,Number(input.value||1)+Number(button.dataset.copyStep)));}));
 })();
-(() => {
-    const viewer=document.querySelector('[data-artwork-viewer]');
-    if(!viewer)return;
-    const image=viewer.querySelector('[data-artwork-image]');
-    const stage=viewer.querySelector('[data-artwork-stage]');
-    const value=viewer.querySelector('[data-artwork-zoom-value]');
-    const touchDevice=(navigator.maxTouchPoints||0)>0||window.matchMedia('(hover: none), (pointer: coarse)').matches;
-    const preferredSource=image.getAttribute('data-artwork-hd-src');
-    if(preferredSource&&!touchDevice){
-        const enhancedImage=new Image();
-        enhancedImage.onload=()=>{image.src=preferredSource;};
-        const loadEnhanced=()=>{enhancedImage.src=preferredSource;};
-        if(image.complete&&image.naturalWidth>0)loadEnhanced();else image.addEventListener('load',loadEnhanced,{once:true});
-    }
-    let zoom=1;
-    const render=()=>{image.style.width=(zoom*100)+'%';image.style.maxWidth=zoom===1?'100%':'none';value.value=Math.round(zoom*100)+'%';};
-    const setZoom=(next)=>{zoom=Math.max(1,Math.min(4,Math.round(next*4)/4));render();};
-    viewer.querySelector('[data-artwork-zoom-in]').addEventListener('click',()=>setZoom(zoom+.25));
-    viewer.querySelector('[data-artwork-zoom-out]').addEventListener('click',()=>setZoom(zoom-.25));
-    viewer.querySelector('[data-artwork-zoom-reset]').addEventListener('click',()=>{setZoom(1);stage.scrollTo({top:0,left:0});});
-    image.addEventListener('dblclick',()=>setZoom(zoom===1?2:1));
-    document.getElementById('articleArtworkModal')?.addEventListener('hidden.bs.modal',()=>{setZoom(1);stage.scrollTo({top:0,left:0});});
-    render();
-})();
 </script>
+<?php if ($articleArtwork && $articleArtworkPresentation['kind'] === 'pdf'): ?><script type="module" src="assets/artwork-pdf-viewer.js?v=<?=h((string)(@filemtime(__DIR__.'/assets/artwork-pdf-viewer.js')?:'1'))?>"></script><?php endif; ?>
 
 <?php require __DIR__ . '/partials/footer.php'; ?>

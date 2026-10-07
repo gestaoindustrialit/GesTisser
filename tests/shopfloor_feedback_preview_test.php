@@ -10,15 +10,26 @@ shopfloor_feedback_check(strpos($styles, 'bottom: calc(20px + env(safe-area-inse
 shopfloor_feedback_check(strpos($styles, 'left: 50%') !== false && strpos($styles, 'translateX(-50%)') !== false, 'A notificação não está centrada horizontalmente.');
 shopfloor_feedback_check(strpos($styles, 'translateY(2rem) scale(.96)') !== false && strpos($styles, '.toast.show') !== false, 'A animação da notificação não foi configurada.');
 shopfloor_feedback_check(strpos($shopfloor, '<iframe') === false, 'O PDF continua dependente de um iframe bloqueado pelas políticas de segurança.');
-shopfloor_feedback_check(strpos($shopfloor, 'ArticleDocument::thumbnailUrl((int)$articleArtwork[\'id\'])') !== false, 'A pré-visualização segura do PDF está em falta.');
+shopfloor_feedback_check(strpos($shopfloor, "'article_artwork.php?id=' . \$articleArtworkId") !== false, 'A pré-visualização segura do PDF está em falta.');
 shopfloor_feedback_check(strpos($styles, '.shopfloor-artwork-pdf-preview') !== false, 'O visualizador PDF não ocupa a área útil da janela.');
 shopfloor_feedback_check(strpos($styles, '100dvh') !== false, 'O visualizador PDF não foi adaptado aos ecrãs dos tablets.');
 shopfloor_feedback_check(strpos($shopfloor, 'data-artwork-zoom-in') !== false && strpos($shopfloor, 'data-artwork-zoom-out') !== false && strpos($shopfloor, 'data-artwork-zoom-reset') !== false, 'Os controlos de zoom da maquete estão em falta.');
-shopfloor_feedback_check(strpos($shopfloor, 'Math.min(4') !== false && strpos($shopfloor, "image.style.width=(zoom*100)+'%'") !== false, 'O zoom da maquete não está limitado ou não atualiza a imagem.');
 shopfloor_feedback_check(strpos($styles, '.shopfloor-artwork-stage') !== false && strpos($styles, 'overflow: auto') !== false, 'A maquete ampliada não permite deslocação dentro do modal.');
-shopfloor_feedback_check(strpos($shopfloor, 'data-artwork-tablet-src') === false && strpos($shopfloor, 'data-artwork-hd-src') !== false, 'O tablet ainda tenta carregar automaticamente uma imagem pesada.');
-shopfloor_feedback_check(strpos($shopfloor, 'const enhancedImage=new Image()') !== false && strpos($shopfloor, 'enhancedImage.onload=()=>{image.src=preferredSource;}') !== false, 'A imagem HD não é pré-carregada antes de substituir a alternativa leve.');
-shopfloor_feedback_check(strpos($shopfloor, 'navigator.maxTouchPoints') !== false && strpos($shopfloor, 'if(preferredSource&&!touchDevice)') !== false, 'Os dispositivos táteis não são protegidos do carregamento HD automático.');
-$erp = (string) file_get_contents(__DIR__ . '/../erp.php');
-shopfloor_feedback_check(strpos($erp, "[4800, 3600]") !== false && strpos($erp, "[2400, 1800]") !== false, 'As resoluções específicas para PC e tablet não foram configuradas.');
+$pdfViewer = (string) file_get_contents(__DIR__ . '/../assets/artwork-pdf-viewer.js');
+shopfloor_feedback_check(strpos($shopfloor, 'assets/artwork-pdf-viewer.js') !== false && strpos($shopfloor, 'data-pdf-url=') !== false, 'O visualizador PDF.js não foi ligado à maquete.');
+shopfloor_feedback_check(strpos($shopfloor, 'article_artwork.php?id=') !== false, 'A maquete ainda depende do caminho interno do ERP.');
+shopfloor_feedback_check(strpos($shopfloor, 'ArticleDocument::pageCount') !== false, 'A contagem de páginas da maquete está em falta.');
+shopfloor_feedback_check(strpos($shopfloor, 'data-artwork-page-previous') !== false && strpos($shopfloor, 'data-artwork-page-next') !== false, 'Os comandos habituais de navegação do PDF estão em falta.');
+shopfloor_feedback_check(strpos($shopfloor, '<canvas class="shopfloor-artwork-canvas"') !== false && strpos($shopfloor, 'data-artwork-image') === false, 'O preview não usa exclusivamente canvas.');
+shopfloor_feedback_check(strpos($pdfViewer, "fetch(pdfUrl, { credentials: 'same-origin'") !== false && strpos($pdfViewer, 'response.arrayBuffer()') !== false, 'O PDF não é carregado de forma autenticada para memória.');
+shopfloor_feedback_check(strpos($pdfViewer, "../node_modules/pdfjs-dist/legacy/build/pdf.min.mjs") !== false && strpos($pdfViewer, "../node_modules/pdfjs-dist/legacy/build/pdf.worker.min.mjs") !== false, 'O PDF.js ou o worker local não foi configurado.');
+shopfloor_feedback_check(strpos($pdfViewer, 'loadPdfJsWithTimeout().then((pdfjsLib)') !== false && strpos($pdfViewer, 'reportStartupError') !== false, 'Uma falha ao carregar o módulo deixa o preview eternamente em preparação.');
+shopfloor_feedback_check(strpos($pdfViewer, 'pdfjs-dist@4.10.38/legacy/build/pdf.min.mjs') !== false, 'O fallback de arranque do PDF.js está em falta.');
+shopfloor_feedback_check(strpos($pdfViewer, 'disableWorker: true') !== false, 'O fallback sem worker do PDF.js está em falta.');
+shopfloor_feedback_check(strpos($pdfViewer, 'Math.min(window.devicePixelRatio || 1, 2)') !== false, 'O devicePixelRatio do canvas não está limitado.');
+shopfloor_feedback_check(strpos($pdfViewer, 'maxCanvasDimension = 4096') !== false && strpos($pdfViewer, 'maxCanvasPixels = 16777216') !== false, 'Os limites de dimensão do canvas estão em falta.');
+shopfloor_feedback_check(strpos($pdfViewer, 'task.cancel()') !== false && strpos($pdfViewer, 'pdfDocument.destroy()') !== false, 'O render/documento PDF anterior não é libertado.');
+foreach (['URL', 'fetch status', 'bytes', 'PDF loaded', 'pages', 'rendering page', 'canvas WxH', 'render complete'] as $log) {
+    shopfloor_feedback_check(strpos($pdfViewer, "[PDF Preview] {$log}") !== false, "Log temporário em falta: {$log}.");
+}
 echo "shopfloor feedback and preview ok\n";

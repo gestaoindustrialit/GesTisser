@@ -78,6 +78,9 @@ $resolved = ArticleDocument::absolutePath($root, 'storage/uploads/test.pdf');
 if ($resolved === '' || basename($resolved) !== 'test.pdf') {
     throw new RuntimeException('Não foi possível resolver um upload existente.');
 }
+if (ArticleDocument::absolutePath($root, '/GesTisser/storage/uploads/test.pdf') !== $resolved) {
+    throw new RuntimeException('Um URL de upload com a subpasta da instalação não foi resolvido.');
+}
 $thumbnail = ArticleDocument::thumbnail($resolved);
 if (substr($thumbnail, 0, 2) !== "\xFF\xD8") {
     throw new RuntimeException('O thumbnail de fallback não é uma imagem JPEG.');
@@ -87,6 +90,16 @@ if (ArticleDocument::absolutePath($root, 'storage/uploads/missing.pdf') !== '') 
 }
 if (ArticleDocument::absolutePath($root, 'storage/uploads/../../../etc/passwd') !== '') {
     throw new RuntimeException('O resolvedor permitiu sair da pasta de uploads.');
+}
+if (strpos($articleDocumentSource, "app_config('paths.uploads')") === false) {
+    throw new RuntimeException('O resolvedor não consulta a pasta de uploads configurada na instalação.');
+}
+
+$erpSource = (string) file_get_contents(__DIR__ . '/../erp.php');
+if (strpos($erpSource, "['article_document', 'article_document_thumbnail']") === false
+    || strpos($erpSource, "['Utilizador', 'Produção', 'Chefias', 'RH']") === false
+    || strpos($erpSource, 'if (!$canViewErp && !$canViewShopfloorArtwork)') === false) {
+    throw new RuntimeException('Os operadores autenticados do Shopfloor não conseguem abrir a maquete.');
 }
 unlink($root . '/storage/uploads/test.pdf');
 rmdir($root . '/storage/uploads');
