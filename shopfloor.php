@@ -3,7 +3,6 @@ require_once __DIR__ . '/helpers.php';
 require_once __DIR__ . '/app/Services/ShopfloorAttachment.php';
 require_once __DIR__ . '/article_document.php';
 require_once __DIR__ . '/app/Services/OperationChecklistService.php';
-require_once __DIR__ . '/app/Services/RoutingService.php';
 require_once __DIR__ . '/app/Services/ShopfloorDailyIndicators.php';
 require_once __DIR__ . '/app/Services/OperationConsumptionService.php';
 require_once __DIR__ . '/app/Services/ProductionOrderStatusService.php';
@@ -1086,9 +1085,6 @@ $displayedHourBankAbsMinutes = abs($displayedHourBankMinutes);
 $formattedHourBank = sprintf('%s%02dh%02dm', $displayedHourBankMinutes < 0 ? '-' : '', intdiv($displayedHourBankAbsMinutes, 60), $displayedHourBankAbsMinutes % 60);
 
 
-// Refresh only operations that have never started, so corrections to an
-// article routing become usable without rewriting production history.
-(new RoutingService($pdo))->syncPendingOrderOperations();
 ProductionOrderStatusService::syncAll($pdo,$userId);
 $ofSql = 'SELECT o.id, o.order_number, o.product_id, fp.id AS finished_product_id, o.planned_quantity, o.status, COALESCE(NULLIF(json_extract(pos.snapshot_json,"$._order.lot"),""),NULLIF(json_extract(ts.snapshot_json,"$._order.lot"),""),o.order_number) AS lot, c.name AS customer_name, TRIM(COALESCE(c.postal_code,"") || " " || COALESCE(c.city,"")) AS customer_locality, COALESCE(fp.code,p.code) AS product_code, COALESCE(fp.description,p.description) AS product_description FROM erp_production_orders o JOIN erp_products p ON p.id = o.product_id LEFT JOIN erp_finished_products fp ON fp.id=o.finished_product_id OR (o.finished_product_id IS NULL AND fp.code=p.code) LEFT JOIN erp_customers c ON c.id=o.customer_id LEFT JOIN erp_production_order_snapshots pos ON pos.production_order_id=o.id LEFT JOIN erp_technical_sheets ts ON ts.production_order_id=o.id WHERE o.status IN ("Por iniciar", "Em Produção", "Em Pausa", "Planeada", "Em curso")';
 $ofParams = [];

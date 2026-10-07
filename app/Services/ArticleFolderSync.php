@@ -41,7 +41,7 @@ final class ArticleFolderSync
                 $mime = UploadService::detectMime($absolutePath);
                 if (!in_array($mime, ['application/pdf', 'image/jpeg', 'image/png', 'image/webp'], true)) continue;
 
-                $url = self::publicUrl($articleId, $fileName);
+                $url = self::fileUrl($articleId, $fileName);
                 $find->execute([$articleId, $url]);
                 if ($find->fetchColumn()) continue;
                 $title = trim((string) pathinfo($fileName, PATHINFO_FILENAME));
@@ -51,6 +51,61 @@ final class ArticleFolderSync
         }
 
         return $imported;
+    }
+
+    /**
+     * Put artwork uploaded through GesTisser in the article's managed folder.
+     *
+     * Older uploads were stored directly in storage/uploads.  Keep that source
+     * file as a safety copy and point the catalogue entry at the new copy.  A
+     * document which already came from the article folder (for example through
+     * cPanel) is deliberately left untouched.
+     */
+    public static function copyArtworkToFolder(PDO $pdo, int $articleId): bool
+    {
+        if ($articleId < 1) return false;
+        $query = $pdo->prepare(
+            'SELECT id,title,file_url FROM erp_product_documents '
+            . 'WHERE entity_type="finished_product" AND entity_id=? '
+            . 'AND document_type="production_main" AND status="Ativo" ORDER BY id DESC LIMIT 1'
+        );
+        $query->execute([$articleId]);
+        $document = $query->fetch(PDO::FETCH_ASSOC);
+        if (!$document) return false;
+
+        $source = ArticleDocument::absolutePath((string) app_config('paths.root'), (string) $document['file_url']);
+        // UploadService historically returned storage/uploads/<name> even when
+        // the environment-specific upload directory was storage/uploads/production.
+        if ($source === '') {
+            $legacyName = basename(rawurldecode((string) (parse_url((string) $document['file_url'], PHP_URL_PATH) ?: '')));
+            $legacyCandidate = rtrim((string) app_config('paths.uploads'), '/\\') . '/' . $legacyName;
+            if ($legacyName !== '' && $legacyName !== '.' && $legacyName !== '..' && is_file($legacyCandidate)) {
+                $source = $legacyCandidate;
+            }
+        }
+        if ($source === '') return false;
+        $directory = self::directory($articleId);
+        self::ensureDirectory($directory);
+        $managedDirectory = realpath($directory);
+        if ($managedDirectory !== false && dirname($source) === $managedDirectory) return false;
+
+        $extension = strtolower((string) pathinfo($source, PATHINFO_EXTENSION));
+        $base = preg_replace('/[^A-Za-z0-9._-]+/', '-', trim((string) ($document['title'] ?? 'maquete')));
+        $base = trim((string) $base, '.-_');
+        if ($base === '') $base = 'maquete';
+        $fileName = $base . '-' . (int) $document['id'] . ($extension !== '' ? '.' . $extension : '');
+        $destination = $directory . '/' . $fileName;
+        if (!is_file($destination)) {
+            $temporary = $destination . '.tmp-' . bin2hex(random_bytes(4));
+            if (!copy($source, $temporary) || !rename($temporary, $destination)) {
+                @unlink($temporary);
+                throw new RuntimeException('Não foi possível copiar a maquete para a pasta do artigo.');
+            }
+            @chmod($destination, 0640);
+        }
+        $url = self::fileUrl($articleId, $fileName);
+        $pdo->prepare('UPDATE erp_product_documents SET file_url=? WHERE id=?')->execute([$url, (int) $document['id']]);
+        return true;
     }
 
     public static function directory(int $articleId): string
@@ -75,7 +130,7 @@ final class ArticleFolderSync
         return unlink($path);
     }
 
-    private static function publicUrl(int $articleId, string $fileName): string
+    public static function fileUrl(int $articleId, string $fileName): string
     {
         $uploads = str_replace('\\', '/', rtrim((string) app_config('paths.uploads'), '/\\'));
         $root = str_replace('\\', '/', rtrim((string) app_config('paths.root'), '/\\'));
