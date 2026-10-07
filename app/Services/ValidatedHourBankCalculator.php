@@ -6,8 +6,10 @@ class ValidatedHourBankCalculator
      * Rebuilds the hour-bank balance from days whose time entries are all validated.
      * Returns null when the employee does not have a validated day, allowing callers
      * to retain a manually configured opening balance.
+     *
+     * @return int|null
      */
-    public static function calculateMinutes(PDO $pdo, int $userId, int $dailyObjectiveMinutes = 480): ?int
+    public static function calculateMinutes(PDO $pdo, int $userId, int $dailyObjectiveMinutes = 480)
     {
         $entriesStmt = $pdo->prepare(
             'SELECT entry_type, occurred_at

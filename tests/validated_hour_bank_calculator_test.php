@@ -2,7 +2,7 @@
 
 require_once __DIR__ . '/../app/Services/ValidatedHourBankCalculator.php';
 
-function validated_bh_assert(bool $condition, string $message): void
+function validated_bh_assert(bool $condition, string $message)
 {
     if (!$condition) {
         throw new RuntimeException($message);

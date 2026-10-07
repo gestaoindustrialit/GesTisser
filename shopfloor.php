@@ -33,6 +33,7 @@ if (!$isAdmin && !in_array($profile, ['Utilizador', 'Produção', 'Chefias', 'RH
 
 $flashSuccess = null;
 $flashError = null;
+$showClockEntryRequiredModal = false;
 $workCentersStmt = $pdo->query(
     'SELECT wc.id, wc.code, wc.name, wc.center_type, wc.machine_id, wc.is_active,
             p.id AS printer_id, p.name AS printer_name, p.network_uri AS printer_uri
@@ -136,7 +137,7 @@ if (!function_exists('shopfloor_operation_can_run_at_work_center')) {
 }
 $sessionLoginAt = trim((string) ($_SESSION['login_at'] ?? ''));
 $todayLocalDate = date('Y-m-d');
-$latestClockEntryTodayStmt = $pdo->prepare('SELECT entry_type FROM shopfloor_time_entries WHERE user_id = ? AND date(occurred_at) = ? ORDER BY occurred_at DESC LIMIT 1');
+$latestClockEntryTodayStmt = $pdo->prepare('SELECT entry_type FROM shopfloor_time_entries WHERE user_id = ? AND date(occurred_at) = ? ORDER BY occurred_at DESC, id DESC LIMIT 1');
 $latestClockEntryTodayStmt->execute([$userId, $todayLocalDate]);
 $latestClockEntryToday = (string) ($latestClockEntryTodayStmt->fetchColumn() ?: '');
 $hasOpenClockEntryToday = $latestClockEntryToday === 'entrada';
@@ -288,6 +289,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         if ($flashError) {
         } elseif (!$operation) {
             $flashError = 'Etapa da OF inválida.';
+        } elseif (!$hasOpenClockEntryToday) {
+            $flashError = 'Não pode iniciar produção sem registar primeiro o ponto de entrada na empresa.';
+            $showClockEntryRequiredModal = true;
         } elseif ($selectedWorkCenterId <= 0) {
             $flashError = 'Selecione primeiro o centro de trabalho deste dispositivo.';
         } elseif (!$canRunAtSelectedWorkCenter) {
@@ -343,7 +347,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $missingOperationConsumption = $reachesPlannedQuantity && (int) ($completionConsumption['required_materials'] ?? 0) > (int) ($completionConsumption['consumed_materials'] ?? 0);
         }
         if($endChecklistRequired){try{$operationChecklistService->validateAndEncode((int)$entryInfo['checklist_template_id'],(array)($_POST['checklist']??[]));}catch(InvalidArgumentException$exception){$flashError=$exception->getMessage();}}
-        if($flashError){}elseif($entryInfo&&(int)$entryInfo['requires_good_quantity']===1&&$reject>0&&$reason===''){$flashError='Indique o Motivo NOK.';}elseif($entryInfo&&((int)$entryInfo['requires_quality']||trim((string)$entryInfo['quality_points'])!=='')&&!in_array($qualityResult,['pass','fail','na'],true)){$flashError='Execute e registe o controlo de qualidade obrigatório.';}else{$stmt->execute([$good, $reject, trim((string)($_POST['notes'] ?? '')) ?: null, $entryId, $userId]);if($stmt->rowCount()>0){$pdo->prepare('UPDATE erp_operation_stoppages SET ended_at = CURRENT_TIMESTAMP WHERE time_entry_id = ? AND ended_at IS NULL')->execute([$entryId]);if($endChecklistRequired)$operationChecklistService->save($entryInfo,$userId,'end',(array)($_POST['checklist']??[]),$entryId);if($reject>0)$pdo->prepare('INSERT INTO erp_operation_waste(time_entry_id,quantity,reason,created_by) VALUES (?,?,?,?)')->execute([$entryId,$reject,$reason,$userId]);if($qualityResult!=='')$pdo->prepare('INSERT INTO erp_operation_quality_checks(production_order_operation_id,checkpoint,result,checked_by) VALUES (?,?,?,?)')->execute([(int)$entryInfo['id'],trim((string)$entryInfo['quality_points'])?:'Controlo obrigatório',$qualityResult,$userId]);$pdo->prepare('UPDATE erp_production_order_operations SET status="Concluída" WHERE id=(SELECT production_order_operation_id FROM erp_operation_time_entries WHERE id=?)')->execute([$entryId]);}$flashSuccess=$stmt->rowCount()>0?'Operação concluída e tempos registados na OF.':'Operação inválida.';}
+        if($flashError){}elseif($entryInfo&&(int)$entryInfo['requires_good_quantity']===1&&$reject>0&&$reason===''){$flashError='Indique o Motivo NOK.';}elseif($entryInfo&&($good>0||$reject>0)&&((int)$entryInfo['requires_quality']||trim((string)$entryInfo['quality_points'])!=='')&&!in_array($qualityResult,['pass','fail','na'],true)){$flashError='Execute e registe o controlo de qualidade obrigatório.';}else{$stmt->execute([$good, $reject, trim((string)($_POST['notes'] ?? '')) ?: null, $entryId, $userId]);if($stmt->rowCount()>0){$pdo->prepare('UPDATE erp_operation_stoppages SET ended_at = CURRENT_TIMESTAMP WHERE time_entry_id = ? AND ended_at IS NULL')->execute([$entryId]);if($endChecklistRequired)$operationChecklistService->save($entryInfo,$userId,'end',(array)($_POST['checklist']??[]),$entryId);if($reject>0)$pdo->prepare('INSERT INTO erp_operation_waste(time_entry_id,quantity,reason,created_by) VALUES (?,?,?,?)')->execute([$entryId,$reject,$reason,$userId]);if($qualityResult!=='')$pdo->prepare('INSERT INTO erp_operation_quality_checks(production_order_operation_id,checkpoint,result,checked_by) VALUES (?,?,?,?)')->execute([(int)$entryInfo['id'],trim((string)$entryInfo['quality_points'])?:'Controlo obrigatório',$qualityResult,$userId]);$pdo->prepare('UPDATE erp_production_order_operations SET status="Concluída" WHERE id=(SELECT production_order_operation_id FROM erp_operation_time_entries WHERE id=?)')->execute([$entryId]);}$flashSuccess=$stmt->rowCount()>0?'Operação concluída e tempos registados na OF.':'Operação inválida.';}
     }
 
     if ($action === 'start_unit_consumption') {
@@ -408,6 +412,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         if ($action === 'pause_operation') {
             $paused = shopfloor_pause_active_operation($pdo, $userId, 'Paragem manual aprovada pelo colaborador');
             $flashSuccess = $paused ? 'Operação pausada.' : 'Não existe uma operação em produção para pausar.';
+        } elseif (!$hasOpenClockEntryToday) {
+            $flashError = 'Não pode retomar produção sem registar primeiro o ponto de entrada na empresa.';
+            $showClockEntryRequiredModal = true;
         } else {
             $resumed = shopfloor_resume_operation($pdo, $entryId, $userId);
             $flashSuccess = $resumed ? 'Operação retomada.' : 'Não foi possível retomar a operação.';
@@ -480,8 +487,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $pausedEntryStmt = $pdo->prepare('SELECT id FROM erp_operation_time_entries WHERE user_id=? AND ended_at IS NULL AND status="paused" ORDER BY started_at DESC LIMIT 1');
             $pausedEntryStmt->execute([$userId]);
             $pausedEntryId = (int) ($pausedEntryStmt->fetchColumn() ?: 0);
-            $resumedAfterBreak = $pausedEntryId > 0 && shopfloor_resume_operation($pdo, $pausedEntryId, $userId);
+            $resumedAfterBreak = $hasOpenClockEntryToday && $pausedEntryId > 0 && shopfloor_resume_operation($pdo, $pausedEntryId, $userId);
             $flashSuccess = $resumedAfterBreak ? 'Pausa/paragem terminada e operação retomada automaticamente.' : 'Pausa/paragem terminada com sucesso.';
+            if ($pausedEntryId > 0 && !$hasOpenClockEntryToday) {
+                $flashError = 'Não pode retomar produção sem registar primeiro o ponto de entrada na empresa.';
+                $showClockEntryRequiredModal = true;
+            }
         }
     }
 
@@ -807,7 +818,7 @@ if (!$hourBank) {
     $hourBank = ['balance_hours' => 0, 'updated_at' => date('Y-m-d H:i:s')];
 }
 
-$todayEntriesStmt = $pdo->prepare('SELECT entry_type, note, occurred_at FROM shopfloor_time_entries WHERE user_id = ? AND date(occurred_at) = ? ORDER BY occurred_at DESC');
+$todayEntriesStmt = $pdo->prepare('SELECT entry_type, note, occurred_at FROM shopfloor_time_entries WHERE user_id = ? AND date(occurred_at) = ? ORDER BY occurred_at DESC, id DESC');
 $todayEntriesStmt->execute([$userId, $todayLocalDate]);
 $todayEntries = $todayEntriesStmt->fetchAll(PDO::FETCH_ASSOC);
 
@@ -1310,15 +1321,14 @@ require __DIR__ . '/partials/header.php';
     <div class="shopfloor-panel mb-4">
         <div class="shopfloor-panel-header flex-wrap gap-2">
             <h2 class="h4 mb-0">Produção - escolher OF</h2>
-            <?php if ($isAdmin || $profile !== 'Utilizador'): ?>
-                <a href="erp.php" class="btn btn-outline-primary btn-sm">ERP / relatórios</a>
-            <?php endif; ?>
+            <div class="small text-secondary" data-shopfloor-order-summary>
+                <strong>Qtd Planeada:</strong> <?= $selectedOf ? h(shopfloor_format_quantity((float) $selectedOf['planned_quantity'])) : '—' ?>
+                <span class="mx-1">|</span>
+                <strong>Estado da OF:</strong> <?= $selectedOf ? h((string) $selectedOf['status']) : '—' ?>
+            </div>
         </div>
         <form method="get" class="row g-2 align-items-end mb-3" data-of-picker-form><div class="col-md-8"><label class="form-label" for="shopfloorOfSearch">Ordem de fabrico</label><input type="search" id="shopfloorOfSearch" class="form-control shopfloor-of-search" list="shopfloorOfOptions" autocomplete="off" enterkeyhint="search" inputmode="search" data-of-search value="<?= $selectedOf ? h($selectedOf['order_number'].' · '.$selectedOf['product_code'].' · '.$selectedOf['product_description']) : '' ?>" placeholder="Pesquisar por código, nome ou referência..."><input type="hidden" name="of_id" data-of-id value="<?= (int)$selectedOfId ?>"><datalist id="shopfloorOfOptions"><?php foreach ($productionOrders as $of): ?><option data-id="<?= (int)$of['id'] ?>" value="<?= h($of['order_number'].' · '.$of['product_code'].' · '.$of['product_description']) ?>"></option><?php endforeach; ?></datalist></div><div class="col-md-4"><button class="btn btn-primary w-100">Abrir OF</button></div></form>
         <?php if ($selectedOf): ?>
-            <div class="alert alert-info">
-                <div class="small"><strong><?= h($selectedOf['order_number']) ?></strong> — Quantidade planeada: <?= h((string)$selectedOf['planned_quantity']) ?> · Estado: <?= h($selectedOf['status']) ?></div>
-            </div>
             <h3 class="h6">Documentos obrigatórios</h3>
             <div class="list-group mb-3"><?php if (!$ofDocuments): ?><div class="list-group-item text-secondary">Sem documentos anexados.</div><?php endif; foreach ($ofDocuments as $doc): ?><div class="list-group-item d-flex justify-content-between gap-2"><div><strong><?= h($doc['title']) ?></strong><?php if (!empty($doc['document_url'])): ?> · <a target="_blank" href="<?= h($doc['document_url']) ?>">visualizar</a><?php endif; ?><div class="small text-secondary"><?= nl2br(h((string)$doc['body'])) ?></div></div><form method="post"><input type="hidden" name="action" value="ack_of_document"><input type="hidden" name="document_id" value="<?= (int)$doc['id'] ?>"><button class="btn btn-sm <?= (int)$doc['acknowledged']===1?'btn-success':'btn-outline-success' ?>"><?= (int)$doc['acknowledged']===1?'Confirmado':'Tomei conhecimento' ?></button></form></div><?php endforeach; ?></div>
             <h3 class="h6">Operações</h3>
@@ -1952,6 +1962,31 @@ require __DIR__ . '/partials/header.php';
 
 </section>
 
+<div class="modal fade" id="shopfloorClockEntryRequiredModal" tabindex="-1" aria-labelledby="shopfloorClockEntryRequiredModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2 class="modal-title fs-5" id="shopfloorClockEntryRequiredModalLabel">Ponto de entrada necessário</h2>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Fechar"></button>
+            </div>
+            <div class="modal-body">
+                <div class="alert alert-warning">Não pode iniciar ou retomar produção sem registar primeiro o ponto de entrada.</div>
+                <p>Pretende dar entrada na empresa?</p>
+                <p class="small text-secondary mb-0">Depois de registar a entrada, pode iniciar ou retomar a operação.</p>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Agora não</button>
+                <form method="post">
+                    <?= csrf_input() ?>
+                    <input type="hidden" name="action" value="clock_entry">
+                    <input type="hidden" name="entry_type" value="entrada">
+                    <button type="submit" class="btn btn-primary">Sim, dar entrada</button>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+
 <?php if ($articleArtwork): ?>
 <?php
 $articleArtworkPresentation = ArticleDocument::presentation((string) ($articleArtwork['file_url'] ?? ''));
@@ -2012,6 +2047,27 @@ $articleArtworkPageCount = $articleArtworkPresentation['kind'] === 'pdf' ? Artic
 </div>
 
 <script>
+(() => {
+    const modalElement = document.getElementById('shopfloorClockEntryRequiredModal');
+    const hasOpenClockEntry = <?= $hasOpenClockEntryToday ? 'true' : 'false' ?>;
+    const showRequiredModal = <?= $showClockEntryRequiredModal ? 'true' : 'false' ?>;
+    const showModal = () => {
+        if (!modalElement || typeof bootstrap === 'undefined') return false;
+        bootstrap.Modal.getOrCreateInstance(modalElement).show();
+        return true;
+    };
+
+    document.addEventListener('submit', (event) => {
+        const action = event.target.querySelector('input[name="action"]');
+        if (!hasOpenClockEntry && action && ['start_of_operation', 'resume_operation'].includes(action.value) && showModal()) {
+            event.preventDefault();
+        }
+    });
+    window.addEventListener('load', () => {
+        if (showRequiredModal) showModal();
+    }, { once: true });
+})();
+
 (() => {
     const indicators = document.querySelectorAll('[data-daily-indicator]');
     if (!indicators.length) return;
