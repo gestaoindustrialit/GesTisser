@@ -6,6 +6,22 @@ if (defined('GESTISSER_ERP_MIGRATIONS_LOADED')) {
 }
 define('GESTISSER_ERP_MIGRATIONS_LOADED', true);
 
+// Bump this value whenever the phase-one schema below changes.  The marker lets
+// normal page requests stay read-only instead of re-running hundreds of
+// CREATE/INSERT/UPDATE statements and competing with the backup process.
+define('GESTISSER_ERP_SCHEMA_VERSION', '2026100601');
+
+function gt_erp_schema_is_current(PDO $pdo): bool
+{
+    if (!gt_erp_migration_table_exists($pdo, 'gestisser_erp_schema_migrations')) {
+        return false;
+    }
+
+    $stmt = $pdo->prepare('SELECT 1 FROM gestisser_erp_schema_migrations WHERE version=? LIMIT 1');
+    $stmt->execute([GESTISSER_ERP_SCHEMA_VERSION]);
+    return (bool) $stmt->fetchColumn();
+}
+
 function gt_erp_migration_table_exists(PDO $pdo, string $table): bool
 {
     $stmt = $pdo->prepare("SELECT 1 FROM sqlite_master WHERE type='table' AND name=? LIMIT 1");
@@ -166,7 +182,10 @@ function gt_erp_run_phase1_migrations(PDO $pdo)
     if ($ran) {
         return;
     }
-    $ran = true;
+    if (gt_erp_schema_is_current($pdo)) {
+        $ran = true;
+        return;
+    }
 
     $needsBackup = !gt_erp_migration_table_exists($pdo, 'erp_stock_movements') || !gt_erp_migration_table_exists($pdo, 'erp_raw_materials');
     if ($needsBackup) {
@@ -430,7 +449,11 @@ function gt_erp_run_phase1_migrations(PDO $pdo)
         foreach ([['BOB','Bobina'],['PAL','Palete'],['PRD','Produção'],['EXP','Expedição']] as $lt) { $pdo->prepare('INSERT OR IGNORE INTO erp_location_types(code,description) VALUES (?,?)')->execute($lt); }
         foreach ([['BL','Branco laminado'],['BNL','Branco não laminado'],['TL','Transparente laminado'],['TNL','Transparente não laminado'],['R30','R30'],['R50','R50']] as $mf) { $pdo->prepare('INSERT OR IGNORE INTO erp_material_features(code,description) VALUES (?,?)')->execute($mf); }
         $pdo->exec('INSERT OR IGNORE INTO erp_locations(warehouse_id, code, description) SELECT id, "GERAL", "Localização geral" FROM erp_warehouses');
+        $pdo->exec('CREATE TABLE IF NOT EXISTS gestisser_erp_schema_migrations (version TEXT PRIMARY KEY, applied_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP)');
+        $marker = $pdo->prepare('INSERT OR IGNORE INTO gestisser_erp_schema_migrations(version) VALUES (?)');
+        $marker->execute([GESTISSER_ERP_SCHEMA_VERSION]);
         $pdo->commit();
+        $ran = true;
     } catch (Throwable $e) {
         $pdo->rollBack();
         throw $e;

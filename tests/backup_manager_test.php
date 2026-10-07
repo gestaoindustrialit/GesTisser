@@ -46,6 +46,24 @@ $zip = new ZipArchive();
 backup_assert($zip->open($archive) === true, 'O ZIP não pode ser aberto.');
 backup_assert($zip->locateName('database.sqlite') !== false, 'A base de dados não está no backup.');
 backup_assert($zip->getFromName('uploads/prova.txt') === 'anexo', 'Os uploads não foram incluídos.');
+
+// A cópia deve ser apenas leitora: o processo de backup não pode adquirir a
+// reserva de escrita que anteriormente fazia a navegação ERP terminar em 500.
+$writer = new PDO('sqlite:' . $database);
+$writer->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
+$writer->exec('PRAGMA journal_mode=WAL');
+$writer->exec('BEGIN IMMEDIATE');
+$writer->exec("INSERT INTO sample(value) VALUES ('ainda não confirmado')");
+$parallelSnapshot = $root . '/storage/backups/parallel.sqlite';
+$snapshotMethod = new ReflectionMethod(BackupManager::class, 'createDatabaseSnapshot');
+$snapshotMethod->setAccessible(true);
+$snapshotMethod->invoke($manager, $parallelSnapshot);
+$parallelPdo = new PDO('sqlite:' . $parallelSnapshot);
+backup_assert((int) $parallelPdo->query('SELECT COUNT(*) FROM sample')->fetchColumn() === 1, 'O snapshot incluiu uma escrita ainda não confirmada.');
+$parallelPdo = null;
+$writer->exec('ROLLBACK');
+$writer = null;
+@unlink($parallelSnapshot);
 $restored = $root . '/restored.sqlite';
 file_put_contents($restored, $zip->getFromName('database.sqlite'));
 $zip->close();
