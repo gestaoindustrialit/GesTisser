@@ -115,6 +115,20 @@ function has_shopfloor_only_navigation(array $user): bool
     return is_pin_only_user($user) || (string) ($user['access_profile'] ?? 'Utilizador') === 'Utilizador';
 }
 
+/** Users that can enter Shopfloor may also retrieve its protected artwork. */
+function can_access_shopfloor_artwork(array $user): bool
+{
+    if ((int) ($user['is_admin'] ?? 0) === 1 || is_pin_only_user($user)) {
+        return true;
+    }
+
+    $email = strtolower(trim((string) ($user['email'] ?? '')));
+    $profile = (string) ($user['access_profile'] ?? 'Utilizador');
+
+    return $email === 'shopfloor@tisser.pt'
+        || in_array($profile, ['Utilizador', 'Produção', 'Chefias', 'RH', 'Shopfloor'], true);
+}
+
 function redirect(string $url)
 {
     header('Location: ' . $url);
@@ -135,15 +149,23 @@ function require_login()
         redirect('login.php');
     }
 
+    $currentPage = basename((string) ($_SERVER['SCRIPT_NAME'] ?? ''));
     if (is_pin_only_user($user)) {
-        $allowedPages = ['shopfloor.php', 'logout.php'];
-        $currentPage = basename((string) ($_SERVER['SCRIPT_NAME'] ?? ''));
+        // Artwork is a protected Shopfloor resource, not an ERP screen. Without
+        // this exception a PIN-only terminal receives the shopfloor HTML through
+        // a login redirect where PDF.js expects application/pdf.
+        $allowedPages = ['shopfloor.php', 'article_artwork.php', 'logout.php'];
         if (!in_array($currentPage, $allowedPages, true)) {
             redirect('shopfloor.php');
         }
     }
 
-    $currentPage = basename((string) ($_SERVER['SCRIPT_NAME'] ?? ''));
+    // A binary resource request must never turn into an HTML redirect because
+    // of an announcement, nor start background jobs before streaming the PDF.
+    if ($currentPage === 'article_artwork.php') {
+        return;
+    }
+
     if ($currentPage !== 'shopfloor.php') {
         $sessionLoginAt = trim((string) ($_SESSION['login_at'] ?? ''));
         $pendingAnnouncement = fetch_pending_shopfloor_announcement_ack($pdo, (int) $user['id'], $sessionLoginAt);
