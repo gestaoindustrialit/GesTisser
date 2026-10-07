@@ -6,8 +6,7 @@ require_once __DIR__ . '/article_document.php';
 
 require_login();
 $user = current_user($pdo) ?: [];
-$profile = (string) ($user['access_profile'] ?? 'Utilizador');
-if ((int) ($user['is_admin'] ?? 0) !== 1 && !in_array($profile, ['Utilizador', 'Produção', 'Chefias', 'RH'], true)) {
+if (!can_access_shopfloor_artwork($user)) {
     http_response_code(403);
     exit('Acesso reservado ao Shopfloor.');
 }

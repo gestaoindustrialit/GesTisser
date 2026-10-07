@@ -51,8 +51,7 @@ $isAdmin = is_admin($pdo, $userId);
 $profile = (string) ($user['access_profile'] ?? 'Utilizador');
 $canViewErp = gt_erp_user_can($pdo, $user, 'erp.view');
 $isArticleDocumentRequest = in_array($requestedPage, ['article_document', 'article_document_thumbnail'], true);
-$canViewShopfloorArtwork = $isArticleDocumentRequest
-    && in_array($profile, ['Utilizador', 'Produção', 'Chefias', 'RH'], true);
+$canViewShopfloorArtwork = $isArticleDocumentRequest && can_access_shopfloor_artwork($user);
 // Article artwork is also part of the Shopfloor. In particular, PIN-only
 // operators normally use the "Utilizador" profile and deliberately have no
 // access to the rest of the ERP; blocking these two authenticated endpoints

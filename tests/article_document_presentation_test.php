@@ -97,9 +97,16 @@ if (strpos($articleDocumentSource, "app_config('paths.uploads')") === false) {
 
 $erpSource = (string) file_get_contents(__DIR__ . '/../erp.php');
 if (strpos($erpSource, "['article_document', 'article_document_thumbnail']") === false
-    || strpos($erpSource, "['Utilizador', 'Produção', 'Chefias', 'RH']") === false
+    || strpos($erpSource, 'can_access_shopfloor_artwork($user)') === false
     || strpos($erpSource, 'if (!$canViewErp && !$canViewShopfloorArtwork)') === false) {
     throw new RuntimeException('Os operadores autenticados do Shopfloor não conseguem abrir a maquete.');
+}
+$helpersSource = (string) file_get_contents(__DIR__ . '/../helpers.php');
+if (strpos($helpersSource, "'article_artwork.php'") === false
+    || strpos($helpersSource, "shopfloor@tisser.pt") === false
+    || strpos($helpersSource, "'Shopfloor'") === false
+    || strpos($helpersSource, "if (\$currentPage === 'article_artwork.php')") === false) {
+    throw new RuntimeException('A conta dedicada e os terminais Shopfloor não têm permissão para obter a maquete.');
 }
 unlink($root . '/storage/uploads/test.pdf');
 rmdir($root . '/storage/uploads');
