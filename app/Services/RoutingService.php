@@ -5,6 +5,7 @@ final class RoutingService
 {
     /** @var PDO */
     private $pdo;
+    private $transactionActive = false;
     public function __construct(PDO $pdo) { $this->pdo = $pdo; }
 
     public function saveOperation(array $data, array $machineIds, int $userId): int
@@ -194,17 +195,23 @@ final class RoutingService
      */
     private function transaction(callable $callback)
     {
-        if ($this->pdo->inTransaction()) return $callback();
+        if ($this->transactionActive || $this->pdo->inTransaction()) return $callback();
 
         $attempt = 0;
         while (true) {
             try {
                 $this->pdo->exec('BEGIN IMMEDIATE');
+                $this->transactionActive = true;
                 $result = $callback();
-                $this->pdo->commit();
+                // PHP 7.0 PDO does not track a transaction opened with SQL BEGIN.
+                $this->pdo->exec('COMMIT');
+                $this->transactionActive = false;
                 return $result;
             } catch (Throwable $exception) {
-                if ($this->pdo->inTransaction()) $this->pdo->rollBack();
+                if ($this->transactionActive) {
+                    try { $this->pdo->exec('ROLLBACK'); }
+                    finally { $this->transactionActive = false; }
+                }
                 $attempt++;
                 if ($attempt >= 3 || !$this->isDatabaseBusy($exception)) throw $exception;
                 usleep($attempt * 100000);

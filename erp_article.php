@@ -1,5 +1,5 @@
 <?php
-// Read-only bootstrap: do not trigger the legacy ERP's schema/status writes.
+// Consultation never triggers migrations/status writes; explicit saves use the shared writers.
 function db() {return $GLOBALS['pdo'];}
 function has_shopfloor_only_navigation(array $user): bool {
     return (int)($user['is_admin']??0)!==1 && ((int)($user['pin_only_login']??0)===1 || (string)($user['access_profile']??'')==='Utilizador');
@@ -12,10 +12,10 @@ require_once __DIR__.'/app/Services/ArticleTheoreticalWeight.php';
 require_once __DIR__.'/app/Services/ArticlePalletWeight.php';
 $path=app_config('db_path');
 if(!is_file($path)){http_response_code(503);exit('Base de dados indisponível.');}
-$pdo=new PDO('sqlite:'.$path);$pdo->setAttribute(PDO::ATTR_ERRMODE,PDO::ERRMODE_EXCEPTION);$pdo->setAttribute(PDO::ATTR_DEFAULT_FETCH_MODE,PDO::FETCH_ASSOC);$pdo->exec('PRAGMA query_only=ON');
+$pdo=new PDO('sqlite:'.$path);$pdo->setAttribute(PDO::ATTR_ERRMODE,PDO::ERRMODE_EXCEPTION);$pdo->setAttribute(PDO::ATTR_DEFAULT_FETCH_MODE,PDO::FETCH_ASSOC);$pdo->exec('PRAGMA foreign_keys=ON');$pdo->exec('PRAGMA busy_timeout=5000');$pdo->exec('PRAGMA query_only=ON');
 require_login();$user=current_user($pdo)?:[];
 if(!gt_erp_user_can($pdo,$user,'erp.view')){http_response_code(403);exit('Sem permissão para consultar artigos.');}
-if(($_SERVER['REQUEST_METHOD']??'GET')!=='GET'){http_response_code(405);header('Allow: GET');exit('A ficha é de consulta.');}
+$method=$_SERVER['REQUEST_METHOD']??'GET';if(!in_array($method,['GET','POST'],true)){http_response_code(405);header('Allow: GET, POST');exit('Método não permitido.');}
 $id=filter_input(INPUT_GET,'id',FILTER_VALIDATE_INT)?:0;
 $service=new ArticleProfile($pdo);$article=$id>0?$service->article($id):null;
 if(!$article){http_response_code(404);exit('Artigo não encontrado.');}
@@ -24,6 +24,8 @@ $tabs=['overview'=>'Visão Geral','technical'=>'Dados Técnicos','routing'=>'Rou
 $tab=is_scalar($_GET['tab']??'')?(string)($_GET['tab']??'overview'):'overview';if(!isset($tabs[$tab]))$tab='overview';
 if(($tab==='costs'&&!$financial)||($tab==='routing'&&!$canRouting)){http_response_code(403);exit('Sem permissão para consultar este separador.');}
 $filters=ArticleProfile::filters($_GET);
+$editing=($_GET['edit']??'')==='1';$flashError='';if($editing){if(!gt_erp_user_can($pdo,$user,'erp.master_data')){http_response_code(403);exit('Sem permissão para editar artigos.');}$tab='technical';}
+
 function ap_url($id,$tab='overview',array $filters=[]) {return 'erp.php?'.http_build_query(array_merge(['page'=>'article_profile','id'=>$id,'tab'=>$tab],$filters));}
 function ap_number($v,$precision=2) {return $v===null?'Sem dados':number_format((float)$v,$precision,',',' ');}
 function ap_value($v,$unit='') {return $v===null||trim((string)$v)===''?'Sem dados':(string)$v.($unit!==''?' '.$unit:'');}
@@ -34,6 +36,45 @@ function ap_fields(array $article,array $fields) {
     foreach($fields as $field=>$label){echo '<dt class="col-sm-5">'.h($label).'</dt><dd class="col-sm-7">'.h(ap_value($article[$field]??null)).'</dd>';}
     echo '</dl>';
 }
+// Validate the action, permission, CSRF and article relationship before allowing writes.
+$routingActions=['new_version','activate','save_template','apply_template','add_step','update_step','delete_step','delete_version','move'];
+$action=is_scalar($_POST['action']??null)?(string)$_POST['action']:'';
+if($method==='POST'){
+    $chunk=($_GET['article_upload']??'')==='chunk';$isRouting=$tab==='routing'&&in_array($action,$routingActions,true);
+    if(!$chunk&&!$isRouting&&!in_array($action,['save_article','duplicate_article','delete_article_document'],true)){http_response_code(405);exit('Ação não permitida.');}
+    $permission=$isRouting?($action==='activate'?'erp.routings.activate':'erp.routings.edit'):'erp.master_data';
+    if(!gt_erp_user_can($pdo,$user,$permission)){http_response_code(403);exit('Sem permissão para esta ação.');}
+    $token=$_POST['_token']??'';if(!is_string($token)||$token===''||!hash_equals(csrf_token(),$token)){http_response_code(419);exit('Pedido inválido. Atualize a página e tente novamente.');}
+    if(!$chunk){$posted=is_scalar($_POST['article_id']??null)?filter_var($_POST['article_id'],FILTER_VALIDATE_INT):false;if($posted!==$id){http_response_code(400);exit('Artigo inválido para esta ficha.');}}
+    if($chunk){
+        require_once __DIR__.'/app/Services/ArticleDocumentChunkUpload.php';header('Content-Type: application/json');
+        try{$complete=ArticleDocumentChunkUpload::receive((int)$user['id'],$_POST,$_FILES['chunk']??[]);echo json_encode(['ok'=>true,'complete'=>$complete]);}catch(Throwable $e){http_response_code(422);echo json_encode(['ok'=>false,'error'=>$e->getMessage()]);}exit;
+    }
+    if($isRouting){
+        foreach(['version_id','source_version_id'] as $field){if(!isset($_POST[$field]))continue;$value=is_scalar($_POST[$field])?filter_var($_POST[$field],FILTER_VALIDATE_INT):false;if($field==='source_version_id'&&$value===0)continue;
+            $check=$pdo->prepare('SELECT 1 FROM erp_article_routing_versions v JOIN erp_article_routings r ON r.id=v.routing_id WHERE v.id=? AND r.finished_product_id=?');$check->execute([$value,$id]);if(!$check->fetchColumn()){http_response_code(400);exit('Versão de outro artigo ou inexistente.');}}
+        if(isset($_POST['step_id'])){$value=is_scalar($_POST['step_id'])?filter_var($_POST['step_id'],FILTER_VALIDATE_INT):false;$check=$pdo->prepare('SELECT 1 FROM erp_article_routing_steps s JOIN erp_article_routing_versions v ON v.id=s.routing_version_id JOIN erp_article_routings r ON r.id=v.routing_id WHERE s.id=? AND r.finished_product_id=?');$check->execute([$value,$id]);if(!$check->fetchColumn()){http_response_code(400);exit('Operação de outro artigo ou inexistente.');}}
+    }else{
+        require_once __DIR__.'/app/Services/ArticleEditor.php';$input=$_POST;if($action==='delete_article_document')$input['document_id']=$_POST['document_id']??$_GET['document_id']??0;
+        try{$pdo->exec('PRAGMA query_only=OFF');$pdo->beginTransaction();
+            if($action==='save_article')$result=ArticleEditor::save($pdo,$input,(int)$user['id']);
+            elseif($action==='duplicate_article')$result=ArticleEditor::duplicate($pdo,$input,(int)$user['id']);
+            else $result=ArticleEditor::deleteDocument($pdo,$input,(int)$user['id']);
+            $pdo->commit();$target=ap_url($result['id'],'technical',['saved'=>'1']);if($action==='duplicate_article')$target=ap_url($result['id'],'technical',['edit'=>'1','duplicated'=>'1']);
+        }catch(Throwable $e){if($pdo->inTransaction())$pdo->rollBack();error_log('Article profile save failed: '.$e->getMessage());$flashError=$e instanceof PDOException?'Não foi possível guardar o artigo. Verifique os dados e se o código já existe.':$e->getMessage();http_response_code(422);$editing=true;$tab='technical';}
+        finally{$pdo->exec('PRAGMA query_only=ON');}
+        if($flashError===''){header('Location: '.$target,true,303);exit;}
+    }
+}
+function ap_routing_markup(PDO $pdo,array $user,$id){
+    $embeddedRouting=true;$profileArticleId=$id;ob_start();
+    try{if(($_SERVER['REQUEST_METHOD']??'GET')==='POST'){$pdo->exec('PRAGMA query_only=OFF');$pdo->beginTransaction();}
+        require __DIR__.'/erp_routing.php';if($pdo->inTransaction())$pdo->commit();return ob_get_clean();
+    }catch(Throwable $e){if($pdo->inTransaction())$pdo->rollBack();ob_end_clean();throw $e;}
+    finally{$pdo->exec('PRAGMA query_only=ON');}
+}
+$routingMarkup=$tab==='routing'?ap_routing_markup($pdo,$user,$id):'';
+
 $documents=in_array($tab,['overview','documents'],true)?$service->documents($id):[];
 if(($_GET['action']??'')==='export'){
     if(!gt_erp_user_can($pdo,$user,'erp.reports_export')){http_response_code(403);exit('Sem permissão para exportar.');}
@@ -45,23 +86,34 @@ if(($_GET['action']??'')==='export'){
 $summary=$service->summary($id,$financial);$data=[];$routing=null;$materials=[];$versions=[];$colors=[];$features=[];
 if($tab==='overview'){$data=$service->history($id,$filters,'overview',5);if($canRouting)$routing=['active'=>$service->activeRouting($id)];}
 if(in_array($tab,['history','costs','trace'],true))$data=$service->history($id,$filters,$tab);
-if($tab==='routing')$routing=$service->routing($id,is_scalar($_GET['version']??null)?(int)($_GET['version']??0):0);
+
 if($tab==='technical'){$materials=$service->materials($id);$versions=$service->technicalVersions($id);$colors=$service->colors($id);$features=$service->features($id);}
 $historicalVersion=$tab==='technical'&&is_scalar($_GET['technical_version']??null)?$service->technicalVersion($id,(int)$_GET['technical_version']):null;
 $movements=$tab==='trace'?$service->movements($id,$filters,is_scalar($_GET['mp']??null)?(int)$_GET['mp']:1):[];
 $reverse=$tab==='trace'?$service->reverseTrace($id,is_scalar($_GET['unit_type']??null)?(string)$_GET['unit_type']:'',is_scalar($_GET['stock_unit']??null)?(int)$_GET['stock_unit']:0):[];
 $statuses=$tab==='history'||$tab==='costs'||$tab==='trace'?$service->options($id):[];
+if($editing){
+    require_once __DIR__.'/app/Services/ArticleFormSupport.php';$selectedArticle=$article;$articleFormBackUrl=ap_url($id,'technical');
+    if($method==='POST'&&$flashError!==''){foreach($_POST as $field=>$value){if(array_key_exists($field,$selectedArticle)&&is_scalar($value))$selectedArticle[$field]=$value;}foreach(['front_colors','back_colors','of_front_colors','of_back_colors'] as $field)if(isset($_POST[$field])&&is_array($_POST[$field]))$selectedArticle[$field]=$_POST[$field];}
+    $customers=$pdo->query('SELECT id,name FROM erp_customers ORDER BY name')->fetchAll();$units=$pdo->query('SELECT id,code,name FROM erp_units ORDER BY code')->fetchAll();
+    $rawMaterials=$pdo->query('SELECT r.*,u.code unit_code FROM erp_raw_materials r LEFT JOIN erp_units u ON u.id=r.primary_unit_id ORDER BY r.code')->fetchAll();$inkMaterials=array_values(array_filter($rawMaterials,function($m){return $m['product_category']==='subsidiary'&&$m['status']==='Ativo';}));
+    $q=$pdo->prepare('SELECT * FROM erp_article_materials WHERE finished_product_id=? ORDER BY id');$q->execute([$id]);$articleMaterials=$q->fetchAll();
+    if($method==='POST'&&$flashError!==''&&$action==='save_article'){$articleMaterials=[];foreach(is_array($_POST['material_id']??null)?$_POST['material_id']:[] as $index=>$materialId){$item=[];foreach(['raw_material_id'=>'material_id','quantity_per_unit'=>'material_quantity','waste_percent'=>'material_waste','notes'=>'material_notes'] as $field=>$key){$value=$_POST[$key][$index]??'';$item[$field]=is_scalar($value)?$value:'';}$articleMaterials[]=$item;}foreach(['of_colors_match_technical','microperforation','has_handle','has_holes','has_gusset','centered_gusset'] as $field)$selectedArticle[$field]=isset($_POST[$field])?1:0;}
+$articleDocuments=array_values(array_filter($service->documents($id),function($d){return $d['status']==='Ativo';}));
+}
 $pageTitle='Ficha de artigo';$navbarClockControl=[];require __DIR__.'/partials/header.php';
 ?>
 <link rel="stylesheet" href="assets/customer-profile.css?v=<?= h((string)filemtime(__DIR__.'/assets/customer-profile.css')) ?>">
 <div class="container-fluid py-4 customer-profile">
+<?php if($flashError!==''): ?><div class="alert alert-danger" role="alert"><?= h($flashError) ?></div><?php elseif(($_GET['duplicated']??'')==='1'): ?><div class="alert alert-success" role="status">Artigo duplicado. Reveja os dados da cópia.</div><?php elseif(($_GET['saved']??'')==='1'): ?><div class="alert alert-success" role="status">Artigo atualizado com sucesso.</div><?php endif; ?>
+<?php if($editing): ?><script defer src="assets/article-editor.js?v=<?= h((string)filemtime(__DIR__.'/assets/article-editor.js')) ?>"></script><?php endif; ?>
 <header class="d-flex flex-wrap justify-content-between align-items-start gap-3 mb-4">
 <div><a class="btn btn-sm btn-outline-secondary" href="erp.php?page=articles"><i class="bi bi-arrow-left me-1"></i>Voltar à lista</a><div class="small text-secondary mt-3"><?= h($article['code']) ?></div><h1 class="h3 mb-2"><?= h($article['description']) ?></h1>
 <div class="d-flex flex-wrap gap-2 align-items-center"><span class="badge <?= $article['status']==='Ativo'?'text-bg-success':'text-bg-secondary' ?>"><?= h($article['status']) ?></span>
 <?php if($article['customer_id']&&$article['customer_name']!==null): ?><a href="erp.php?page=customer_profile&amp;id=<?= (int)$article['customer_id'] ?>"><?= h($article['customer_name']) ?></a><?php else: ?><span class="text-secondary">Sem cliente associado</span><?php endif; ?></div>
 <p class="small text-secondary mt-2 mb-0"><?= h(ap_value($article['width'],'cm').' × '.ap_value($article['length'],'cm').' · '.ap_value($article['grammage'],'g/m²').' · Cores por face: '.ap_value($article['colors_per_face'])) ?></p>
 <?php if(!empty($article['proof_reference'])): ?><p class="small mt-2 mb-0">Prova: <?= h($article['proof_reference']) ?></p><?php endif; ?></div>
-<div class="d-flex flex-wrap gap-2"><?php if(gt_erp_user_can($pdo,$user,'erp.master_data')): ?><a class="btn btn-outline-primary" href="erp.php?page=articles&amp;article_id=<?= $id ?>#article-editor">Editar artigo</a><?php endif; ?><?php if($canRouting): ?><a class="btn btn-outline-success" href="erp_routing.php?article_id=<?= $id ?>">Routing</a><?php endif; ?><?php if(gt_erp_user_can($pdo,$user,'erp.reports_export')): ?><a class="btn btn-outline-secondary" href="<?= h(ap_url($id,'technical',['action'=>'export'])) ?>" target="_blank" rel="noopener">Exportar ficha técnica</a><?php endif; ?></div>
+<div class="d-flex flex-wrap gap-2"><?php if(gt_erp_user_can($pdo,$user,'erp.master_data')): ?><a class="btn btn-outline-primary" href="<?= h(ap_url($id,'technical',['edit'=>'1'])) ?>">Editar artigo</a><?php endif; ?><?php if(gt_erp_user_can($pdo,$user,'erp.master_data')): ?><form method="post" action="<?= h(ap_url($id)) ?>"><?= csrf_input() ?><input type="hidden" name="article_id" value="<?= $id ?>"><button class="btn btn-outline-secondary" name="action" value="duplicate_article">Duplicar artigo</button></form><?php endif; ?><?php if($canRouting): ?><a class="btn btn-outline-success" href="<?= h(ap_url($id,'routing')) ?>">Routing</a><?php endif; ?><?php if(gt_erp_user_can($pdo,$user,'erp.reports_export')): ?><a class="btn btn-outline-secondary" href="<?= h(ap_url($id,'technical',['action'=>'export'])) ?>" target="_blank" rel="noopener">Exportar ficha técnica</a><?php endif; ?></div>
 </header>
 <div class="row g-3 mb-4">
 <?php $cards=[['Total de encomendas','Sem dados','Histórico comercial por integrar'],['Total de ordens de fabrico',ap_value($summary['ofs']),'Relação pelo identificador do artigo'],['Quantidade total produzida',ap_quantity($summary['quantity'],$article['unit']),'Quantidade registada nas OF'],['Última produção',ap_date($summary['last_production']),'Produção encerrada ou fecho com produção'],['Custo real médio de produção',$financial?ap_value($summary['average_cost']===null?null:ap_number($summary['average_cost']),'€ / OF'):'Acesso reservado',$financial?'Média dos totais de '.$summary['closed_ofs'].' OF com fecho e produção':'Requer permissão de custeio'],['Tempo total de produção concluído',ap_value($summary['hours']===null?null:ap_number($summary['hours']),'h'),'Registos encerrados; desconta pausas']];foreach($cards as $card): ?>
@@ -74,7 +126,8 @@ $pageTitle='Ficha de artigo';$navbarClockControl=[];require __DIR__.'/partials/h
 <?php foreach(['from'=>'Desde','to'=>'Até'] as $key=>$label): ?><div class="col-6 col-md-3"><label class="form-label small" for="<?= $key ?>"><?= h($label) ?></label><input class="form-control" type="date" id="<?= $key ?>" name="<?= $key ?>" value="<?= h($filters[$key]) ?>"></div><?php endforeach; ?>
 <div class="col-6 col-md-3"><label class="form-label small" for="status">Estado</label><select class="form-select" id="status" name="status"><option value="">Todos</option><?php foreach($statuses as $r): ?><option value="<?= h($r['status']) ?>" <?= $filters['status']===$r['status']?'selected':'' ?>><?= h($r['status']) ?></option><?php endforeach; ?></select></div><div class="col-6 col-md-3 align-self-end"><button class="btn btn-primary w-100">Filtrar</button></div></form>
 <?php endif; ?>
-<?php if($tab==='overview'): ?>
+<?php if($tab==='technical'&&$editing): require __DIR__.'/partials/article-profile-form.php'; ?>
+<?php elseif($tab==='overview'): ?>
 <div class="row g-3 mb-4"><div class="col-md-6"><?php ap_fields($article,['code'=>'Código','description'=>'Descrição','status'=>'Estado','composition'=>'Composição','material'=>'Material','bag_color'=>'Cor','width'=>'Largura (cm)','length'=>'Comprimento (cm)','grammage'=>'Gramagem (g/m²)','seam_type'=>'Costura','perforation_type'=>'Perfuração','gusset_length'=>'Medida do fole']); ?></div><div class="col-md-6"><h3 class="h6">Roteiro ativo</h3><p><?= h(!$canRouting?'Acesso reservado':($routing['active']?'Versão '.$routing['active']['version_no'].' · '.ap_date($routing['active']['effective_from']):'Sem routing ativo.')) ?></p><h3 class="h6">Última atividade produtiva concluída</h3><p><?= h(ap_date($summary['last_production'])) ?></p><a class="btn btn-sm btn-outline-primary" href="<?= h(ap_url($id,'technical')) ?>">Consultar todos os dados técnicos</a></div></div><h3 class="h6">Últimas ordens de fabrico</h3>
 <?php elseif($tab==='technical'): ?>
 <?php $groups=[
@@ -94,12 +147,7 @@ $technical=$article;$technical['theoretical_weight']=ArticleTheoreticalWeight::g
 <h3 class="h6 mt-3">Versões da ficha técnica</h3><ul><?php foreach($versions as $v): ?><li><a href="<?= h(ap_url($id,'technical',['technical_version'=>$v['id']])) ?>"><?= h('Versão '.$v['version_no'].' · '.$v['status'].' · '.ap_date($v['effective_from'])) ?></a></li><?php endforeach; ?></ul><?php if(!$versions): ?><p class="text-secondary">Sem versões técnicas registadas.</p><?php endif; ?><p class="small text-secondary">As fichas efetivamente usadas na produção podem ser abertas no histórico de OF.</p>
 <?php if($historicalVersion): $historical=json_decode($historicalVersion['snapshot_json'],true)?:[]; ?><div class="border rounded p-3 mt-3"><h3 class="h6">Snapshot histórico · versão <?= (int)$historicalVersion['version_no'] ?></h3><p class="small text-secondary">Valores guardados nesta versão. Campos ausentes não são preenchidos a partir do artigo atual.</p><div class="row g-3"><?php foreach($groups as $title=>$fields): ?><div class="col-lg-6"><h4 class="h6"><?= h($title) ?></h4><?php ap_fields($historical,$fields); ?></div><?php endforeach; ?></div><h4 class="h6">Matérias-primas da versão</h4><ul><?php foreach($historical['_materials']??[] as $m): ?><li><?= h(ap_value($m['code']??null).' · '.ap_quantity($m['quantity_per_unit']??null,$m['unit_code']??null).' · desperdício '.ap_value($m['waste_percent']??null,'%')) ?></li><?php endforeach; ?></ul><?php if(empty($historical['_materials'])): ?><p class="text-secondary">Sem BOM neste snapshot.</p><?php endif; ?></div><?php endif; ?>
 <?php elseif($tab==='routing'): ?>
-<a class="btn btn-sm btn-outline-success mb-3" href="erp_routing.php?article_id=<?= $id ?>">Gerir routing</a>
-<?php if(!$routing['active']): ?><p class="alert alert-info">Este artigo não tem routing ativo.</p><?php endif; ?>
-<?php if($routing['versions']): ?><form method="get" class="d-flex flex-wrap gap-2 mb-3"><input type="hidden" name="page" value="article_profile"><input type="hidden" name="id" value="<?= $id ?>"><input type="hidden" name="tab" value="routing"><label for="version" class="align-self-center">Histórico de versões</label><select class="form-select cp-search" id="version" name="version"><option value="">Versão ativa</option><?php foreach($routing['versions'] as $v): ?><option value="<?= (int)$v['id'] ?>" <?= $routing['selected']&&(int)$routing['selected']['id']===(int)$v['id']?'selected':'' ?>><?= h($v['routing_name'].' · v'.$v['version_no'].' · '.$v['status'].' · '.ap_date($v['effective_from']?:$v['created_at'])) ?></option><?php endforeach; ?></select><button class="btn btn-primary">Consultar</button></form><?php endif; ?>
-<?php if($routing['selected']): ?><p><?= h('Versão '.$routing['selected']['version_no'].' · '.$routing['selected']['status'].' · '.ap_date($routing['selected']['effective_from']?:$routing['selected']['created_at'])) ?></p><?php endif; ?>
-<div class="table-responsive"><table class="table align-middle"><thead><tr><th>Ordem / Operação</th><th>Centros / Máquinas</th><th>Operadores</th><th>Preparação</th><th>Ciclo / Cadência</th><th>Quantidade base</th><th>Consumos / unidade</th></tr></thead><tbody><?php foreach($routing['steps'] as $r): $snap=json_decode($r['operation_snapshot_json'],true)?:[];$calculation=['seconds_per_unit'=>'s / unidade','minutes_per_unit'=>'min / unidade','units_per_hour'=>'unidades / h','meters_per_minute'=>'m / min']; ?>
-<tr><td><?= (int)$r['sort_order'] ?> · <?= h($snap['name']??$r['operation_name']??'Operação histórica') ?><div class="small text-secondary"><?= !empty($r['is_active'])?'Ativa':'Inativa' ?></div></td><td><?= h(implode(' · ',$routing['centers'][$r['id']]??array_filter([$r['work_center_name']]))?:'Sem dados') ?><div class="small text-secondary"><?= h(implode(' · ',$routing['machines'][$r['id']]??array_filter([$r['machine_name']]))?:'Sem dados') ?></div></td><td><?= (int)$r['operators_count'] ?></td><td><?= h(ap_number($r['setup_time']).' min') ?></td><td><?= h(ap_number($r['run_value']).' '.($calculation[$r['calculation_unit']]??$r['calculation_unit'])) ?></td><td><?= h(ap_quantity($r['base_quantity'],$article['unit'])) ?></td><td><?php foreach($routing['materials'][$r['id']]??[] as $m): ?><div><?= h($m['code'].' — '.$m['description'].' · '.ap_quantity($m['quantity_per_unit'],$m['unit'])) ?></div><?php endforeach; ?><?php if(empty($routing['materials'][$r['id']])): ?>Sem consumos associados<?php endif; ?></td></tr><?php endforeach; ?><?php if(!$routing['steps']): ?><tr><td colspan="7">Sem operações nesta versão.</td></tr><?php endif; ?></tbody></table></div>
+<?= $routingMarkup ?>
 <?php elseif($tab==='history'): ?><h3 class="h6">Encomendas</h3><p class="text-secondary">Sem dados de encomendas comerciais ou quantidades entregues. As encomendas existentes são compras a fornecedores. O histórico Bobinas será apresentado quando houver relações comprovadas com o artigo.</p><h3 class="h6 mt-4">Ordens de fabrico</h3>
 <?php elseif($tab==='costs'): ?><p class="small text-secondary">Totais previstos e reais são os do fecho da OF. Os custos por categoria são apresentados separadamente e não somados novamente ao fecho. Os tempos previstos usam o snapshot do routing; os reais usam registos encerrados, descontando pausas. Tarifas atuais e preço de venda não são usados.</p>
 <?php elseif($tab==='trace'): ?><p class="small text-secondary">Artigo → OF → consumos → lotes documentados. Reservas são identificadas separadamente dos consumos efetivos. Lotes sem identificador são indicados como não registados.</p><?php if(!empty($data['truncated'])): ?><p class="alert alert-info">Resumo limitado a 200 consumos e 200 rolos por página. Abra a OF para consultar os detalhes completos.</p><?php endif; ?>

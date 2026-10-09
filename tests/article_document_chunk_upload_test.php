@@ -6,6 +6,7 @@ if (ArticleDocumentChunkUpload::CHUNK_BYTES !== 524288 || ArticleDocumentChunkUp
 }
 
 $source = (string) file_get_contents(dirname(__DIR__) . '/erp.php');
+foreach(['app/Services/ArticleEditor.php','app/Services/ArticleFormSupport.php','partials/article-profile-form.php','assets/article-editor.js'] as $file) $source.=(string)file_get_contents(dirname(__DIR__).'/'.$file);
 foreach (['article_upload', 'article_document_uploads[]', '512*1024', 'ArticleDocumentChunkUpload::persist'] as $expected) {
     if (strpos($source, $expected) === false) {
         throw new RuntimeException('Falta a integração do upload por partes: ' . $expected);

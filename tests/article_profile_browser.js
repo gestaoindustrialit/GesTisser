@@ -23,21 +23,41 @@ const fixture=JSON.parse(fs.readFileSync(process.argv[2],'utf8'));
     }
     await page.setViewportSize({width:1440,height:1000});
     await page.goto(fixture.url+'/erp.php?page=articles');
-    await page.locator('table a[href="erp.php?page=article_profile&id='+fixture.article+'"]').first().click();
+    const row=page.locator('[data-article-url="erp.php?page=article_profile&id='+fixture.article+'"]');
+    const code=row.locator('.article-profile-link').first();
+    assert(await code.evaluate(el=>getComputedStyle(el).color===getComputedStyle(el.parentElement).color),'Article code inherits row text color');
+    assert(await code.evaluate(el=>getComputedStyle(el).textDecorationLine==='none'),'Article code has no underline');
+    await row.locator('td').nth(2).click();
     assert(page.url().includes('page=article_profile'),'List opens article profile');
+    for(const key of ['Enter','Space']){
+      await page.goto(fixture.url+'/erp.php?page=articles');
+      await row.focus();await page.keyboard.press(key);
+      await page.waitForURL('**page=article_profile&id='+fixture.article);
+    }
+    await page.goto(profile);
+
     await page.locator('.customer-profile header a[href="erp.php?page=customer_profile&id='+fixture.customer+'"]').click();
     await page.locator('.cp-tabs').getByRole('link',{name:'Artigos',exact:true}).click();
     await page.locator('.customer-profile table a[href="erp.php?page=article_profile&id='+fixture.article+'"]').first().click();
     assert(page.url().includes('page=article_profile'),'Customer article returns to article profile');
     await page.getByRole('link',{name:'Editar artigo',exact:true}).click();
-    assert(await page.locator('#article-editor [name="article_id"]').inputValue()===String(fixture.article),'Original article editor ID retained');
+    assert(page.url().includes('page=article_profile')&&page.url().includes('edit=1'),'Editing stays within profile');
+    assert(await page.locator('#article-editor [name="article_id"]').inputValue()===String(fixture.article),'Shared article editor ID retained');
     await page.locator('#article-editor [name="width"]').fill('50');
     assert(await page.locator('[data-theoretical-weight]').inputValue()==='50','Existing theoretical weight updates after dimension edits');
     await page.goto(profile+'&tab=history');
     await page.getByRole('link',{name:'Seguinte',exact:true}).click();
     assert(page.url().includes('p=2'),'History pagination navigates');
     await page.goto(profile+'&tab=routing');
-    assert(await page.getByRole('link',{name:'Gerir routing',exact:true}).getAttribute('href')==='erp_routing.php?article_id='+fixture.article,'Original routing target retained');
+    assert(page.url().includes('page=article_profile'),'Routing editor stays inside article profile');
+    assert(await page.getByText('Histórico de versões',{exact:true}).count()===1,'Version management present inside article profile');
+    await page.getByRole('button',{name:'Duplicar / nova versão',exact:true}).click();
+    assert(page.url().includes('page=article_profile')&&page.url().includes('tab=routing'),'New routing version created within profile');
+    await page.getByText('Nova versão em rascunho criada.',{exact:true}).waitFor();
+    await page.goto(profile);
+    await page.getByRole('button',{name:'Duplicar artigo',exact:true}).click();
+    await page.waitForURL('**duplicated=1');
+    assert(page.url().includes('page=article_profile')&&!page.url().includes('id='+fixture.article+'&'),'Duplication opens the new article profile');
     await page.goto(fixture.url+'/erp.php?page=article_profile&id='+fixture.empty+'&tab=documents');
     assert(await page.getByText('Sem documentos associados a este artigo.',{exact:true}).count()===1,'Empty documents message');
     assert(errors.length===0,'No JavaScript errors: '+errors.join('; '));

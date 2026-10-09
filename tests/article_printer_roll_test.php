@@ -1,5 +1,6 @@
 <?php
 $erpSource = (string) file_get_contents(__DIR__ . '/../erp.php');
+foreach(['app/Services/ArticleEditor.php','app/Services/ArticleFormSupport.php','partials/article-profile-form.php','assets/article-editor.js'] as $file) $erpSource.=(string)file_get_contents(dirname(__DIR__).'/'.$file);
 $migrationSource = (string) file_get_contents(__DIR__ . '/../erp_migrations.php');
 $dossierSource = (string) file_get_contents(__DIR__ . '/../production_dossier.php');
 $printSource = (string) file_get_contents(__DIR__ . '/../production_dossier_print.php');
