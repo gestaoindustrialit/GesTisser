@@ -73,7 +73,9 @@ Modificado: `erp.php` — dispatch da ficha antes do bootstrap legado e botão C
 Criados:
 
 - `erp_material.php`: ficha GET, autenticação, permissões, filtros, sete separadores.
-- `app/Services/MaterialProfile.php`: projeções de consulta e paginação.
+- `app/Services/MaterialProfile.php`: entry point de compatibilidade para o serviço.
+- `material_profile_service.php`: implementação autónoma na raiz; a localização
+  em `app/Services` é mantida como entry point de compatibilidade.
 - `tests/material_profile_test.php`: dados reais em leitura e casos em memória.
 - `tests/material_profile_http.py`: HTTP numa cópia descartável.
 - `docs/material-profile-phase3.md`: esta auditoria e entrega.
@@ -195,3 +197,24 @@ contra a base enviada. Não foi efetuada validação visual num tablet físico.
 - A ficha foi validada no checkout e numa cópia `gestisser-dev`. A instalação real
   precisa de apontar para a base dev pelos mecanismos existentes; a base enviada
   não foi copiada para substituir `database.sqlite` da aplicação.
+
+## Correção do carregamento do serviço
+
+O log de `gestisser-dev` para a referência `295D0B56E624` registou
+`Class 'MaterialProfile' not found` em `erp_material.php`, linha 22. O erro ocorre
+ao instanciar a classe, antes de consultar materiais; não identifica uma falha SQL.
+O ficheiro carregado em `app/Services` não disponibilizou a classe nesse pedido.
+Sem acesso aos ficheiros/cache do servidor, não se distingue ficheiro incompleto
+de uma versão compilada desatualizada.
+
+A implementação foi colocada em `material_profile_service.php`, na raiz, e a
+ficha carrega diretamente esse entry point autónomo. É o padrão já usado por
+`ArticleDocument` e `ProductionDossierService` para evitar dependências de
+carregamento na pasta `app/Services`. O caminho anterior permanece um wrapper
+para os consumidores existentes; não há uma segunda implementação da classe.
+
+O teste HTTP aceita `--simulate-stale-service`: na cópia descartável, simula um
+ficheiro em `app/Services` que é incluído mas não declara a classe. O carregador
+antigo reproduz `Class 'MaterialProfile' not found`; a ficha com o entry point
+raiz deve continuar a abrir todos os separadores em PHP 7.0. A correção não
+altera o esquema, permissões ou dados da base.
