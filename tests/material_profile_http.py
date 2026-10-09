@@ -14,6 +14,8 @@ import urllib.request
 parser = argparse.ArgumentParser()
 parser.add_argument('database')
 parser.add_argument('--php', default='php')
+parser.add_argument('--simulate-stale-service', action='store_true',
+                    help='Reproduce an app/Services entry point that loads without defining MaterialProfile.')
 args = parser.parse_args()
 root = Path(__file__).resolve().parents[1]
 source = Path(args.database).resolve()
@@ -31,6 +33,14 @@ for relative in paths:
     dst = app / relative
     dst.parent.mkdir(parents=True, exist_ok=True)
     shutil.copyfile(src, dst)
+if args.simulate_stale_service:
+    entry = app / 'app' / 'Services' / 'MaterialProfile.php'
+    entry.write_text('<?php\n// Simulate an incomplete deployment or stale compiled service file.\n')
+    legacy = subprocess.run([args.php, '-r',
+        "require '"+str(entry)+"'; new MaterialProfile(new PDO('sqlite::memory:'));"],
+        capture_output=True, text=True)
+    assert legacy.returncode != 0 and 'MaterialProfile' in legacy.stderr and 'not found' in legacy.stderr, legacy.stderr
+    print("PASS: Reproduced Class 'MaterialProfile' not found with the legacy loader", flush=True)
 db = app / 'database.sqlite'
 shutil.copyfile(source, db)
 c = sqlite3.connect(db)

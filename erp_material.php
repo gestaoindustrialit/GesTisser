@@ -6,7 +6,7 @@ function has_shopfloor_only_navigation(array $user): bool {
 }
 require_once __DIR__.'/bootstrap/app.php';
 require_once __DIR__.'/erp_migrations.php';
-require_once __DIR__.'/app/Services/MaterialProfile.php';
+require_once __DIR__.'/material_profile_service.php';
 $path = app_config('db_path');
 if (!is_file($path)) { http_response_code(503); exit('Base de dados indisponível.'); }
 $pdo = new PDO('sqlite:'.$path);
