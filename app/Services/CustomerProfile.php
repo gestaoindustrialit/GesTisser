@@ -36,9 +36,13 @@ final class CustomerProfile
     }
     public function summary($id) {
         $summary=['orders'=>null,'last_order'=>null,'ofs'=>null,'quantities'=>[],'produced_articles'=>null,'hours'=>null,'last_activity'=>null];
+        if($this->exists('erp_sales_orders')) {
+            $commercial=$this->row('SELECT COUNT(*) total,MAX(order_date) last_order,MAX(updated_at) last_activity FROM erp_sales_orders WHERE customer_id=?',[$id]);
+            $summary['orders']=(int)$commercial['total'];$summary['last_order']=$commercial['last_order'];$summary['last_activity']=$commercial['last_activity'];
+        }
         if(!$this->exists('erp_production_orders'))return $summary;
         $r=$this->row('SELECT COUNT(*) total,COUNT(DISTINCT CASE WHEN produced_quantity>0 THEN finished_product_id END) produced_articles,MAX(created_at) last_created FROM erp_production_orders WHERE customer_id=?',[$id]);
-        $summary['ofs']=(int)$r['total'];$summary['produced_articles']=$r['total']>0?(int)$r['produced_articles']:null;$summary['last_activity']=$r['last_created'];
+        $summary['ofs']=(int)$r['total'];$summary['produced_articles']=$r['total']>0?(int)$r['produced_articles']:null;if($r['last_created']&&(!$summary['last_activity']||$r['last_created']>$summary['last_activity']))$summary['last_activity']=$r['last_created'];
         $summary['quantities']=$this->all('SELECT SUM(o.produced_quantity) quantity,u.code unit,CASE WHEN u.id IS NULL THEN o.order_number ELSE NULL END unknown_order FROM erp_production_orders o LEFT JOIN erp_finished_products a ON a.id=o.finished_product_id LEFT JOIN erp_products p ON p.id=o.product_id LEFT JOIN erp_units u ON u.id=COALESCE(a.unit_id,p.unit_id) WHERE o.customer_id=? GROUP BY CASE WHEN u.id IS NULL THEN "of:"||o.id ELSE "unit:"||u.id END ORDER BY u.code,o.id',[$id]);
         if($this->exists('erp_operation_time_entries')) {
             $t=$this->row('SELECT COUNT(*) total,SUM(MAX(0,(julianday(t.ended_at)-julianday(t.started_at))*24-COALESCE(t.pause_seconds,0)/3600.0)) hours,MAX(t.ended_at) last_ended FROM erp_operation_time_entries t JOIN erp_production_order_operations op ON op.id=t.production_order_operation_id JOIN erp_production_orders o ON o.id=op.production_order_id WHERE o.customer_id=? AND t.ended_at IS NOT NULL',[$id]);
