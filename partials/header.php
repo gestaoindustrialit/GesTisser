@@ -104,6 +104,7 @@ if ($currentFile === '') {
 }
 $currentErpPage = trim((string) ($_GET['page'] ?? 'overview'));
 if ($currentErpPage === 'customer_profile') { $currentErpPage = 'sales'; }
+if ($currentErpPage === 'article_profile') { $currentErpPage = 'articles'; }
 $shopfloorUserNameParts = preg_split('/\s+/u', trim((string) ($user['name'] ?? ''))) ?: [];
 $shopfloorUserShortName = $shopfloorUserNameParts !== []
     ? ($shopfloorUserNameParts[0] . (count($shopfloorUserNameParts) > 1 ? ' ' . $shopfloorUserNameParts[count($shopfloorUserNameParts) - 1] : ''))
@@ -207,7 +208,8 @@ header('Content-Type: text/html; charset=UTF-8');
                             'overview' => ['label' => 'Visão geral ERP', 'icon' => 'bi-grid'],
                             'sales' => ['label' => 'Clientes', 'icon' => 'bi-people'],
                             'purchases' => ['label' => 'Fornecedores', 'icon' => 'bi-cart3'],
-                            'orders' => ['label' => 'Encomendas', 'icon' => 'bi-bag-check'],
+                            'orders' => ['label' => 'Compras a fornecedores', 'icon' => 'bi-cart-check'],
+                            'sales_orders' => ['label' => 'Encomendas de clientes', 'icon' => 'bi-bag-check'],
                             'production' => ['label' => 'Planeamento e produção', 'icon' => 'bi-calendar3'],
                             'articles' => ['label' => 'Artigos', 'icon' => 'bi-box-seam'],
                             'raw_materials' => ['label' => 'Matérias-primas', 'icon' => 'bi-stack'],

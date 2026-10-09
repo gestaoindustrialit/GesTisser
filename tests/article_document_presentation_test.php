@@ -96,6 +96,7 @@ if (strpos($articleDocumentSource, "app_config('paths.uploads')") === false) {
 }
 
 $erpSource = (string) file_get_contents(__DIR__ . '/../erp.php');
+foreach(['app/Services/ArticleEditor.php','app/Services/ArticleFormSupport.php','partials/article-profile-form.php','assets/article-editor.js'] as $file) $erpSource.=(string)file_get_contents(dirname(__DIR__).'/'.$file);
 if (strpos($erpSource, "['article_document', 'article_document_thumbnail']") === false
     || strpos($erpSource, 'can_access_shopfloor_artwork($user)') === false
     || strpos($erpSource, 'if (!$canViewErp && !$canViewShopfloorArtwork)') === false) {

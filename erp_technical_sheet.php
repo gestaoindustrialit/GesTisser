@@ -1,4 +1,6 @@
 <?php
+// The article profile supplies a read-only current sheet to this existing renderer.
+if (!isset($articleProfileSheet)) {
 require_once __DIR__ . '/helpers.php';
 require_once __DIR__ . '/erp_migrations.php';
 require_once __DIR__ . '/article_document.php';
@@ -15,6 +17,7 @@ if (!$sheet) {
     exit('Ficha Técnica não encontrada.');
 }
 
+}
 $a = json_decode($sheet['snapshot_json'], true) ?: [];
 $o = $a['_order'] ?? [];
 $currentArticleStmt = $pdo->prepare('SELECT front_colors, back_colors, pallet_weight, pallet_quantity FROM erp_finished_products WHERE id = ?');

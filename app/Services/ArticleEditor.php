@@ -1,0 +1,47 @@
+<?php
+require_once __DIR__.'/ArticleFormSupport.php';
+require_once __DIR__.'/ArticleTheoreticalWeight.php';
+require_once __DIR__.'/ArticlePalletWeight.php';
+require_once __DIR__.'/ArticleDocumentChunkUpload.php';
+require_once __DIR__.'/ArticleFolderSync.php';
+require_once dirname(__DIR__,2).'/article_document.php';
+/** Shared existing article writer; callers own permission, CSRF and transaction boundaries. */
+final class ArticleEditor
+{
+    public static function save(PDO $pdo,array $input,$userId) {
+                $id=(int)($input['article_id']??0); $code=trim((string)($input['code']??'')); $description=trim((string)($input['description']??''));
+                if ($code==='' || $description==='') { throw new RuntimeException('O código e a descrição são obrigatórios.'); }
+                $fields=['code','description','customer_id','customer_product_code','width','length','grammage','colors_per_face','unit_id','min_stock','sale_price','standard_cost','proof_reference','proof_status','status','notes'];
+                $numeric=['customer_id','width','length','unit_id','min_stock','sale_price','standard_cost']; $values=[];
+                foreach ($fields as $field) { $raw=$input[$field]??''; $values[$field]=in_array($field,$numeric,true) ? ((string)$raw===''?null:(float)$raw) : trim((string)$raw); }
+                $values['grammage']=erp_article_grammage($input['grammage']??'');
+                $values['colors_per_face']=erp_colors_per_face($input['colors_per_face']??'');
+                foreach (erp_article_fields() as $field) { $raw=$input[$field]??''; if(in_array($field,['front_colors','back_colors','of_front_colors','of_back_colors'],true)){$values[$field]=erp_validate_article_inks($pdo,$raw,['front_colors'=>'Ficha Técnica (frente)','back_colors'=>'Ficha Técnica (verso)','of_front_colors'=>'OF (frente)','of_back_colors'=>'OF (verso)'][$field]);continue;}$values[$field]=in_array($field,['pallet_straps','of_colors_match_technical','microperforation','has_handle','has_holes','has_gusset','centered_gusset'],true) ? (int)$raw : (in_array($field,['pallet_weight','pallet_quantity'],true) ? ((string)$raw===''?null:(float)str_replace(',','.',(string)$raw)) : trim((string)$raw)); }
+                $values['theoretical_weight']=ArticleTheoreticalWeight::grams($values['width'],$values['length'],$values['grammage']);
+                $values['pallet_weight']=ArticlePalletWeight::kilograms($values['theoretical_weight'],$values['pallet_quantity']);
+                if ($values['of_colors_match_technical']) { $values['of_front_colors']=$values['front_colors']; $values['of_back_colors']=$values['back_colors']; }
+                if ($id>0) { $exists=$pdo->prepare('SELECT 1 FROM erp_finished_products WHERE id=?');$exists->execute([$id]);if(!$exists->fetchColumn())throw new RuntimeException('Artigo não encontrado.');$sets=[]; $params=[]; foreach($values as $field=>$value){$sets[]=$field.'=?';$params[]=$value;} $params[]=$userId;$params[]=$id; $pdo->prepare('UPDATE erp_finished_products SET '.implode(',',$sets).',updated_by=?,updated_at=CURRENT_TIMESTAMP WHERE id=?')->execute($params); $verb='update'; }
+                else { $columns=array_keys($values);$columns[]='created_by';$columns[]='updated_by';$params=array_values($values);$params[]=$userId;$params[]=$userId; $pdo->prepare('INSERT INTO erp_finished_products('.implode(',',$columns).') VALUES ('.implode(',',array_fill(0,count($columns),'?')).')')->execute($params);$id=(int)$pdo->lastInsertId();$verb='create'; }
+                $pdo->prepare('DELETE FROM erp_article_materials WHERE finished_product_id=?')->execute([$id]);
+                $materialIds=(array)($input['material_id']??[]); $quantities=(array)($input['material_quantity']??[]); $wastes=(array)($input['material_waste']??[]); $materialNotes=(array)($input['material_notes']??[]); $seen=[];
+                $insertMaterial=$pdo->prepare('INSERT INTO erp_article_materials(finished_product_id,raw_material_id,quantity_per_unit,waste_percent,notes) VALUES (?,?,?,?,?)');
+                foreach($materialIds as $index=>$materialId){$materialId=(int)$materialId;$quantity=(float)str_replace(',','.',(string)($quantities[$index]??0));if(!$materialId && $quantity==0.0)continue;if(!$materialId || $quantity<=0)throw new RuntimeException('Cada consumo deve indicar uma matéria-prima e quantidade superior a zero.');if(isset($seen[$materialId]))throw new RuntimeException('A mesma matéria-prima não pode ser repetida no artigo.');$seen[$materialId]=true;$insertMaterial->execute([$id,$materialId,$quantity,max(0,(float)str_replace(',','.',(string)($wastes[$index]??0))),trim((string)($materialNotes[$index]??''))]);}
+                $newDocumentIds=[];
+                $stagedUploads=(array)($input['article_document_uploads']??[]);
+                if($stagedUploads){$insertDocument=$pdo->prepare('INSERT INTO erp_product_documents(entity_type,entity_id,document_type,title,file_url,author_user_id,status) VALUES ("finished_product",?,?,?,?,?,"Ativo")');foreach($stagedUploads as $index=>$uploadId){$document=ArticleDocumentChunkUpload::persist($userId,(string)$uploadId,$id);$originalName=(string)$document['name'];$title=trim((string)pathinfo($originalName,PATHINFO_FILENAME));$insertDocument->execute([$id,'Identificação do artigo',$title?:'Documento do artigo',(string)$document['url'],$userId]);$newDocumentIds[$index]=(int)$pdo->lastInsertId();}}
+                $artworkChoice=(string)($input['artwork_document_id']??'');$artworkId=0;
+                if(strpos($artworkChoice,'new:')===0){$newIndex=(int)substr($artworkChoice,4);$artworkId=(int)($newDocumentIds[$newIndex]??0);}elseif(ctype_digit($artworkChoice)){$artworkId=(int)$artworkChoice;}
+                if($artworkId>0){$artwork=$pdo->prepare('SELECT id FROM erp_product_documents WHERE id=? AND entity_type="finished_product" AND entity_id=? AND status="Ativo"');$artwork->execute([$artworkId,$id]);if(!$artwork->fetchColumn())throw new RuntimeException('Selecione uma maquete válida deste artigo.');$pdo->prepare('UPDATE erp_product_documents SET document_type=CASE WHEN id=? THEN "production_main" WHEN document_type="production_main" THEN "Identificação do artigo" ELSE document_type END WHERE entity_type="finished_product" AND entity_id=?')->execute([$artworkId,$id]);}
+                ArticleFolderSync::copyArtworkToFolder($pdo,$id);
+                gt_erp_audit($pdo,$userId,$verb,'erp_finished_products',$id,[],['code'=>$code,'description'=>$description]); $flashSuccess=$verb==='create'?'Artigo criado com sucesso.':'Artigo atualizado com sucesso.';
+        return ['id'=>$id,'message'=>$flashSuccess];
+    }
+    public static function duplicate(PDO $pdo,array $input,$userId) {
+                $sourceId=(int)($input['article_id']??0);$source=$pdo->prepare('SELECT * FROM erp_finished_products WHERE id=?');$source->execute([$sourceId]);$source=$source->fetch(PDO::FETCH_ASSOC);if(!$source)throw new RuntimeException('Artigo de origem não encontrado.');unset($source['id'],$source['created_at'],$source['updated_at']);$baseCode=(string)$source['code'].'-COPIA';$newCode=$baseCode;$suffix=2;$exists=$pdo->prepare('SELECT 1 FROM erp_finished_products WHERE code=?');do{$exists->execute([$newCode]);if(!$exists->fetchColumn())break;$newCode=$baseCode.'-'.$suffix++;}while(true);$source['code']=$newCode;$source['description']=(string)$source['description'].' (cópia)';$source['created_by']=$userId;$source['updated_by']=$userId;$columns=array_keys($source);$pdo->prepare('INSERT INTO erp_finished_products('.implode(',',$columns).') VALUES ('.implode(',',array_fill(0,count($columns),'?')).')')->execute(array_values($source));$id=(int)$pdo->lastInsertId();$pdo->prepare('INSERT INTO erp_article_materials(finished_product_id,raw_material_id,quantity_per_unit,waste_percent,notes) SELECT ?,raw_material_id,quantity_per_unit,waste_percent,notes FROM erp_article_materials WHERE finished_product_id=?')->execute([$id,$sourceId]);$pdo->prepare('INSERT INTO erp_product_documents(entity_type,entity_id,document_type,title,file_url,version,author_user_id,is_required,valid_until,status,notes) SELECT entity_type,?,document_type,title,file_url,version,?,is_required,valid_until,status,notes FROM erp_product_documents WHERE entity_type="finished_product" AND entity_id=?')->execute([$id,$userId,$sourceId]);gt_erp_audit($pdo,$userId,'duplicate','erp_finished_products',$id,['source_id'=>$sourceId],['code'=>$newCode]);$flashSuccess='Artigo duplicado. Pode agora rever o código e os restantes dados.';
+        return ['id'=>$id,'message'=>$flashSuccess];
+    }
+    public static function deleteDocument(PDO $pdo,array $input,$userId) {
+                $documentId=(int)($input['document_id']??0);$articleId=(int)($input['article_id']??0);$document=$pdo->prepare('SELECT * FROM erp_product_documents WHERE id=? AND entity_type="finished_product" AND entity_id=?');$document->execute([$documentId,$articleId]);$document=$document->fetch(PDO::FETCH_ASSOC);if(!$document)throw new RuntimeException('Documento não encontrado.');ArticleFolderSync::removeManagedFile($articleId,(string)($document['file_url']??''));$pdo->prepare('DELETE FROM erp_product_documents WHERE id=?')->execute([$documentId]);gt_erp_audit($pdo,$userId,'delete','erp_product_documents',$documentId,['title'=>$document['title']],[]);$flashSuccess='Documento removido do artigo.';
+        return ['id'=>$articleId,'message'=>$flashSuccess];
+    }
+}

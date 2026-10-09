@@ -2,16 +2,16 @@
     'use strict';
     // Delegation survives the existing table's client-side sorting and pagination.
     document.addEventListener('click', function (event) {
-        var row = event.target.closest('[data-customer-url]');
+        var row = event.target.closest('[data-customer-url], [data-article-url], [data-material-url]');
         if (!row || event.target.closest('a,button,input,select,textarea,label') || window.getSelection().toString()) return;
-        var url = row.getAttribute('data-customer-url');
+        var url = row.getAttribute('data-customer-url') || row.getAttribute('data-article-url') || row.getAttribute('data-material-url');
         if (event.ctrlKey || event.metaKey) window.open(url, '_blank', 'noopener');
         else window.location.assign(url);
     });
     document.addEventListener('keydown', function (event) {
-        if (!event.target.matches('[data-customer-url]') || (event.key !== 'Enter' && event.key !== ' ')) return;
+        if (!event.target.matches('[data-customer-url], [data-article-url], [data-material-url]') || (event.key !== 'Enter' && event.key !== ' ')) return;
         event.preventDefault();
-        window.location.assign(event.target.getAttribute('data-customer-url'));
+        window.location.assign(event.target.getAttribute('data-customer-url') || event.target.getAttribute('data-article-url') || event.target.getAttribute('data-material-url'));
     });
     document.addEventListener('DOMContentLoaded', function () {
         var toggle = document.querySelector('[data-customer-edit-toggle]');
