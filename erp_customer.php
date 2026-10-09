@@ -1,5 +1,5 @@
 <?php
-// A read-only endpoint: bypass config.php's legacy migrations and production status writes.
+// Customer profile: bypass legacy migrations/status writes; only explicit, CSRF-checked saves may write.
 function db() {return $GLOBALS['pdo'];}
 function has_shopfloor_only_navigation(array $user): bool {
     return (int)($user['is_admin']??0)!==1 && ((int)($user['pin_only_login']??0)===1 || (string)($user['access_profile']??'')==='Utilizador');
@@ -9,16 +9,20 @@ require_once __DIR__.'/erp_migrations.php';
 require_once __DIR__.'/app/Services/CustomerProfile.php';
 $path=app_config('db_path');
 if(!is_file($path)){http_response_code(503);exit('Base de dados indisponível.');}
-$pdo=new PDO('sqlite:'.$path);$pdo->setAttribute(PDO::ATTR_ERRMODE,PDO::ERRMODE_EXCEPTION);$pdo->setAttribute(PDO::ATTR_DEFAULT_FETCH_MODE,PDO::FETCH_ASSOC);$pdo->exec('PRAGMA query_only=ON');
+$pdo=new PDO('sqlite:'.$path);$pdo->setAttribute(PDO::ATTR_ERRMODE,PDO::ERRMODE_EXCEPTION);$pdo->setAttribute(PDO::ATTR_DEFAULT_FETCH_MODE,PDO::FETCH_ASSOC);$pdo->exec('PRAGMA foreign_keys=ON');$pdo->exec('PRAGMA query_only=ON');
 require_login();$user=current_user($pdo)?:[];
 if(!gt_erp_user_can($pdo,$user,'erp.view') || !gt_erp_user_can($pdo,$user,'erp.customers')){http_response_code(403);exit('Sem permissão para consultar clientes.');}
-if(($_SERVER['REQUEST_METHOD']??'GET')!=='GET'){http_response_code(405);header('Allow: GET');exit('Esta ficha permite apenas consulta.');}
+$method=$_SERVER['REQUEST_METHOD']??'GET';
+if(!in_array($method,['GET','POST'],true)){http_response_code(405);header('Allow: GET, POST');exit('Método não permitido.');}
 $id=filter_input(INPUT_GET,'id',FILTER_VALIDATE_INT)?:0;
 if($id<1){http_response_code(404);exit('Cliente não encontrado.');}
 $service=new CustomerProfile($pdo);$customer=$service->customer($id);
 if(!$customer){http_response_code(404);exit('Cliente não encontrado.');}
 $tabs=['overview'=>'Visão geral','orders'=>'Encomendas','articles'=>'Artigos','ofs'=>'Ordens de fabrico','costs'=>'Histórico / Custeio','trace'=>'Rastreabilidade','general'=>'Dados gerais'];
 $tab=is_scalar($_GET['tab']??'')?(string)($_GET['tab']??'overview'):'overview';if(!isset($tabs[$tab]))$tab='overview';
+$editing=$method==='POST'||($_GET['edit']??'')==='1';
+if($editing)$tab='general';
+$flashError='';
 $financial=gt_erp_user_can($pdo,$user,'erp.costs_view');
 if($tab==='costs' && !$financial){http_response_code(403);exit('Sem permissão para consultar custos.');}
 $filters=CustomerProfile::filters($_GET);
@@ -26,6 +30,33 @@ function cp_url($id,$tab,array $filters=[]) {return 'erp.php?'.http_build_query(
 function cp_number($value,$precision=2){return $value===null?'Sem dados':number_format((float)$value,$precision,',',' ');}
 function cp_date($value){$timestamp=$value?strtotime($value):false;return $timestamp===false?'Sem dados':date('d/m/Y',$timestamp);}
 function cp_quantity($value,$unit){return $value===null?'Sem dados':cp_number($value).' '.($unit?:'(unidade não registada)');}
+if($method==='POST') {
+    if(($_POST['action']??'')!=='save_customer'){http_response_code(405);exit('Ação não permitida.');}
+    // Reuse the existing token contract without the legacy helper's DB write on a rejected token.
+    $token=$_POST['_token']??'';
+    if(!is_string($token)||$token===''||!hash_equals(csrf_token(),$token)){http_response_code(419);exit('Pedido inválido. Atualize a página e tente novamente.');}
+    $postedId=is_scalar($_POST['customer_id']??null)?filter_var($_POST['customer_id'],FILTER_VALIDATE_INT):false;
+    if($postedId!==$id){http_response_code(400);exit('Cliente inválido para esta ficha.');}
+    require_once __DIR__.'/app/Services/CustomerEditor.php';
+    try {
+        $pdo->exec('PRAGMA query_only=OFF');
+        $pdo->beginTransaction();
+        CustomerEditor::save($pdo,$_POST,(int)$user['id']);
+        $pdo->commit();
+    } catch(PDOException $e) {
+        if($pdo->inTransaction())$pdo->rollBack();
+        error_log('Customer profile save failed: '.$e->getMessage());
+        $flashError='Não foi possível guardar o cliente. Verifique os dados e se o código já existe.';
+        http_response_code(422);
+    } catch(RuntimeException $e) {
+        if($pdo->inTransaction())$pdo->rollBack();
+        $flashError=$e->getMessage();
+        http_response_code(422);
+    } finally {
+        $pdo->exec('PRAGMA query_only=ON');
+    }
+    if($flashError===''){header('Location: '.cp_url($id,'general',['saved'=>'1']),true,303);exit;}
+}
 if(($_GET['action']??'')==='export') {
     if(!gt_erp_user_can($pdo,$user,'erp.reports_export')){http_response_code(403);exit('Sem permissão para exportar.');}
     require_once __DIR__.'/app/Services/SimpleXlsx.php';
@@ -45,22 +76,32 @@ if($tab==='ofs'){$data=$service->orders($id,$filters);$options=$service->options
 if($tab==='costs'){$data=$service->costs($id,$filters);$options=$service->options($id);}
 if($tab==='trace'){$data=$service->trace($id,$filters);$options=$service->options($id);}
 if($tab==='general')$addresses=$service->addresses($id);
+$editCustomer=$customer;
+if($method==='POST'&&$flashError!==''){
+    require_once __DIR__.'/app/Services/CustomerSpreadsheet.php';
+    foreach(array_unique(CustomerSpreadsheet::columns()) as $field)if(isset($_POST[$field])&&is_scalar($_POST[$field]))$editCustomer[$field]=(string)$_POST[$field];
+    $addresses=[];
+    foreach(is_array($_POST['delivery_address']??null)?$_POST['delivery_address']:[] as $index=>$unused){
+        $row=[];foreach(['id','label','address','postal_code','city','country','transporter'] as $field){$value=$_POST['delivery_'.$field][$index]??'';$row[$field]=is_scalar($value)?(string)$value:'';}$addresses[]=$row;
+    }
+}
 $pageTitle='Ficha de cliente';$navbarClockControl=[];
 require __DIR__.'/partials/header.php';
 ?>
-<link rel="stylesheet" href="assets/customer-profile.css">
+<link rel="stylesheet" href="assets/customer-profile.css?v=<?= h((string)filemtime(__DIR__.'/assets/customer-profile.css')) ?>"><script defer src="assets/customer-profile.js?v=<?= h((string)filemtime(__DIR__.'/assets/customer-profile.js')) ?>"></script>
 <div class="container-fluid py-4 customer-profile">
+<?php if($flashError!==''): ?><div class="alert alert-danger" role="alert"><?= h($flashError) ?></div><?php elseif(($_GET['saved']??'')==='1'): ?><div class="alert alert-success" role="status">Cliente atualizado com sucesso.</div><?php endif; ?>
 <header class="d-flex flex-wrap justify-content-between align-items-start gap-3 mb-4">
-<div><a class="small text-decoration-none" href="erp.php?page=sales"><i class="bi bi-arrow-left me-1"></i>Voltar à lista</a><div class="small text-secondary mt-3"><?= h($customer['code']) ?></div><h1 class="h3 mb-2"><?= h($customer['name']) ?></h1>
+<div><a class="btn btn-sm btn-outline-secondary" href="erp.php?page=sales"><i class="bi bi-arrow-left me-1"></i>Voltar à lista</a><div class="small text-secondary mt-3"><?= h($customer['code']) ?></div><h1 class="h3 mb-2"><?= h($customer['name']) ?></h1>
 <div class="d-flex flex-wrap gap-2 align-items-center"><span class="badge <?= !empty($customer['is_active'])?'text-bg-success':'text-bg-secondary' ?>"><?= !empty($customer['is_active'])?'Ativo':'Inativo' ?></span><span class="text-secondary">NIF <?= h($customer['tax_number']?:'—') ?> · <?= h($customer['country']?:'—') ?> · <?= h($customer['city']??'') ?></span></div>
 <?php if(!empty($customer['contact_name'])): ?><p class="small mt-2 mb-0"><i class="bi bi-person me-1"></i><?= h($customer['contact_name']) ?></p><?php endif; ?></div>
-<div class="d-flex flex-wrap gap-2"><a class="btn btn-primary" href="erp.php?page=sales&amp;customer_id=<?= $id ?>#customer-editor"><i class="bi bi-pencil me-1"></i>Editar cliente</a><button class="btn btn-outline-secondary" disabled title="Ainda não existe formulário de encomendas comerciais a clientes">Nova encomenda</button><?php if(gt_erp_user_can($pdo,$user,'erp.reports_export')): ?><a class="btn btn-outline-success" href="<?= h(cp_url($id,'general',['action'=>'export'])) ?>"><i class="bi bi-file-earmark-excel me-1"></i>Exportar ficha</a><?php endif; ?></div>
+<div class="d-flex flex-wrap gap-2"><div class="form-check form-switch cp-edit-switch"><input class="form-check-input" type="checkbox" role="switch" id="customer-edit-toggle" data-customer-edit-toggle data-edit-url="<?= h(cp_url($id,'general',['edit'=>'1'])) ?>" <?= $editing?'checked':'' ?>><label class="form-check-label" for="customer-edit-toggle"><i class="bi bi-pencil me-1" aria-hidden="true"></i>Editar cliente</label></div><noscript><a class="btn btn-outline-primary" href="<?= h(cp_url($id,'general',['edit'=>'1'])) ?>">Editar dados</a></noscript><button class="btn btn-outline-secondary" disabled title="Ainda não existe formulário de encomendas comerciais a clientes">Nova encomenda</button><?php if(gt_erp_user_can($pdo,$user,'erp.reports_export')): ?><a class="btn btn-outline-success" href="<?= h(cp_url($id,'general',['action'=>'export'])) ?>"><i class="bi bi-file-earmark-excel me-1"></i>Exportar ficha</a><?php endif; ?></div>
 </header>
 <div class="row g-3 mb-4">
 <?php $quantityText=[];foreach($summary['quantities'] as $quantity)$quantityText[]=cp_quantity($quantity['quantity'],$quantity['unit']).(!empty($quantity['unknown_order'])?' · '.$quantity['unknown_order']:'');
 $cards=[['Total de encomendas','Sem dados','Sem estrutura comercial'],['Total de OFs',$summary['ofs']===null?'Sem dados':(string)$summary['ofs'],'Relação direta com o cliente'],['Quantidade produzida',$quantityText?implode(' · ',$quantityText):'Sem dados','Separada por unidade; sem conversões'],['Última encomenda','Sem dados','Histórico comercial por integrar'],['Artigos distintos produzidos',$summary['produced_articles']===null?'Sem dados':(string)$summary['produced_articles'],'Artigos atuais com FK e produção registada'],['Tempo de produção concluído',cp_number($summary['hours']).($summary['hours']===null?'':' h'),'Registos encerrados; desconta pausas registadas']];
 foreach($cards as $card): ?><div class="col-12 col-sm-6 col-xl-4"><div class="card h-100"><div class="card-body"><div class="small text-secondary mb-2"><?= h($card[0]) ?></div><div class="h4 cp-metric mb-2"><?= h($card[1]) ?></div><div class="small text-secondary"><?= h($card[2]) ?></div></div></div></div><?php endforeach; ?></div>
-<nav class="cp-tabs mb-4" aria-label="Separadores da ficha"><div class="nav nav-pills flex-nowrap"><?php foreach($tabs as $key=>$label):if($key==='costs'&&!$financial)continue; ?><a class="nav-link <?= $tab===$key?'active':'' ?>" <?= $tab===$key?'aria-current="page"':'' ?> href="<?= h(cp_url($id,$key)) ?>"><?= h($label) ?></a><?php endforeach; ?></div></nav>
+<nav class="cp-tabs mb-4" aria-label="Separadores da ficha"><div class="d-flex flex-wrap gap-2"><?php $tabIcons=['overview'=>'bi-grid','orders'=>'bi-bag-check','articles'=>'bi-box-seam','ofs'=>'bi-clipboard2-check','costs'=>'bi-graph-up','trace'=>'bi-upc-scan','general'=>'bi-person-vcard'];foreach($tabs as $key=>$label):if($key==='costs'&&!$financial)continue; ?><a class="btn btn-sm <?= $tab===$key?'btn-primary':'btn-outline-secondary' ?>" <?= $tab===$key?'aria-current="page"':'' ?> href="<?= h(cp_url($id,$key)) ?>"><i class="bi <?= h($tabIcons[$key]) ?> me-1" aria-hidden="true"></i><?= h($label) ?></a><?php endforeach; ?></div></nav>
 <section class="card"><div class="card-body">
 <h2 class="h5 mb-3"><?= h($tabs[$tab]) ?></h2>
 <?php if($options): ?><form method="get" class="row g-2 mb-4"><input type="hidden" name="page" value="customer_profile"><input type="hidden" name="id" value="<?= $id ?>"><input type="hidden" name="tab" value="<?= h($tab) ?>">
@@ -77,8 +118,7 @@ foreach($cards as $card): ?><div class="col-12 col-sm-6 col-xl-4"><div class="ca
 <form method="get" class="d-flex flex-wrap gap-2 mb-3"><input type="hidden" name="page" value="customer_profile"><input type="hidden" name="id" value="<?= $id ?>"><input type="hidden" name="tab" value="articles"><label class="visually-hidden" for="q">Pesquisar referência ou designação</label><input id="q" name="q" value="<?= h($filters['q']) ?>" class="form-control cp-search" placeholder="Referência ou designação"><button class="btn btn-primary">Pesquisar</button></form>
 <div class="table-responsive"><table class="table table-hover align-middle"><thead><tr><th>Artigo</th><th>Produções</th><th>Quantidade acumulada</th><th>Última produção / criação da OF</th></tr></thead><tbody><?php foreach($data['rows'] as $r): ?><tr><td><a href="erp.php?page=articles&amp;article_id=<?= (int)$r['id'] ?>#article-editor"><?= h($r['code']) ?></a><div class="small text-secondary"><?= h($r['description']) ?></div></td><td><?= $r['productions']===null?'Sem dados':(int)$r['productions'] ?></td><td><?= h(cp_quantity($r['quantity'],$r['unit'])) ?></td><td><?= h(cp_date($r['last_production'])) ?></td></tr><?php endforeach; ?><?php if(!$data['rows']): ?><tr><td colspan="4" class="text-secondary py-4">Sem artigos associados por relações comprovadas.</td></tr><?php endif; ?></tbody></table></div>
 <?php elseif($tab==='general'): ?>
-<dl class="row cp-details"><?php foreach(['code'=>'Código','name'=>'Nome fiscal','tax_number'=>'NIF','address'=>'Morada','address_2'=>'Morada 2','postal_code'=>'Código postal','city'=>'Localidade','country'=>'País','contact_name'=>'Contacto principal','phone'=>'Telefone','mobile'=>'Telemóvel','fax'=>'Fax','email'=>'Email','salesperson'=>'Vendedor','discount_percent'=>'Desconto (%)','balance'=>'Saldo registado (€)','credit_limit'=>'Plafond (€)','notes'=>'Observações'] as $field=>$label): ?><dt class="col-sm-4"><?= h($label) ?></dt><dd class="col-sm-8"><?= ($customer[$field]??'')!==''&&($customer[$field]??null)!==null?nl2br(h($customer[$field])):'Sem dados' ?></dd><?php endforeach; ?></dl><p class="small text-secondary">Condições comerciais apresentadas apenas nos campos existentes; não existe informação adicional de condições de pagamento confirmada.</p>
-<h3 class="h6 mt-4">Moradas de entrega</h3><?php foreach($addresses as $address): ?><div class="border rounded p-3 mb-2"><strong><?= h($address['label']) ?></strong><p class="mb-1"><?= h($address['address']) ?> · <?= h($address['postal_code'].' '.$address['city'].' · '.$address['country']) ?></p><span class="small text-secondary">Transportador: <?= h($address['transporter']) ?></span></div><?php endforeach; ?><?php if(!$addresses): ?><p class="text-secondary">Sem moradas de entrega registadas.</p><?php endif; ?>
+<?php require __DIR__.'/partials/customer-profile-form.php'; ?>
 <?php endif; ?>
 <?php if(in_array($tab,['overview','ofs','costs','trace'],true)): ?>
 <?php if($tab==='trace'&&!empty($data['truncated'])): ?><p class="alert alert-info">Consulta resumida aos primeiros 200 consumos e 200 rolos desta página. Para consultar todos os registos, abra a ficha de cada OF.</p><?php endif; ?>
@@ -89,9 +129,9 @@ foreach($cards as $card): ?><div class="col-12 col-sm-6 col-xl-4"><div class="ca
 <?php if($tab==='costs'): ?><tr><td colspan="8"><details><summary class="small">Tempos por etapa e custos registados</summary><ul class="small mt-2"><?php foreach($data['operations'][$r['id']]??[] as $operation): ?><li><?= h($operation['operation_name']) ?>: <?= h(cp_number($operation['hours'])) ?> h</li><?php endforeach; ?><?php foreach($data['costs'][$r['id']]??[] as $cost): ?><li><?= h($cost['category']) ?>: <?= h(cp_number($cost['amount'])) ?> €</li><?php endforeach; ?></ul><?php if(empty($data['operations'][$r['id']])&&empty($data['costs'][$r['id']])): ?><p class="small text-secondary">Sem tempos ou custos por etapa registados.</p><?php endif; ?></details></td></tr><?php endif; ?>
 <?php if($tab==='trace'): ?><tr><td colspan="5"><details open><summary class="small">Consumos e ligações documentadas</summary><ul class="small mt-2"><?php foreach($data['consumptions'][$r['id']]??[] as $consumption): ?><li><?= h($consumption['material_code']??'Material sem ligação atual') ?> · <?= h(cp_quantity($consumption['quantity'],$consumption['unit_code'])) ?> · lote <?= h($consumption['lot']?:'não registado') ?> · <?= h(cp_date($consumption['created_at'])) ?><?php if($consumption['stock_unit_id']): ?> · <?= h($consumption['stock_unit_type']) ?> #<?= (int)$consumption['stock_unit_id'] ?><?php endif; ?><?php if($consumption['ink_barcode']): ?> · recipiente <?= h($consumption['ink_barcode']) ?> · lote <?= h($consumption['ink_lot']) ?><?php endif; ?><?php if($consumption['movement_number']): ?> · movimento <?= h($consumption['movement_number']) ?><?php endif; ?></li><?php endforeach; ?><?php foreach($data['rolls'][$r['id']]??[] as $roll): ?><li>Rolo <?= h($roll['barcode']) ?> · lote <?= h($roll['supplier_lot']) ?> · <?= h(cp_number($roll['consumed_metres'])) ?> m / <?= h(cp_number($roll['consumed_weight_kg'])) ?> kg · <?= h(cp_date($roll['created_at'])) ?></li><?php endforeach; ?></ul><?php if(empty($data['consumptions'][$r['id']])&&empty($data['rolls'][$r['id']])): ?><p class="small text-secondary"><?= !empty($data['truncated'])?'Detalhes não carregados neste resumo. Abra a ficha da OF para consultar todos os registos.':'Sem ligações comprovadas a rolos, recipientes, lotes ou movimentos nesta OF.' ?></p><?php endif; ?></details></td></tr><?php endif; ?>
 <?php endforeach; ?><?php if(!$data['rows']): ?><tr><td colspan="<?= $tab==='costs'?8:5 ?>" class="text-secondary py-4">Sem OFs associadas<?= $tab==='overview'?'':' para os filtros selecionados' ?>.</td></tr><?php endif; ?></tbody></table></div>
-<?php if($tab==='overview'): ?><a href="<?= h(cp_url($id,'ofs')) ?>" class="small">Ver todas as OFs</a><h3 class="h6 mt-4">Artigos mais frequentes</h3><ul><?php foreach($frequent as $article): ?><li><a href="erp.php?page=articles&amp;article_id=<?= (int)$article['id'] ?>#article-editor"><?= h($article['code'].' — '.$article['description']) ?></a> · <?= (int)$article['productions'] ?> produções</li><?php endforeach; ?></ul><?php if(!$frequent): ?><p class="text-secondary">Sem produções associadas a artigos atuais.</p><?php endif; ?><?php endif; ?>
+<?php if($tab==='overview'): ?><a href="<?= h(cp_url($id,'ofs')) ?>" class="btn btn-sm btn-outline-primary"><i class="bi bi-arrow-right me-1" aria-hidden="true"></i>Ver todas as OFs</a><h3 class="h6 mt-4">Artigos mais frequentes</h3><ul><?php foreach($frequent as $article): ?><li><a href="erp.php?page=articles&amp;article_id=<?= (int)$article['id'] ?>#article-editor"><?= h($article['code'].' — '.$article['description']) ?></a> · <?= (int)$article['productions'] ?> produções</li><?php endforeach; ?></ul><?php if(!$frequent): ?><p class="text-secondary">Sem produções associadas a artigos atuais.</p><?php endif; ?><?php endif; ?>
 <?php endif; ?>
 <?php if($data && $tab!=='overview'): ?><nav aria-label="Paginação" class="d-flex flex-wrap justify-content-between align-items-center gap-2 mt-3"><span class="small text-secondary"><?= (int)$data['total'] ?> registos · página <?= (int)$data['page'] ?> / <?= (int)$data['pages'] ?></span><div class="d-flex gap-2"><?php if($data['page']>1): ?><a class="btn btn-sm btn-outline-secondary" href="<?= h(cp_url($id,$tab,array_merge($filters,['p'=>$data['page']-1]))) ?>">Anterior</a><?php endif; ?><?php if($data['page']<$data['pages']): ?><a class="btn btn-sm btn-outline-secondary" href="<?= h(cp_url($id,$tab,array_merge($filters,['p'=>$data['page']+1]))) ?>">Seguinte</a><?php endif; ?></div></nav><?php endif; ?>
-</div></section><p class="small text-secondary mt-3">Consulta de dados existentes. A integração Bobinas não foi executada e esta vista não altera operações, OFs, stocks ou catálogos.</p>
+</div></section>
 </div>
 <?php require __DIR__.'/partials/footer.php'; ?>
