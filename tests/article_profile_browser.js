@@ -18,7 +18,14 @@ const fixture=JSON.parse(fs.readFileSync(process.argv[2],'utf8'));
         assert(await page.evaluate(()=>document.documentElement.scrollWidth<=window.innerWidth+1),'Page overflow at '+width+' / '+tab);
         assert(await page.locator('#gtSidebar a.is-active[href="erp.php?page=articles"]').count()===1,'Native articles sidebar selected');
         assert(await page.locator('.cp-metric').count()===6,'Six metric cards');
+        assert(await page.locator('.cp-tabs a:not(:has(i.bi))').count()===0,'Every article tab has an icon');
+        const thumbnail=page.locator('.ap-artwork img');
+        assert(await thumbnail.count()===1,'Main artwork thumbnail appears on every tab');
+        await thumbnail.evaluate(img=>img.complete?Promise.resolve():new Promise(resolve=>{img.onload=resolve;img.onerror=resolve;}));
+        assert(await thumbnail.evaluate(img=>img.naturalWidth===1200),'Server rasterises the real PDF rather than a placeholder');
+        if(width>=768)assert(await page.evaluate(()=>document.querySelector('.ap-artwork').getBoundingClientRect().right<=document.querySelector('.ap-metrics').getBoundingClientRect().left),'Artwork sits left of compact indicators');
       }
+      await page.goto(profile);await page.screenshot({path:require('path').join(require('path').dirname(process.argv[2]),'article-profile-'+width+'.png'),fullPage:true});
       console.log('PASS (browser): seven tabs and responsive layout at '+width+'px');
     }
     await page.setViewportSize({width:1440,height:1000});
@@ -35,6 +42,7 @@ const fixture=JSON.parse(fs.readFileSync(process.argv[2],'utf8'));
       await page.waitForURL('**page=article_profile&id='+fixture.article);
     }
     await page.goto(profile);
+    assert(await page.locator('.customer-profile header .btn:not(:has(i.bi))').count()===0,'Header actions have icons');
 
     await page.locator('.customer-profile header a[href="erp.php?page=customer_profile&id='+fixture.customer+'"]').click();
     await page.locator('.cp-tabs').getByRole('link',{name:'Artigos',exact:true}).click();
@@ -59,6 +67,7 @@ const fixture=JSON.parse(fs.readFileSync(process.argv[2],'utf8'));
     await page.waitForURL('**duplicated=1');
     assert(page.url().includes('page=article_profile')&&!page.url().includes('id='+fixture.article+'&'),'Duplication opens the new article profile');
     await page.goto(fixture.url+'/erp.php?page=article_profile&id='+fixture.empty+'&tab=documents');
+    assert(await page.getByText('Sem maquete principal',{exact:true}).count()===1,'Missing main artwork has an explicit empty state');
     assert(await page.getByText('Sem documentos associados a este artigo.',{exact:true}).count()===1,'Empty documents message');
     assert(errors.length===0,'No JavaScript errors: '+errors.join('; '));
     console.log('PASS (browser): list/client/article/editor navigation, routing link, pagination and empty states');
