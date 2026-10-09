@@ -4,8 +4,12 @@ final class CustomerProfile
 {
     private $pdo;
     private $tables=[];
+    private $orderScope;
     const PAGE_SIZE=20;
-    public function __construct(PDO $pdo) { $this->pdo=$pdo; }
+    public function __construct(PDO $pdo, $orderScope='customer_id') {
+        if(!in_array($orderScope,['customer_id','finished_product_id'],true))throw new InvalidArgumentException('Invalid history scope');
+        $this->pdo=$pdo;$this->orderScope=$orderScope;
+    }
     private function exists($table) {
         if(!array_key_exists($table,$this->tables)) {$s=$this->pdo->prepare("SELECT 1 FROM sqlite_master WHERE type='table' AND name=?");$s->execute([$table]);$this->tables[$table]=(bool)$s->fetchColumn();}
         return $this->tables[$table];
@@ -22,10 +26,12 @@ final class CustomerProfile
         return ['year'=>$year,'article'=>$id,'status'=>is_scalar($input['status']??'')?mb_substr(trim((string)($input['status']??'')),0,80):'','q'=>is_scalar($input['q']??'')?mb_substr(trim((string)($input['q']??'')),0,120):'','p'=>$page,'sort'=>in_array($input['sort']??'',['newest','oldest','number'],true)?$input['sort']:'newest'];
     }
     private function where($id,array $filters) {
-        $where='o.customer_id=?';$params=[$id];
+        $where='o.'.$this->orderScope.'=?';$params=[$id];
         if($filters['year']!=='') {$where.=' AND o.created_at>=? AND o.created_at<?';$params[]=$filters['year'].'-01-01';$params[]=((int)$filters['year']+1).'-01-01';}
         if($filters['article']>0) {$where.=' AND o.finished_product_id=?';$params[]=$filters['article'];}
         if($filters['status']!=='') {$where.=' AND o.status=?';$params[]=$filters['status'];}
+        if(!empty($filters['from'])) {$where.=' AND o.created_at>=?';$params[]=$filters['from'];}
+        if(!empty($filters['to'])) {$where.=' AND o.created_at<?';$params[]=(new DateTime($filters['to']))->modify('+1 day')->format('Y-m-d');}
         return [$where,$params];
     }
     public function summary($id) {
@@ -87,7 +93,7 @@ final class CustomerProfile
             foreach($rows as $r)$list['consumptions'][$r['production_order_id']][]=$r;
         }
         if($this->exists('erp_raw_material_roll_consumptions')){
-            $rows=$this->all('SELECT c.production_order_id,l.barcode,l.supplier_lot,c.consumed_metres,c.consumed_weight_kg,c.created_at FROM erp_raw_material_roll_consumptions c JOIN erp_raw_material_roll_labels l ON l.id=c.source_label_id WHERE c.production_order_id IN ('.$in.') ORDER BY c.id LIMIT 201',$ids);
+            $rows=$this->all('SELECT c.production_order_id,c.source_label_id,l.barcode,l.supplier_lot,c.consumed_metres,c.consumed_weight_kg,c.created_at FROM erp_raw_material_roll_consumptions c JOIN erp_raw_material_roll_labels l ON l.id=c.source_label_id WHERE c.production_order_id IN ('.$in.') ORDER BY c.id LIMIT 201',$ids);
             if(count($rows)>200){$list['truncated']=true;array_pop($rows);}
             foreach($rows as $r)$list['rolls'][$r['production_order_id']][]=$r;
         }
