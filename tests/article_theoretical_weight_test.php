@@ -16,6 +16,7 @@ theoretical_weight_check(ArticleTheoreticalWeight::grams('', 70, 80) === null, '
 theoretical_weight_check(strpos(file_get_contents(dirname(__DIR__).'/app/Services/ArticleTheoreticalWeight.php'), '?float') === false, 'O serviço deve ser compatível com PHP 7.0.');
 
 $source=file_get_contents(dirname(__DIR__).'/erp.php');
+foreach(['app/Services/ArticleEditor.php','app/Services/ArticleFormSupport.php','partials/article-profile-form.php','assets/article-editor.js'] as $file) $source.=(string)file_get_contents(dirname(__DIR__).'/'.$file);
 theoretical_weight_check(strpos($source, "\$values['theoretical_weight']=ArticleTheoreticalWeight::grams") !== false, 'A gravação não impõe o cálculo no servidor.');
 theoretical_weight_check(strpos($source, 'data-theoretical-weight readonly') !== false, 'O peso teórico ainda pode ser editado manualmente.');
 

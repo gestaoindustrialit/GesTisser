@@ -104,6 +104,7 @@ if ($currentFile === '') {
 }
 $currentErpPage = trim((string) ($_GET['page'] ?? 'overview'));
 if ($currentErpPage === 'customer_profile') { $currentErpPage = 'sales'; }
+if ($currentErpPage === 'article_profile') { $currentErpPage = 'articles'; }
 $shopfloorUserNameParts = preg_split('/\s+/u', trim((string) ($user['name'] ?? ''))) ?: [];
 $shopfloorUserShortName = $shopfloorUserNameParts !== []
     ? ($shopfloorUserNameParts[0] . (count($shopfloorUserNameParts) > 1 ? ' ' . $shopfloorUserNameParts[count($shopfloorUserNameParts) - 1] : ''))
