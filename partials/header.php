@@ -103,6 +103,7 @@ if ($currentFile === '') {
     $currentFile = basename((string) ($_SERVER['PHP_SELF'] ?? ''));
 }
 $currentErpPage = trim((string) ($_GET['page'] ?? 'overview'));
+if ($currentErpPage === 'customer_profile') { $currentErpPage = 'sales'; }
 $shopfloorUserNameParts = preg_split('/\s+/u', trim((string) ($user['name'] ?? ''))) ?: [];
 $shopfloorUserShortName = $shopfloorUserNameParts !== []
     ? ($shopfloorUserNameParts[0] . (count($shopfloorUserNameParts) > 1 ? ' ' . $shopfloorUserNameParts[count($shopfloorUserNameParts) - 1] : ''))
