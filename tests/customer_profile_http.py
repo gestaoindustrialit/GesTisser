@@ -52,7 +52,11 @@ try:
     check(req(profile+'&action=export',uid=90002)[0]==403,'Export permission enforced')
     for invalid in ('-1','abc','999999999','1%27%20OR%201%3D1','%5B%5D'):
         check(req('erp.php?page=customer_profile&id='+invalid)[0]==404,'Invalid or missing customer '+invalid)
-    check(req(profile,data=b'action=save_customer&name=changed')[0]==405,'POST to read-only profile rejected')
+    check(req(profile,data=b'action=save_customer&name=changed')[0]==419,'Save without CSRF rejected before DB writes')
+    check(req(profile,data=b'action=delete_customer')[0]==405,'Unsupported profile action rejected')
+    check(req(profile,data=b'action=save_customer&_token=customerprofiletesttoken&customer_id=1')[0]==400,'Posted customer ID cannot replace URL customer')
+    check(req(profile,uid=90003,data=b'action=save_customer&_token=customerprofiletesttoken')[0]==403,'Save denied without customer permission')
+    check(req(profile+'&tab=general&edit=1')[0]==200,'Inline edit mode is a GET and does not write')
     check(req(profile+'&tab=ofs&year[]=2025&status[]=x&article[]=1&p[]=x&sort[]=x')[0]==200,'Malformed filter arrays harmless')
     check(before==hashlib.sha256(db.read_bytes()).hexdigest(),'All seven tabs, export and denied requests leave DB byte-identical')
     # Existing ERP startup migrations and existing write forms run only in this disposable clone.
@@ -67,8 +71,31 @@ try:
     c=sqlite3.connect(db);check(c.execute('SELECT COUNT(*) FROM erp_customers WHERE code="PROFILE_NEW"').fetchone()[0]==1,'Original create inserts exactly one customer');c.close()
     status,_,body=req('erp_customer_export.php');check(status==200 and b'PROFILE_TEST' in body and b'PROFILE_NEW' in body,'Existing Excel list export includes saved and created customers')
     status,_,body=req(profile+'&tab=general');check(b'Transportes Teste' in body and b'Nome editado' in body,'Profile reads original edited customer and delivery address')
+    # Profile editing shares the legacy writer and keeps delivery FKs stable.
+    c=sqlite3.connect(db);c.row_factory=sqlite3.Row
+    address=c.execute('SELECT * FROM erp_customer_delivery_addresses WHERE customer_id=?',(customer,)).fetchone();address_id=address['id']
+    c.execute('INSERT INTO erp_production_orders(id,order_number,customer_id,product_id,status,planned_quantity,produced_quantity,delivery_address_id) VALUES(90001,"PROFILE_OF",?,1,"Encerrada",1,1,?)',(customer,address_id));c.commit()
+    untouched={t:c.execute('SELECT * FROM '+t+' ORDER BY id').fetchall() for t in ('erp_finished_products','erp_raw_materials','erp_suppliers','erp_production_orders')}
+    other_customers=c.execute('SELECT * FROM erp_customers WHERE id<>? ORDER BY id',(customer,)).fetchall()
+    full=dict(c.execute('SELECT * FROM erp_customers WHERE id=?',(customer,)).fetchone());c.close()
+    full.update(_token='customerprofiletesttoken',action='save_customer',customer_id=str(customer),name='Nome na ficha',country_prefix='PT',**{'delivery_id[]':str(address_id),'delivery_label[]':'Armazém editado','delivery_address[]':'Rua editada','delivery_country[]':'Portugal','delivery_transporter[]':'Transportes Atualizados'})
+    bad=dict(full,name='Tentativa inválida',**{'delivery_transporter[]':''})
+    before=hashlib.sha256(db.read_bytes()).hexdigest();status,_,body=req(profile,data=urllib.parse.urlencode(bad).encode())
+    check(status==422 and b'Tentativa inv' in body,'Invalid save keeps submitted values in inline edit mode')
+    check(before==hashlib.sha256(db.read_bytes()).hexdigest(),'Invalid address rolls back the whole save')
+    bad=dict(full,**{'delivery_id[]':'999999'})
+    check(req(profile,data=urllib.parse.urlencode(bad).encode())[0]==422 and before==hashlib.sha256(db.read_bytes()).hexdigest(),'Forged delivery identifier rejected without writes')
+    removed={k:v for k,v in full.items() if not k.startswith('delivery_')}
+    check(req(profile,data=urllib.parse.urlencode(removed).encode())[0]==422 and before==hashlib.sha256(db.read_bytes()).hexdigest(),'Removing OF-linked destination rejected without detaching OF')
+    status,_,body=req(profile,data=urllib.parse.urlencode(full).encode());c=sqlite3.connect(db);c.row_factory=sqlite3.Row
+    saved=c.execute('SELECT * FROM erp_customers WHERE id=?',(customer,)).fetchone()
+    check(status==200 and b'Cliente atualizado com sucesso' in body and saved['name']=='Nome na ficha' and saved['country_prefix']=='PT','Inline customer save returns to same profile with updated fields')
+    saved_address=c.execute('SELECT * FROM erp_customer_delivery_addresses WHERE customer_id=?',(customer,)).fetchone()
+    check(saved_address['id']==address_id and saved_address['transporter']=='Transportes Atualizados','Inline save updates destination in place')
+    check(c.execute('SELECT delivery_address_id FROM erp_production_orders WHERE id=90001').fetchone()[0]==address_id,'Existing OF retains delivery FK after customer edit')
+    check(all(untouched[t]==c.execute('SELECT * FROM '+t+' ORDER BY id').fetchall() for t in untouched) and other_customers==c.execute('SELECT * FROM erp_customers WHERE id<>? ORDER BY id',(customer,)).fetchall(),'Customer save leaves other customers, catalogues and all OFs unchanged');c.close()
     if args.browser:
-        c=sqlite3.connect(db);c.row_factory=sqlite3.Row;order=c.execute('SELECT id,customer_id,finished_product_id FROM erp_production_orders WHERE customer_id IS NOT NULL AND finished_product_id IS NOT NULL LIMIT 1').fetchone();c.close()
+        c=sqlite3.connect(db);c.row_factory=sqlite3.Row;order=c.execute('SELECT id,customer_id,finished_product_id FROM erp_production_orders WHERE customer_id IS NOT NULL AND finished_product_id IS NOT NULL AND id<>90001 LIMIT 1').fetchone();c.close()
         fixture=base/'browser.json';fixture.write_text(json.dumps({'url':url,'id':customer,'cookie':sessions[90001],'order':dict(order) if order else None}));subprocess.run(['node',str(root/'tests/customer_profile_browser.js'),str(fixture)],check=True,env=env)
     check(original==hashlib.sha256(source.read_bytes()).hexdigest(),'Supplied database remains byte-identical')
     print('Artifacts: '+str(base),flush=True)
