@@ -23,7 +23,15 @@ c.execute('INSERT INTO erp_operations(code,name) VALUES("ARTICLE_OP","Operação
 c.execute('INSERT INTO erp_article_routings(finished_product_id,name) VALUES(?,"Routing de teste")',(article,));routing=c.execute('SELECT last_insert_rowid()').fetchone()[0]
 c.execute('INSERT INTO erp_article_routing_versions(routing_id,version_no,status,effective_from) VALUES(?,1,"active","2025-01-01")',(routing,));routing_version=c.execute('SELECT last_insert_rowid()').fetchone()[0]
 c.execute('INSERT INTO erp_article_routing_steps(routing_version_id,operation_id,operation_no,sort_order,setup_time,run_value,operation_snapshot_json) VALUES(?,?,10,1,15,5,?)',(routing_version,operation,json.dumps({'name':'Operação do routing'})))
-(app/'storage/uploads').mkdir(parents=True,exist_ok=True);(app/'storage/uploads/article-test.pdf').write_bytes(b'%PDF-1.4\n1 0 obj << /Type /Catalog >> endobj\n%%EOF\n')
+(app/'storage/uploads').mkdir(parents=True,exist_ok=True)
+# A real one-page artwork allows the browser to exercise the existing PDF rasteriser.
+stream=b'0.1 0.5 0.3 rg 30 30 240 140 re f\n'
+objects=[b'<< /Type /Catalog /Pages 2 0 R >>',b'<< /Type /Pages /Kids [3 0 R] /Count 1 >>',b'<< /Type /Page /Parent 2 0 R /MediaBox [0 0 300 200] /Contents 4 0 R >>',b'<< /Length '+str(len(stream)).encode()+b' >>\nstream\n'+stream+b'endstream']
+pdf=b'%PDF-1.4\n';offsets=[0]
+for index,obj in enumerate(objects,1):
+    offsets.append(len(pdf));pdf+=str(index).encode()+b' 0 obj\n'+obj+b'\nendobj\n'
+xref=len(pdf);pdf+=b'xref\n0 5\n0000000000 65535 f \n'+b''.join(('%010d 00000 n \n'%offset).encode() for offset in offsets[1:])+b'trailer\n<< /Size 5 /Root 1 0 R >>\nstartxref\n'+str(xref).encode()+b'\n%%EOF\n'
+(app/'storage/uploads/article-test.pdf').write_bytes(pdf)
 c.execute('INSERT INTO erp_product_documents(entity_type,entity_id,document_type,title,file_url,status) VALUES("finished_product",?,"production_main","Maquete teste","storage/uploads/article-test.pdf","Ativo")',(article,));document=c.execute('SELECT last_insert_rowid()').fetchone()[0]
 for n in range(23):
     c.execute('INSERT INTO erp_production_orders(order_number,product_id,finished_product_id,customer_id,status,planned_quantity,produced_quantity,created_at) VALUES(?,?,?,?,"Encerrada",20,10,"2025-03-10")',('ARTICLE_OF_'+str(n),product,article,customer));of=c.execute('SELECT last_insert_rowid()').fetchone()[0]
