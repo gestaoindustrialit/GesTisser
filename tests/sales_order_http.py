@@ -9,7 +9,7 @@ for name in subprocess.check_output(['git','ls-files','--cached','--others','--e
 os.symlink(root/'vendor',app/'vendor')
 source=Path('/workspace/gestisser-env/logs/initial-test-artifacts/database.sqlite');original=hashlib.sha256(source.read_bytes()).hexdigest();db=app/'database.sqlite';shutil.copyfile(source,db)
 env=dict(os.environ,APP_ENV='test',GESTISSER_DB_PATH=str(db),APP_DEBUG='0');php=os.environ.get('SALES_TEST_PHP','/workspace/gestisser-env/bin/php')
-subprocess.run([php,'-r',"require '"+str(app)+"/config.php'; require '"+str(app)+"/app/Services/SalesOrderSchema.php'; SalesOrderSchema::migrate($pdo);"],env=env,check=True,stdout=subprocess.DEVNULL)
+subprocess.run([php,'-r',"require '"+str(app)+"/config.php'; "],env=env,check=True,stdout=subprocess.DEVNULL)
 c=sqlite3.connect(db)
 for uid,admin in [(90001,1),(90002,0),(90003,0)]:
     c.execute('INSERT OR REPLACE INTO users(id,name,email,password,is_admin,is_active,access_profile) VALUES(?,?,?,?,?,1,?)',(uid,'Order test',str(uid)+'@example.invalid','unused',admin,'SalesTest'))
@@ -35,9 +35,14 @@ def check(yes,label):
 try:
     route='erp.php?page=sales_orders'
     for i in range(50):
-        try:status,_,body=req(route);break
+        try:status,_,body=req(route,90003);break
         except urllib.error.URLError:time.sleep(.1)
-    check(status==200,'List opens in PHP 7.0')
+    check(status==403,'Unauthorized first access denied before migration')
+    c=sqlite3.connect(db);check(c.execute("SELECT COUNT(*) FROM sqlite_master WHERE name LIKE 'erp_sales_order%' AND type='table'").fetchone()[0]==0,'Denied access leaves sales tables absent');c.close()
+    status,_,body=req(route)
+    check(status==200,'First authorized access automatically installs sales schema in PHP 7.0')
+    c=sqlite3.connect(db);check(c.execute("SELECT COUNT(*) FROM sqlite_master WHERE name IN ('erp_sales_orders','erp_sales_order_lines','erp_sales_order_work_orders','erp_sales_order_deliveries')").fetchone()[0]==4,'All four commercial tables created automatically');c.close()
+    before_ready=hashlib.sha256(db.read_bytes()).hexdigest();check(req(route)[0]==200 and hashlib.sha256(db.read_bytes()).hexdigest()==before_ready,'Second access skips migration without database writes')
     check(req(route,90003)[0]==403,'Sales permission required')
     check(req(route+'&new=1')[0]==200,'New order form')
     check(req(route,data={'action':'save','id':'0'})[0]==419,'CSRF required before writes')

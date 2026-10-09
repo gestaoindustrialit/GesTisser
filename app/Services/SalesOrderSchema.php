@@ -1,10 +1,32 @@
 <?php
-/** Explicit incremental migration. Never called by a consultation request. */
+/** Incremental migration, automatically ensured on authorized development access. */
 final class SalesOrderSchema
 {
+    public static function developmentAllowed($environment,$root,$databasePath) {
+        if(in_array($environment,['development','gestisser-dev','test'],true))return true;
+        // A deployed dev copy may inherit the default "production" setting.
+        // Trust its filesystem location, never the request URL, and require its own DB.
+        $root=realpath($root);$databasePath=realpath($databasePath);
+        return $root!==false&&$databasePath!==false&&basename($root)==='gestisser-dev'
+            &&strpos($databasePath,$root.DIRECTORY_SEPARATOR)===0;
+    }
     public static function ready(PDO $pdo) {
-        $s=$pdo->prepare("SELECT 1 FROM sqlite_master WHERE type='table' AND name=?");
-        $s->execute(['erp_sales_order_deliveries']);return (bool)$s->fetchColumn();
+        $objects=['erp_sales_orders','erp_sales_order_lines','erp_sales_order_work_orders','erp_sales_order_deliveries',
+            'idx_sales_orders_customer_date','idx_sales_orders_date','idx_sales_orders_expected','idx_sales_lines_article','idx_sales_of_line','idx_sales_delivery_line'];
+        $s=$pdo->prepare('SELECT COUNT(*) FROM sqlite_master WHERE name IN ('.implode(',',array_fill(0,count($objects),'?')).') AND type IN ("table","index")');
+        $s->execute($objects);if((int)$s->fetchColumn()!==count($objects))return false;
+        $s=$pdo->prepare("SELECT 1 FROM sqlite_master WHERE type='table' AND name='erp_number_sequences'");$s->execute();if(!$s->fetchColumn())return false;
+        $s=$pdo->prepare('SELECT 1 FROM erp_number_sequences WHERE code=?');$s->execute(['sales_order']);return (bool)$s->fetchColumn();
+    }
+    public static function ensure(PDO $pdo,$environment,$root,$databasePath) {
+        if(self::ready($pdo))return true;
+        if(!self::developmentAllowed($environment,$root,$databasePath))return false;
+        $queryOnly=(int)$pdo->query('PRAGMA query_only')->fetchColumn();
+        try {
+            $pdo->exec('PRAGMA query_only=OFF');
+            self::migrate($pdo);
+        } finally {$pdo->exec('PRAGMA query_only='.($queryOnly?'ON':'OFF'));}
+        return self::ready($pdo);
     }
     public static function migrate(PDO $pdo) {
         $pdo->beginTransaction();

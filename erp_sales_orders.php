@@ -1,5 +1,5 @@
 <?php
-// Same read-only bootstrap as the customer profile; no legacy migration or OF sync.
+// Own bootstrap: ensure only the sales schema in development, then read-only consultation.
 function db(){return $GLOBALS['pdo'];}
 function has_shopfloor_only_navigation(array $user): bool{return (int)($user['is_admin']??0)!==1&&((int)($user['pin_only_login']??0)===1||(string)($user['access_profile']??'')==='Utilizador');}
 require_once __DIR__.'/bootstrap/app.php';
@@ -9,8 +9,15 @@ $path=app_config('db_path');if(!is_file($path)){http_response_code(503);exit('Ba
 $pdo=new PDO('sqlite:'.$path);$pdo->setAttribute(PDO::ATTR_ERRMODE,PDO::ERRMODE_EXCEPTION);$pdo->setAttribute(PDO::ATTR_DEFAULT_FETCH_MODE,PDO::FETCH_ASSOC);$pdo->exec('PRAGMA foreign_keys=ON');$pdo->exec('PRAGMA busy_timeout=5000');$pdo->exec('PRAGMA query_only=ON');
 require_login();$user=current_user($pdo)?:[];
 if(!gt_erp_user_can($pdo,$user,'erp.view')||!gt_erp_user_can($pdo,$user,'erp.sales')){http_response_code(403);exit('Sem permissão para consultar encomendas de clientes.');}
-if(!SalesOrderSchema::ready($pdo)){http_response_code(503);exit('Módulo de encomendas de clientes por preparar na cópia de desenvolvimento.');}
 $method=$_SERVER['REQUEST_METHOD']??'GET';if(!in_array($method,['GET','POST'],true)){http_response_code(405);header('Allow: GET, POST');exit('Método não permitido.');}
+try {
+    if(!SalesOrderSchema::ensure($pdo,app_config('env'),__DIR__,$path)){
+        http_response_code(503);exit('A preparação automática de encomendas está disponível apenas na cópia de desenvolvimento.');
+    }
+} catch(Throwable $e){
+    error_log('Sales order schema preparation failed: '.$e->getMessage());
+    http_response_code(503);exit('Não foi possível preparar as encomendas. Verifique a permissão de escrita da base SQLite e da respetiva pasta no servidor.');
+}
 $service=new SalesOrderService($pdo);$id=filter_input(INPUT_GET,'id',FILTER_VALIDATE_INT)?:0;
 if(isset($_GET['id'])&&$id<1){http_response_code(404);exit('Encomenda não encontrada.');}
 $order=$id?$service->order($id):null;if($id&&!$order){http_response_code(404);exit('Encomenda não encontrada.');}
@@ -20,7 +27,7 @@ $financial=gt_erp_user_can($pdo,$user,'erp.costs_view');if($tab==='costs'&&!$fin
 $mayConfirm=gt_erp_user_can($pdo,$user,'erp.confirm_orders');$mayOF=gt_erp_user_can($pdo,$user,'erp.work_orders_create');$mayDeliver=gt_erp_user_can($pdo,$user,'erp.shipments_confirm');
 $editing=SalesOrderService::text($_GET,'edit')==='1'||SalesOrderService::text($_GET,'new')==='1';
 $historical=$order&&($order['source_system']!=='GesTISSER'||$order['original_id']!==null);
-$writeEnvironment=in_array(app_config('env'),['development','gestisser-dev','test'],true);
+$writeEnvironment=SalesOrderSchema::developmentAllowed(app_config('env'),__DIR__,$path);
 $error='';
 function so_url(array $params=[]){return 'erp.php?'.http_build_query(array_merge(['page'=>'sales_orders'],$params));}
 function so_number($value,$precision=3){return $value===null?'Sem dados':number_format((float)$value,$precision,',',' ');}
