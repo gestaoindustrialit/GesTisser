@@ -236,7 +236,7 @@ $companyAddress = (string) app_setting($pdo, 'company_address', '');
 $companyEmail = (string) app_setting($pdo, 'company_email', '');
 $companyPhone = (string) app_setting($pdo, 'company_phone', '');
 $companyFax = (string) app_setting($pdo, 'company_fax', '');
-$confirmationTerms = (string) app_setting($pdo,'sales_order_confirmation_terms',SalesOrderConfirmation::DEFAULT_TERMS);
+$confirmationTerms = trim((string) app_setting($pdo,'sales_order_confirmation_terms',SalesOrderConfirmation::DEFAULT_TERMS))?:SalesOrderConfirmation::DEFAULT_TERMS;
 $companyTaxNumber = (string) app_setting($pdo, 'company_tax_number', '');
 $payrollNightStart = (string) app_setting($pdo, 'payroll_night_start', '22:00');
 $payrollNightEnd = (string) app_setting($pdo, 'payroll_night_end', '07:00');
@@ -298,7 +298,7 @@ require __DIR__ . '/partials/header.php';
                 <input class="form-control" name="company_tax_number" inputmode="numeric" maxlength="9" value="<?= h($companyTaxNumber) ?>" <?= !$isAdmin ? 'readonly' : '' ?>>
             </div>
             <div class="col-md-6"><label class="form-label">Fax</label><input class="form-control" name="company_fax" value="<?=h($companyFax)?>" <?=!$isAdmin?'readonly':''?>></div>
-            <div class="col-12"><label class="form-label">Condições da confirmação de encomenda</label><textarea class="form-control" name="sales_order_confirmation_terms" rows="3" maxlength="500" <?=!$isAdmin?'readonly':''?>><?=h($confirmationTerms)?></textarea><div class="form-text">Texto do rodapé dos novos documentos. Deixe em branco para não incluir condições.</div></div>
+            <div class="col-12"><label class="form-label">Condições da confirmação de encomenda</label><textarea class="form-control" name="sales_order_confirmation_terms" rows="3" maxlength="500" <?=!$isAdmin?'readonly':''?>><?=h($confirmationTerms)?></textarea><div class="form-text">Texto do rodapé dos novos documentos. Se deixar em branco, são usadas as variações padrão de ±3% e ±10 mm.</div></div>
             <div class="col-12"><hr><h2 class="h5">Configuração Payroll / Assiduidade</h2><p class="small text-muted mb-0">O intervalo noturno pode atravessar a meia-noite.</p></div>
             <div class="col-md-3"><label class="form-label">Início do horário noturno</label><input class="form-control" type="time" name="payroll_night_start" value="<?= h($payrollNightStart) ?>" required></div>
             <div class="col-md-3"><label class="form-label">Fim do horário noturno</label><input class="form-control" type="time" name="payroll_night_end" value="<?= h($payrollNightEnd) ?>" required></div>

@@ -52,7 +52,7 @@ try:
     check(req(route,90003)[0]==403,'Sales permission required')
     check(req(route+'&new=1')[0]==200,'New order form')
     check(req(route,data={'action':'save','id':'0'})[0]==419,'CSRF required before writes')
-    data={'_token':'salesordertesttoken','action':'save','id':'0','customer_id':str(customer),'order_date':'2026-01-01','expected_date':'2026-01-10','status':'Confirmada','lines[0][finished_product_id]':str(article),'lines[0][quantity]':'100','lines[0][unit_price]':'2.50','lines[0][discount_percent]':'10'}
+    data={'_token':'salesordertesttoken','action':'save','id':'0','customer_id':str(customer),'order_date':'2026-01-01','expected_date':'2026-01-10','status':'Confirmada','requisition_number':'REQ-HTTP-001','lines[0][finished_product_id]':str(article),'lines[0][quantity]':'100','lines[0][unit_price]':'2.50','lines[0][discount_percent]':'10'}
     status,_,body=req(route+'&new=1',data=data)
     check(status==200 and b'EC-' in body,'Create via authenticated POST and redirect')
     c=sqlite3.connect(db);order=c.execute('SELECT id FROM erp_sales_orders WHERE customer_id=?',(customer,)).fetchone()[0];line=c.execute('SELECT id FROM erp_sales_order_lines WHERE sales_order_id=?',(order,)).fetchone()[0];c.close();profile=route+'&id='+str(order)
@@ -137,7 +137,7 @@ try:
     c=sqlite3.connect(db);revision=c.execute('SELECT revision FROM erp_sales_orders WHERE id=?',(order,)).fetchone()[0]
     c.execute('INSERT OR REPLACE INTO app_settings(setting_key,setting_value) VALUES("logo_report_dark","docs/mapper-reference/ui/assets/logo-tisser-blue.png")');c.commit()
     emission={'_token':'salesordertesttoken','action':'generate_confirmation','id':str(order),'revision':str(revision)}
-    for expected in ['CONF-00001','CONF-00002']:
+    for expected in ['CONF-00001','CONF-00001']:
         status,headers,pdf=req(profile,data=emission)
         check(status==200 and b'<!doctype html>' in pdf and expected.encode() in pdf and 'text/html' in headers.get('Content-Type',''),'Issue archived numbered printable confirmation '+expected)
         doc=c.execute('SELECT id,notes FROM erp_product_documents WHERE entity_type="sales_order" AND entity_id=? AND version=?',(order,expected)).fetchone()
@@ -145,11 +145,35 @@ try:
         download=profile+'&action=document&document='+str(doc[0])
         status,headers,reprint=req(download);check(status==200 and reprint==pdf and 'text/html' in headers.get('Content-Type',''),'Download preserves archived number and exact archived document bytes')
         check(req(download,uid=90002)[0]==403,'Archived confirmation requires report export permission')
+    check(c.execute('SELECT COUNT(*) FROM erp_product_documents WHERE entity_type="sales_order" AND entity_id=? AND document_type="Confirmação de encomenda"',(order,)).fetchone()[0]==1,'Repeated emission creates one indexed confirmation only')
+    check(b'Nr. Requisi'+bytes([195,167,195,163])+b'o: REQ-HTTP-001' in pdf and b'Processado por' not in pdf,'Requisition printed and issuer footer removed')
     next_number=c.execute('SELECT next_number FROM erp_number_sequences WHERE code="sales_order_confirmation"').fetchone()[0]
-    check(req(profile,data=dict(emission,revision='999'))[0]==422,'Reject stale numbered issuance')
+    check(req(route+'&id='+str(unknown_order),data=dict(emission,id=str(unknown_order),revision='999'))[0]==422,'Reject stale first issuance')
     check(req(profile,data=dict(emission,_token='invalid'))[0]==419,'Require CSRF for numbered issuance')
     check(req(profile,data=emission,uid=90002)[0]==403,'Require permission for numbered issuance')
     check(c.execute('SELECT next_number FROM erp_number_sequences WHERE code="sales_order_confirmation"').fetchone()[0]==next_number,'Denied issuance and reprints do not consume numbers');c.close()
+    c=sqlite3.connect(db)
+    if 'deleted_at' not in [column[1] for column in c.execute('PRAGMA table_info(erp_machines)')]:c.execute('ALTER TABLE erp_machines ADD COLUMN deleted_at TEXT');c.commit()
+    subprocess.run([php,'-r',"require '"+str(app)+"/config.php';require_once '"+str(app)+"/erp_migrations.php';gt_erp_migrate_production_cost_settings($pdo);"],env=env,check=True,stdout=subprocess.DEVNULL)
+    for code,value in [('sales_order','40'),('sales_order_confirmation','21')]:
+        config={'_token':'salesordertesttoken','action':'set_commercial_sequence','commercial_sequence':code,'commercial_next_number':value}
+        status,_,body=req('erp_settings.php',data=config)
+        check(status==200 and c.execute('SELECT next_number FROM erp_number_sequences WHERE code=?',(code,)).fetchone()[0]==int(value),'ERP settings update next commercial number: '+code)
+        req('erp_settings.php',data=dict(config,commercial_next_number='1'))
+        check(c.execute('SELECT next_number FROM erp_number_sequences WHERE code=?',(code,)).fetchone()[0]==int(value),'ERP settings reject previously issued number: '+code)
+        req('erp_settings.php',data=dict(config,commercial_next_number='99'),uid=90002)
+        check(c.execute('SELECT next_number FROM erp_number_sequences WHERE code=?',(code,)).fetchone()[0]==int(value),'Only administrator can change commercial numbering: '+code)
+        req('erp_settings.php',data=dict(config,commercial_next_number='99',_token='invalid'))
+        check(c.execute('SELECT next_number FROM erp_number_sequences WHERE code=?',(code,)).fetchone()[0]==int(value),'CSRF required for commercial numbering: '+code)
+    status,_,body=req(profile,data=emission);check(status==200 and b'CONF-00001' in body and c.execute('SELECT next_number FROM erp_number_sequences WHERE code="sales_order_confirmation"').fetchone()[0]==21,'Existing confirmation unaffected by configured next number')
+    c.close()
+    c=sqlite3.connect(db);old_document=c.execute('SELECT id,version FROM erp_product_documents WHERE entity_type="sales_order" AND entity_id=? AND document_type="Confirmação de encomenda"',(order,)).fetchone();revision=c.execute('SELECT revision FROM erp_sales_orders WHERE id=?',(order,)).fetchone()[0]
+    refresh_data=dict(data,revision=str(revision),requisition_number='REQ-UPDATED-HTTP')
+    check(req(profile+'&edit=1',data=refresh_data)[0]==200,'Save changed requisition on issued order')
+    new_revision=c.execute('SELECT revision FROM erp_sales_orders WHERE id=?',(order,)).fetchone()[0]
+    status,_,updated=req(profile,data=dict(emission,revision=str(new_revision)))
+    current=c.execute('SELECT id,version,notes FROM erp_product_documents WHERE entity_type="sales_order" AND entity_id=? AND document_type="Confirmação de encomenda"',(order,)).fetchall()
+    check(status==200 and b'REQ-UPDATED-HTTP' in updated and len(current)==1 and current[0][:2]==old_document and c.execute('SELECT next_number FROM erp_number_sequences WHERE code="sales_order_confirmation"').fetchone()[0]==21,'Updated order refreshes same indexed confirmation and number without advancing configured counter');c.close()
     subprocess.run(['node',str(root/'tests/sales_order_confirmation_print_browser.js'),str(base/'fixture.json'),str(base/'confirmation-browser.pdf')],check=True,timeout=90)
     check(hashlib.sha256(source.read_bytes()).hexdigest()==original,'Original database untouched')
     print('ARTIFACTS: '+str(base),flush=True)

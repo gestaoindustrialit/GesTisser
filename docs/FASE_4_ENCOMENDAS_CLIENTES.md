@@ -118,15 +118,25 @@ Correção de dados legados: uma encomenda confirmada com unidade não registada
 
 Na ficha de uma encomenda guardada, **Gerar confirmação** abre uma nova aba A4 com **Imprimir / Guardar PDF**, seguindo a Ficha Técnica e a Folha de Acompanhamento. O browser carrega o logótipo em `<img>` e imprime o documento; não se usa o descodificador de imagens do PDF nativo para esta confirmação. PNG, JPG, SVG e WEBP são apresentados pelo browser, independentemente do suporte GD do servidor.
 
-Inclui logótipo e contactos da empresa, NIF, identificação/morada do cliente, datas, referência, moeda EUR, quantidades, descrição técnica, preços, descontos e total sem IVA. Não constitui documento fiscal. Campos não registados não são presumidos. As condições ficam em branco por defeito e são editáveis no Perfil da empresa.
+Inclui logótipo e contactos da empresa, NIF, identificação/morada do cliente, datas, referência, moeda EUR, quantidades, descrição técnica, preços, descontos e total sem IVA. Não constitui documento fiscal. Campos não registados não são presumidos. As variações padrão de quantidade ±3% e largura/comprimento ±10 mm foram repostas. São apresentadas no rodapé no lugar de Processado por, que foi removido. Texto editável no Perfil da empresa; uma configuração vazia usa as variações padrão.
 
-Cada emissão explícita recebe um número da série própria `CONF-00001`, `CONF-00002`, etc. O documento HTML imprimível e os dados comerciais usados são arquivados na encomenda; **Documentos → Abrir / Guardar PDF** reabre a versão emitida sem consumir outro número. Alterações futuras no cliente/artigo não mudam o conteúdo arquivado. PDFs já emitidos pelo gerador anterior continuam descarregáveis. O PDF da nova confirmação é guardado no computador pelo diálogo de impressão do browser; o servidor arquiva o HTML, não esse PDF.
+Cada encomenda recebe uma única confirmação, numerada pela série própria `CONF-00001`, `CONF-00002`, etc. Novos cliques reutilizam o primeiro registo de documento e não avançam o contador. Depois de alterar e guardar a encomenda, o botão atualiza a confirmação com os dados mais recentes, mantendo o mesmo número e identificador. Sem alterações, reabre a versão existente. Encomendas que tenham várias confirmações emitidas pelo comportamento anterior passam a reutilizar a primeira; os documentos antigos são preservados. O documento HTML imprimível e os dados comerciais usados são arquivados na encomenda; **Documentos → Abrir / Guardar PDF** reabre a versão emitida sem consumir outro número. Uma atualização da confirmação usa os dados guardados da encomenda e os dados atuais do cliente/artigo. As versões anteriores do ficheiro são preservadas e a atualização fica auditada. PDFs já emitidos pelo gerador anterior continuam descarregáveis. O PDF da nova confirmação é guardado no computador pelo diálogo de impressão do browser; o servidor arquiva o HTML, não esse PDF.
 
 Usa `logo_report_dark`, como os outros dois documentos. Incorpora imagens locais em data URI, incluindo caminhos de instalações anteriores. Quando só existe um URL HTTP configurado, entrega esse URL ao browser. A imagem remota permanece dependente da disponibilidade desse endereço. Logótipos em falta não bloqueiam a emissão.
 
-A emissão exige sessão, CSRF, permissão `erp.reports_export` e a revisão atual da encomenda. Falhas de escrita/registo revertem a reserva do número. Usa as tabelas existentes de documentos e sequências; não exige migração adicional. A pasta de uploads deve permitir escrita e ser preservada nos backups. Mantêm-se as restrições existentes de alterações comerciais a desenvolvimento/teste.
+A emissão exige sessão, CSRF, permissão `erp.reports_export` e a revisão atual da encomenda. Falhas de escrita/registo revertem a reserva do número. Usa as tabelas existentes de documentos e sequências. O único ajuste de esquema é o campo de requisição descrito abaixo. A pasta de uploads deve permitir escrita e ser preservada nos backups. Mantêm-se as restrições existentes de alterações comerciais a desenvolvimento/teste.
 
-Ficheiros de aplicação para a correção do processo de impressão:
+A encomenda inclui o campo separado **Nr. Requisição**, apresentado depois do nome do cliente quando preenchido. O NIF do cliente fica depois da morada e do país. A migração incremental acrescenta `requisition_number` a `erp_sales_orders`, automaticamente no acesso autorizado em desenvolvimento/teste, sem alterar registos ou contadores existentes.
+
+Na Configuração ERP, os blocos de Encomendas de clientes e Confirmações permitem definir o próximo número. Apenas administradores podem alterar os contadores, com CSRF e auditoria. O próximo número deve ser superior ao último utilizado na mesma série; não modifica encomendas ou documentos existentes.
+
+Ficheiros de aplicação para esta atualização:
 - `erp_sales_orders.php`
+- `erp_settings.php`
+- `company_profile.php`
+- `partials/sales-order-history.php`
+- `app/Services/SalesOrderSchema.php`
+- `app/Services/SalesOrderService.php`
 - `app/Services/SalesOrderConfirmation.php`
-- `app/Services/SalesOrderConfirmationPrint.php` (novo)
+- `app/Services/SalesOrderConfirmationPrint.php`
+- `app/Services/CommercialNumbering.php` (novo)
