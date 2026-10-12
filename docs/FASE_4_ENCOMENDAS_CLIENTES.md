@@ -116,23 +116,17 @@ Correção de dados legados: uma encomenda confirmada com unidade não registada
 
 ## Confirmação de encomenda numerada
 
-Na ficha de uma encomenda guardada, **Gerar confirmação** emite e descarrega um PDF A4 com a identidade visual dos relatórios: logótipo e contactos da empresa, NIF, identificação e morada do cliente, datas, referência, moeda EUR, quantidades, descrição técnica, preços, descontos e total sem IVA. Não constitui documento fiscal. Campos não registados não são presumidos.
+Na ficha de uma encomenda guardada, **Gerar confirmação** abre uma nova aba A4 com **Imprimir / Guardar PDF**, seguindo a Ficha Técnica e a Folha de Acompanhamento. O browser carrega o logótipo em `<img>` e imprime o documento; não se usa o descodificador de imagens do PDF nativo para esta confirmação. PNG, JPG, SVG e WEBP são apresentados pelo browser, independentemente do suporte GD do servidor.
 
-Cada emissão explícita recebe um número da série própria `CONF-00001`, `CONF-00002`, etc. O PDF e os dados comerciais usados são arquivados na encomenda; a área **Documentos** permite descarregar novamente exatamente o documento emitido, sem consumir outro número. Alterações posteriores no cliente/artigo não alteram os PDFs arquivados. A emissão exige sessão, CSRF, permissão `erp.reports_export` e a revisão atual da encomenda. Falhas de escrita/registo revertem a reserva do número. A atividade aparece no histórico.
+Inclui logótipo e contactos da empresa, NIF, identificação/morada do cliente, datas, referência, moeda EUR, quantidades, descrição técnica, preços, descontos e total sem IVA. Não constitui documento fiscal. Campos não registados não são presumidos. As condições ficam em branco por defeito e são editáveis no Perfil da empresa.
 
-Em **Perfil da empresa**, o fax e as condições do rodapé são configuráveis. As condições ficam em branco por defeito, conforme solicitado. A geração funciona em PHP 7.0 sem `vendor/autoload.php`. Usa as tabelas existentes de documentos e sequências; a série é inicializada na primeira emissão autorizada. A pasta configurada de uploads precisa de permitir escrita e deve ser preservada nos backups.
+Cada emissão explícita recebe um número da série própria `CONF-00001`, `CONF-00002`, etc. O documento HTML imprimível e os dados comerciais usados são arquivados na encomenda; **Documentos → Abrir / Guardar PDF** reabre a versão emitida sem consumir outro número. Alterações futuras no cliente/artigo não mudam o conteúdo arquivado. PDFs já emitidos pelo gerador anterior continuam descarregáveis. O PDF da nova confirmação é guardado no computador pelo diálogo de impressão do browser; o servidor arquiva o HTML, não esse PDF.
 
-Ficheiros de aplicação desta alteração:
+Usa `logo_report_dark`, como os outros dois documentos. Incorpora imagens locais em data URI, incluindo caminhos de instalações anteriores. Quando só existe um URL HTTP configurado, entrega esse URL ao browser. A imagem remota permanece dependente da disponibilidade desse endereço. Logótipos em falta não bloqueiam a emissão.
+
+A emissão exige sessão, CSRF, permissão `erp.reports_export` e a revisão atual da encomenda. Falhas de escrita/registo revertem a reserva do número. Usa as tabelas existentes de documentos e sequências; não exige migração adicional. A pasta de uploads deve permitir escrita e ser preservada nos backups. Mantêm-se as restrições existentes de alterações comerciais a desenvolvimento/teste.
+
+Ficheiros de aplicação para a correção do processo de impressão:
 - `erp_sales_orders.php`
-- `company_profile.php`
-- `partials/sales-order-history.php`
-- `app/Services/SalesOrderConfirmation.php` (novo)
-- `app/Services/SalesOrderConfirmationPdf.php` (novo)
-- `app/Services/ProductionDossierPdf.php`
-- `app/Services/SalesOrderPdf.php`
-
-Mantêm-se as restrições existentes de alterações comerciais a desenvolvimento/teste. A cópia destes ficheiros, por si só, não ativa a emissão no ambiente de produção.
-
-### Carregamento do logótipo da confirmação
-
-Usa a configuração `logo_report_dark` da Ficha Técnica e Folha de Acompanhamento. Resolve caminhos locais e URLs guardados de instalações anteriores; quando não existe uma cópia local, mantém o URL HTTP configurado para o descodificador de imagens do dossier PDF. Logótipos em falta ou que o servidor não consiga descodificar não bloqueiam a emissão. PDFs já arquivados permanecem intactos; a correção aplica-se a novas emissões.
+- `app/Services/SalesOrderConfirmation.php`
+- `app/Services/SalesOrderConfirmationPrint.php` (novo)

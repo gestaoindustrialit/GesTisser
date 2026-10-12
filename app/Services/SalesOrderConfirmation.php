@@ -1,6 +1,6 @@
 <?php
 require_once __DIR__.'/SalesOrderService.php';
-require_once __DIR__.'/SalesOrderConfirmationPdf.php';
+require_once __DIR__.'/SalesOrderConfirmationPrint.php';
 /** Explicit issuance: caller owns authorization, CSRF and the database transaction. */
 final class SalesOrderConfirmation
 {
@@ -59,15 +59,15 @@ final class SalesOrderConfirmation
         $this->pdo->prepare('INSERT OR IGNORE INTO erp_number_sequences(code,prefix,next_number,padding) VALUES (?, ?,1,5)')->execute(['sales_order_confirmation','CONF-']);
         $number=NumberSequenceService::take($this->pdo,'sales_order_confirmation');
         $snapshot=['number'=>$number,'model'=>self::MODEL,'issued_at'=>date('Y-m-d H:i:s'),'issuer'=>$issuer,'currency'=>'EUR','company'=>$company,'customer'=>$customer,'order'=>$order,'lines'=>$lines];
-        $pdf=SalesOrderConfirmationPdf::render($snapshot);
+        $content=SalesOrderConfirmationPrint::render($snapshot);
         $directory=$this->uploads.'/sales-orders/'.$orderId.'/confirmations';
         if(!is_dir($directory)&&!@mkdir($directory,0750,true)&&!is_dir($directory))throw new RuntimeException('Não foi possível preparar a pasta de confirmações.');
-        $fileName=preg_replace('/[^A-Za-z0-9._-]/','_',$number).'.pdf';$path=$directory.'/'.$fileName;
-        $handle=@fopen($path,'xb');if(!$handle)throw new RuntimeException('Não foi possível criar o PDF. Verifique a pasta de documentos.');
+        $fileName=preg_replace('/[^A-Za-z0-9._-]/','_',$number).'.html';$path=$directory.'/'.$fileName;
+        $handle=@fopen($path,'xb');if(!$handle)throw new RuntimeException('Não foi possível criar o documento. Verifique a pasta de documentos.');
         try{
-            $offset=0;$length=strlen($pdf);while($offset<$length){$written=fwrite($handle,substr($pdf,$offset));if(!$written)throw new RuntimeException('Não foi possível escrever o PDF completo.');$offset+=$written;}
+            $offset=0;$length=strlen($content);while($offset<$length){$written=fwrite($handle,substr($content,$offset));if(!$written)throw new RuntimeException('Não foi possível escrever o documento completo.');$offset+=$written;}
             fclose($handle);$handle=null;@chmod($path,0640);
-            unset($snapshot['company']['logo_data']);$snapshot['sha256']=hash('sha256',$pdf);
+            unset($snapshot['company']['logo_data']);$snapshot['sha256']=hash('sha256',$content);
             $json=json_encode($snapshot,JSON_UNESCAPED_UNICODE|JSON_UNESCAPED_SLASHES);if($json===false)throw new RuntimeException('Não foi possível guardar os dados da confirmação.');
             $url='storage/uploads/sales-orders/'.$orderId.'/confirmations/'.$fileName;
             $this->pdo->prepare('INSERT INTO erp_product_documents(entity_type,entity_id,document_type,title,file_url,version,author_user_id,status,notes) VALUES("sales_order",?,?,?,?,?, ?,"Ativo",?)')->execute([$orderId,self::TYPE,'Confirmação '.$number.' — '.$order['order_number'],$url,$number,$userId,$json]);
@@ -75,7 +75,7 @@ final class SalesOrderConfirmation
             $this->pdo->prepare('INSERT INTO erp_audit_log(user_id,action,entity,entity_id,new_values_json) VALUES (?,"issue_confirmation","erp_sales_orders",?,?)')->execute([$userId,$orderId,json_encode(['document_id'=>$documentId,'number'=>$number,'revision'=>$revision],JSON_UNESCAPED_UNICODE)]);
             // Register the model in the existing catalogue when installed; no new schema.
             if($service->row('SELECT 1 FROM sqlite_master WHERE type="table" AND name="erp_document_catalog"'))$this->pdo->prepare('INSERT OR IGNORE INTO erp_document_catalog(code,document_number,name,module,output_format,generation_route) VALUES(?,?,?,?,?,?)')->execute(['sales_order_confirmation',self::MODEL,self::TYPE,'Comercial','PDF','erp.php?page=sales_orders&tab=documents']);
-            return ['id'=>$documentId,'number'=>$number,'path'=>$path,'pdf'=>$pdf];
+            return ['id'=>$documentId,'number'=>$number,'path'=>$path,'content'=>$content];
         }catch(Throwable $e){if(is_resource($handle))fclose($handle);@unlink($path);throw $e;}
     }
     private static function technicalDescription(array $article): string
