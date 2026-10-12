@@ -5,10 +5,14 @@
 .customer-profile .sales-order-lines th:nth-child(4){width:100px}
 .customer-profile .sales-order-lines th:nth-child(5){width:75px}
 .customer-profile .sales-order-lines th:nth-child(6){width:145px}
-.customer-profile .sales-order-lines th:nth-child(7){width:40px}
+.customer-profile .sales-order-lines th:nth-child(7){width:70px}
 .customer-profile .sales-order-lines th{font-size:.65rem;white-space:normal;padding:.65rem .4rem}
 .customer-profile .sales-order-lines td{max-width:none;padding:.5rem .4rem}
 .customer-profile .sales-order-lines .form-control,.customer-profile .sales-order-lines .form-select,.customer-profile .sales-order-lines .gt-search-select-control{font-size:.75rem;line-height:1.35;min-height:34px;padding:.4rem .5rem}
 .customer-profile .sales-order-lines input[type=number]{text-align:right}
 .customer-profile .sales-order-lines .gt-search-select{min-width:0}
 .customer-profile .sales-order-lines [data-remove-sales-line]{font-size:.75rem;padding:.25rem .4rem}
+
+.sales-order-lines .sales-line-actions{display:flex;justify-content:flex-end;align-items:center;gap:.25rem}
+.sales-order-lines [data-add-sales-line]{display:none;padding:.25rem .4rem}
+.sales-order-lines tbody tr:last-child [data-add-sales-line]{display:inline-flex;align-items:center;justify-content:center}

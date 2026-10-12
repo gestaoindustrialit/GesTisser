@@ -104,3 +104,5 @@ Os dados de teste foram criados exclusivamente em bases em memória ou cópias d
 - Validação de performance limitada à paginação e consultas com índices em dados de teste. Volumes reais e Safari em Mac/iPad não foram testados; o navegador usado foi Chromium.
 
 O campo Artigo pesquisa por descrição ou código e apresenta apenas artigos do cliente selecionado. Selecionar um artigo preenche automaticamente a descrição da linha. Mudar de cliente limpa seleções incompatíveis. Novas linhas também usam a pesquisa; a validação no servidor rejeita artigos de outro cliente e artigos genéricos para novas seleções. Os valores históricos de linhas existentes continuam preservados.
+
+O botão de adicionar artigo é um ícone + na última linha; a sua posição acompanha adições e remoções. A exportação usa SalesOrderPdf, um gerador A4 sem Composer/vendor, com paginação e valores comerciais registados. A rota mantém as permissões de exportação e não escreve na base de dados.
