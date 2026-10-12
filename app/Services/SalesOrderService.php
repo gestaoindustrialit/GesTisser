@@ -86,7 +86,7 @@ final class SalesOrderService
             $article=(int)self::text($l,'finished_product_id');$a=$this->row('SELECT a.*,u.code unit_code FROM erp_finished_products a LEFT JOIN erp_units u ON u.id=a.unit_id WHERE a.id=?',[$article]);
             if(!$a)throw new RuntimeException('Artigo inexistente.');
             $same=$before&&$article==$before['finished_product_id']&&$old['customer_id']==$customer;
-            if(!$same&&($a['status']!=='Ativo'||($a['customer_id']&&$a['customer_id']!=$customer)))throw new RuntimeException('O artigo deve estar ativo e pertencer ao cliente selecionado, ou ser genérico.');
+            if(!$same&&($a['status']!=='Ativo'||(int)$a['customer_id']!==$customer))throw new RuntimeException('O artigo deve estar ativo e pertencer ao cliente selecionado.');
             $qty=self::number(self::text($l,'quantity'));if($qty<=0)throw new RuntimeException('A quantidade deve ser positiva.');$price=self::number(self::text($l,'unit_price'),true);$discount=self::number(self::text($l,'discount_percent'),true);if($discount!==null&&$discount>100)throw new RuntimeException('Desconto inválido.');
             if($before&&($before['of_count']||$this->row('SELECT id FROM erp_sales_order_deliveries WHERE sales_order_line_id=? LIMIT 1',[$lineId]))&&(!$same||$qty!=(float)$before['quantity']))throw new RuntimeException('Não altere cliente, artigo ou quantidade de uma linha com OF ou entregas associadas.');
             // Preserve stored commercial totals unless the user changes price, discount or quantity.

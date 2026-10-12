@@ -102,3 +102,5 @@ Os dados de teste foram criados exclusivamente em bases em memória ou cópias d
 - Custo previsto/real na ficha usa fechos registados, sem estimar custos ausentes. Não há ligação a faturação nem cálculo de margem.
 - Consulta documental reutilizada; não se criou um novo carregador de anexos. A preparação Bobinas é apenas simulação, sem execução.
 - Validação de performance limitada à paginação e consultas com índices em dados de teste. Volumes reais e Safari em Mac/iPad não foram testados; o navegador usado foi Chromium.
+
+O campo Artigo pesquisa por descrição ou código e apresenta apenas artigos do cliente selecionado. Selecionar um artigo preenche automaticamente a descrição da linha. Mudar de cliente limpa seleções incompatíveis. Novas linhas também usam a pesquisa; a validação no servidor rejeita artigos de outro cliente e artigos genéricos para novas seleções. Os valores históricos de linhas existentes continuam preservados.

@@ -75,7 +75,7 @@ $filters=SalesOrderService::filters($_GET);$list=(!$order&&!$editing)?$service->
 $pageTitle=$order?'Encomenda '.$order['order_number']:'Encomendas de clientes';$navbarClockControl=[];
 require __DIR__.'/partials/header.php';
 ?>
-<link rel="stylesheet" href="assets/customer-profile.css"><script defer src="assets/sales-orders.js"></script>
+<link rel="stylesheet" href="assets/customer-profile.css"><script defer src="assets/sales-orders.js?v=<?= h((string)filemtime(__DIR__.'/assets/sales-orders.js')) ?>"></script>
 <div class="container-fluid py-4 customer-profile">
 <?php if($error):?><div class="alert alert-danger" role="alert"><?=h($error)?></div><?php elseif(SalesOrderService::text($_GET,'saved')==='1'):?><div class="alert alert-success" role="status">Encomenda atualizada com sucesso.</div><?php endif;?>
 <header class="d-flex flex-wrap justify-content-between align-items-start gap-3 mb-4"><div><a class="btn btn-sm btn-outline-secondary" href="<?=h(so_url())?>"><i class="bi bi-arrow-left me-1"></i>Voltar à lista</a><div class="small text-secondary mt-3"><?=h($order?$order['source_system']:'Gestão comercial')?></div><h1 class="h3 mb-2"><?=h($pageTitle)?></h1><?php if($order):?><a href="erp.php?page=customer_profile&amp;id=<?=(int)$order['customer_id']?>"><?=h($order['customer_code'].' — '.$order['customer_name'])?></a> <span class="badge text-bg-light ms-2"><?=h($order['status'])?></span><?php if(!$order['customer_active']):?> <span class="badge text-bg-secondary">Cliente inativo</span><?php endif;?><?php endif;?></div><div class="d-flex flex-wrap gap-2">

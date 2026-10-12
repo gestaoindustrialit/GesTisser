@@ -30,6 +30,7 @@ check((float)$ls[0]['line_total']===225.0&&(float)$ls[1]['line_total']===30.0&&$
 check(count(SalesOrderService::totals($ls,'quantity'))===3,'Mixed and unknown units never aggregated together');
 check($ls[0]['delivered']===0&&$ls[0]['pending']===100.0,'No production or delivery inferred');
 rejected($db,function()use($s,$input){$s->save($input,1,false);},'Confirmation permission enforced');
+$db->exec("INSERT INTO erp_finished_products VALUES(6,'GEN','Genérico',NULL,1,'Ativo',0)");$generic=$input;$generic['lines'][0]['finished_product_id']='6';rejected($db,function()use($s,$generic){$s->save($generic,1,true);},'Generic articles rejected when selecting customer articles');
 $wrong=$input;$wrong['lines'][0]['finished_product_id']='3';rejected($db,function()use($s,$wrong){$s->save($wrong,1,true);},'Foreign-customer article rejected despite equal customer names');
 $bad=$input;$bad['order_date']='2026-02-30';rejected($db,function()use($s,$bad){$s->save($bad,1,true);},'Invalid calendar date rejected');
 $bad=$input;$bad['lines'][0]['quantity']='-1';rejected($db,function()use($s,$bad){$s->save($bad,1,true);},'Negative quantity rejected');
