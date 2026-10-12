@@ -112,3 +112,27 @@ A criação de OF exige uma escolha explícita entre uma encomenda guardada apta
 O histórico fica visível na listagem e por baixo do formulário de nova encomenda. Cada encomenda expande para mostrar quantidades por artigo, evolução de produção e entrega, OF associadas e atividades de auditoria. O estado comercial mantém-se separado das quantidades efetivamente registadas; produzir não implica entregar. O resumo usa a média dos percentuais de cada linha, sem somar unidades diferentes, com barras limitadas visualmente a 100%. A consulta é paginada (20 encomendas) e não altera dados. Disclosure nativo com teclado, controlos para expandir/recolher todas, memória de expansão na sessão do browser e CSS responsivo.
 
 Correção de dados legados: uma encomenda confirmada com unidade não registada no artigo e na linha pode gerar OF ligada, mantendo ambas as unidades como não registadas. Uma unidade efetivamente diferente continua bloqueada com mensagem explícita; não são alterados artigos nem linhas históricas. A atualização do seletor pesquisável foi agrupada por campo, evitando redesenhar o catálogo por cada opção inserida. Com mais de 2000 artigos, a seleção “Sem Encomenda” passou de 2008 atualizações na versão anterior para 4, com pesquisa por descrição e clique reais no browser.
+
+
+## Confirmação de encomenda numerada
+
+Na ficha de uma encomenda guardada, **Gerar confirmação** emite e descarrega um PDF A4 com a identidade visual dos relatórios: logótipo e contactos da empresa, NIF, identificação e morada do cliente, datas, referência, moeda EUR, quantidades, descrição técnica, preços, descontos e total sem IVA. Não constitui documento fiscal. Campos não registados não são presumidos.
+
+Cada emissão explícita recebe um número da série própria `CONF-00001`, `CONF-00002`, etc. O PDF e os dados comerciais usados são arquivados na encomenda; a área **Documentos** permite descarregar novamente exatamente o documento emitido, sem consumir outro número. Alterações posteriores no cliente/artigo não alteram os PDFs arquivados. A emissão exige sessão, CSRF, permissão `erp.reports_export` e a revisão atual da encomenda. Falhas de escrita/registo revertem a reserva do número. A atividade aparece no histórico.
+
+Em **Perfil da empresa**, o fax e as condições do rodapé são configuráveis. As condições ficam em branco por defeito, conforme solicitado. A geração funciona em PHP 7.0 sem `vendor/autoload.php`. Usa as tabelas existentes de documentos e sequências; a série é inicializada na primeira emissão autorizada. A pasta configurada de uploads precisa de permitir escrita e deve ser preservada nos backups.
+
+Ficheiros de aplicação desta alteração:
+- `erp_sales_orders.php`
+- `company_profile.php`
+- `partials/sales-order-history.php`
+- `app/Services/SalesOrderConfirmation.php` (novo)
+- `app/Services/SalesOrderConfirmationPdf.php` (novo)
+- `app/Services/ProductionDossierPdf.php`
+- `app/Services/SalesOrderPdf.php`
+
+Mantêm-se as restrições existentes de alterações comerciais a desenvolvimento/teste. A cópia destes ficheiros, por si só, não ativa a emissão no ambiente de produção.
+
+### Carregamento do logótipo da confirmação
+
+Resolve o logótipo para relatórios a partir de caminhos relativos, caminhos absolutos locais e URLs guardados de instalações anteriores, lendo apenas ficheiros dentro da aplicação. Se não existir logótipo para relatórios configurado, usa o logótipo da barra de navegação. Não faz pedidos HTTP para incorporar o logótipo. Ficheiros em falta ou incompatíveis interrompem a emissão com indicação para carregar PNG/JPG no Perfil da empresa, evitando um PDF emitido silenciosamente sem imagem. PNG/JPG são suportados pelo PDF nativo; WEBP depende de GD. SVG exige uma versão PNG/JPG para este documento. PDFs já arquivados permanecem intactos; a correção aplica-se a novas emissões.

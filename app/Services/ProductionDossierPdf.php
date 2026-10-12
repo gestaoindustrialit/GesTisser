@@ -201,6 +201,9 @@ final class ProductionDossierPdf
         return $pdf . "trailer\n<< /Size {$count} /Root 1 0 R >>\nstartxref\n{$xref}\n%%EOF";
     }
 
+    /** Shared report-logo decoding, including PNG without GD. */
+    public static function reportImage(string $value): array {return self::imageFromDataUri($value);}
+
     private static function imageFromDataUri(string $value): array
     {
         if (preg_match('#^https?://#i', $value)) {

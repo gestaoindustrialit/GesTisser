@@ -7,7 +7,7 @@ final class SalesOrderPdf
         $pages=[];$content='';$y=0;
         $text=function($value,$size=9,$bold=false)use(&$content,&$y,&$pages,$order){
             if($y<55){if($content!=='')$pages[]=$content;$content='';$y=792;
-                $title=self::escape('Encomenda '.($order['order_number']??''));
+                $title=self::escape('Pré-visualização · Encomenda '.($order['order_number']??''));
                 $content.="BT /F2 16 Tf 35 $y Td ($title) Tj ET\n";$y-=28;
             }
             $escaped=self::escape((string)$value);$font=$bold?'F2':'F1';
@@ -30,6 +30,7 @@ final class SalesOrderPdf
             $wrap('Entrega prevista: '.self::date(($line['expected_date']??'')?:($order['expected_date']??'')));$text('');
         }
         $text('Observações',10,true);$wrap(($order['notes']??'')?:'Sem observações.');$text('');
+        $wrap('Pré-visualização sem número de emissão. Utilize Gerar confirmação para emitir o documento.');
         $wrap('Valores comerciais registados na encomenda. Não constitui documento fiscal.');
         if($content!=='')$pages[]=$content;
         $objects=[1=>'<< /Type /Catalog /Pages 2 0 R >>',3=>'<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica /Encoding /WinAnsiEncoding >>',4=>'<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica-Bold /Encoding /WinAnsiEncoding >>'];$kids=[];$count=count($pages);
