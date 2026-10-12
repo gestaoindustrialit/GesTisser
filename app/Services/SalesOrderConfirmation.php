@@ -23,9 +23,10 @@ final class SalesOrderConfirmation
     public static function logoData(string $configured,string $root): string
     {
         $configured=trim($configured);if($configured==='')return '';
+        if(preg_match('#^data:image/[^;]+;base64,#',$configured))return $configured;
         $urlPath=parse_url($configured,PHP_URL_PATH);
         $normalized=str_replace('\\','/',rawurldecode(is_string($urlPath)?$urlPath:$configured));
-        $rootPath=realpath($root);if(!$rootPath)throw new RuntimeException('A pasta da aplicação não está disponível.');
+        $rootPath=realpath($root);if(!$rootPath)return '';
         $candidates=[$rootPath.'/'.ltrim($normalized,'/'),$normalized];
         $assets=strpos($normalized,'assets/');if($assets!==false)$candidates[]=$rootPath.'/'.substr($normalized,$assets);
         $basename=basename($normalized);if($basename!==''&&$basename!=='.'&&$basename!=='..')$candidates[]=$rootPath.'/assets/uploads/'.$basename;
@@ -34,12 +35,14 @@ final class SalesOrderConfirmation
             if(!$path||strpos($path,$rootPath.DIRECTORY_SEPARATOR)!==0||!is_file($path)||!is_readable($path)||filesize($path)>4*1024*1024)continue;
             $bytes=@file_get_contents($path);if(!is_string($bytes)||$bytes==='')continue;
             $info=@getimagesizefromstring($bytes);$mime=is_array($info)?(string)($info['mime']??''):'';
-            if(!in_array($mime,['image/png','image/jpeg','image/webp'],true))throw new RuntimeException('O logótipo configurado não é compatível com este PDF. Carregue a versão PNG ou JPG no Perfil da empresa, em Logótipo para relatórios.');
+            if($mime===''&&strtolower(pathinfo($path,PATHINFO_EXTENSION))==='svg')$mime='image/svg+xml';
+            if(!in_array($mime,['image/png','image/jpeg','image/webp','image/svg+xml'],true))continue;
             $data='data:'.$mime.';base64,'.base64_encode($bytes);
-            if(!ProductionDossierPdf::reportImage($data))throw new RuntimeException('Não foi possível incorporar o logótipo no PDF. Carregue a versão PNG ou JPG no Perfil da empresa.');
             return $data;
         }
-        throw new RuntimeException('O ficheiro do logótipo configurado não foi encontrado nesta instalação. Volte a carregar o Logótipo para relatórios no Perfil da empresa.');
+        // The technical sheet and accompanying sheet retain configured HTTP URLs.
+        // The shared dossier PDF decoder embeds them when a local copy is unavailable.
+        return preg_match('#^https?://#i',$configured)?$configured:'';
     }
     public function issue(int $orderId,int $revision,int $userId,array $company,string $issuer): array
     {
