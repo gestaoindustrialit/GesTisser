@@ -251,15 +251,24 @@
                 const instanceRoot = Array.from(document.querySelectorAll('.gt-search-select')).find((node) => node.querySelector('[aria-controls="' + menu.querySelector('[role=listbox]')?.id + '"]'));
                 if (!menu.contains(event.target) && !instanceRoot?.contains(event.target)) menu.dispatchEvent(new CustomEvent('gt-close'));
             }));
-            new MutationObserver((mutations) => mutations.forEach((mutation) => mutation.addedNodes.forEach((node) => {
-                if (node.nodeType !== 1) return;
-                init(node);
-                const ownerSelect = node.closest && node.closest('select');
-                if (ownerSelect) {
-                    if (ownerSelect._gtSearchableSelect) ownerSelect._gtSearchableSelect.refresh(ownerSelect._gtSearchableSelect.search.value);
-                    else init(ownerSelect);
-                }
-            }))).observe(document.body, {childList: true, subtree: true});
+            new MutationObserver((mutations) => {
+                // A bulk option replacement must refresh each select once, not once per option.
+                const changedSelects = new Set();
+                mutations.forEach((mutation) => {
+                    const owner = mutation.target.closest && mutation.target.closest('select');
+                    if (owner) changedSelects.add(owner);
+                    mutation.addedNodes.forEach((node) => {
+                        if (node.nodeType !== 1 || node.closest('.gt-search-select-menu')) return;
+                        const ownerSelect = node.closest('select');
+                        if (ownerSelect) changedSelects.add(ownerSelect);
+                        else init(node);
+                    });
+                });
+                changedSelects.forEach((select) => {
+                    if (select._gtSearchableSelect) select._gtSearchableSelect.refresh(select._gtSearchableSelect.search.value);
+                    else init(select);
+                });
+            }).observe(document.body, {childList: true, subtree: true});
         };
         document.addEventListener('gt-close', (event) => event.target.classList.remove('is-open'), true);
         document.readyState === 'loading' ? document.addEventListener('DOMContentLoaded', start) : start();

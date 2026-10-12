@@ -19,6 +19,10 @@ c.execute("INSERT INTO erp_customers(code,name,is_active) VALUES('SALES_OTHER','
 c.execute("INSERT INTO erp_units(code,name) VALUES('test-un','Unidade de teste')");unit=c.execute('SELECT last_insert_rowid()').fetchone()[0]
 c.execute("INSERT INTO erp_finished_products(code,description,customer_id,unit_id,status) VALUES('SALES_ART','Artigo de teste',?,?,'Ativo')",(customer,unit));article=c.execute('SELECT last_insert_rowid()').fetchone()[0]
 c.execute("INSERT INTO erp_finished_products(code,description,customer_id,unit_id,status) VALUES('SALES_OTHER_ART','Artigo de teste de outro cliente',?,?,'Ativo'),('SALES_GENERIC','Artigo de teste genérico',NULL,?,'Ativo')",(other_customer,unit,unit));c.commit();c.close()
+# A realistic catalogue exposes quadratic option refreshes masked by tiny fixtures.
+c=sqlite3.connect(db)
+c.executemany('INSERT INTO erp_finished_products(code,description,customer_id,unit_id,status) VALUES(?,?,?,?,"Ativo")', [('BULK_'+str(n),'Artigo de catálogo '+str(n),other_customer,unit) for n in range(2000)])
+c.commit();c.close()
 sessions={}
 for uid in (90001,90002,90003):
     code="require '"+str(app)+"/bootstrap/config.php';require '"+str(app)+"/bootstrap/session.php';$_SESSION['user_id']="+str(uid)+";$_SESSION['_csrf_token']='salesordertesttoken';echo session_id();"
@@ -75,7 +79,7 @@ try:
     check(req(profile,data={'_token':'salesordertesttoken','action':'link_of','id':str(order)},uid=90002)[0]==403,'OF association permission required')
     check(req(profile,data={'_token':'salesordertesttoken','action':'link_delivery','id':str(order)},uid=90002)[0]==403,'Delivery confirmation permission required')
     fixture={'url':url,'cookie':sessions[90001],'order':order,'customer':customer,'article':article,'base':str(base)};(base/'fixture.json').write_text(json.dumps(fixture))
-    subprocess.run(['node',str(root/'tests/sales_order_browser.js'),str(base/'fixture.json')],env=dict(env,BOOTSTRAP_ASSETS='/workspace/gestisser-env'),check=True)
+    subprocess.run(['node',str(root/'tests/sales_order_browser.js'),str(base/'fixture.json')],env=dict(env,BOOTSTRAP_ASSETS='/workspace/gestisser-env'),check=True,timeout=180)
     # Real OF creation exercises the shared transaction, snapshots and commercial FK.
     c=sqlite3.connect(db)
     c.execute('INSERT INTO erp_customer_delivery_addresses(customer_id,label,address,postal_code,city,country,transporter) VALUES(?,"Entrega","Rua teste","1000","Lisboa","Portugal","Teste")',(customer,));address=c.execute('SELECT last_insert_rowid()').fetchone()[0]
@@ -114,6 +118,21 @@ try:
     unchanged=hashlib.sha256(db.read_bytes()).hexdigest();status,_,body=req(route)
     check(status==200 and b'class="so-progress so-progress-delivery" max="100" value="20"' in body and 'Entrega associada'.encode() in body,'Delivery progress and activity reflect registered evidence')
     check(unchanged==hashlib.sha256(db.read_bytes()).hexdigest(),'Progress and expanded history perform zero database writes')
+    # Confirmed order with legacy articles lacking units must not vanish.
+    c=sqlite3.connect(db);c.execute('INSERT INTO erp_finished_products(code,description,customer_id,status) VALUES("UNKNOWN_UNIT_ART","Artigo importado sem unidade",?,"Ativo")',(customer,));unknown_article=c.execute('SELECT last_insert_rowid()').fetchone()[0];c.commit()
+    unknown_order_payload={'_token':'salesordertesttoken','action':'save','id':'0','customer_id':str(customer),'order_date':'2026-10-12','status':'Confirmada','lines[0][finished_product_id]':str(unknown_article),'lines[0][quantity]':'12'}
+    check(req(route+'&new=1',data=unknown_order_payload)[0]==200,'Confirmed order saved with explicitly unrecorded article unit')
+    unknown_order,unknown_line=c.execute('SELECT sales_order_id,id FROM erp_sales_order_lines WHERE finished_product_id=?',(unknown_article,)).fetchone()
+    status,_,body=req('erp.php?page=production')
+    check(status==200 and ('data-order-id="'+str(unknown_order)+'" data-article-id="'+str(unknown_article)+'"').encode() in body,'Confirmed order with unrecorded unit appears in OF selector')
+    c.execute('INSERT INTO erp_article_routings(finished_product_id,name) VALUES(?,"Unknown-unit routing")',(unknown_article,));unknown_routing=c.execute('SELECT last_insert_rowid()').fetchone()[0]
+    c.execute('INSERT INTO erp_article_routing_versions(routing_id,version_no,status,effective_from) VALUES(?,1,"active","2020-01-01")',(unknown_routing,));unknown_version=c.execute('SELECT last_insert_rowid()').fetchone()[0];c.commit()
+    unknown_of_payload=dict(payload,sales_order_id=str(unknown_order),sales_order_line_id=str(unknown_line),finished_product_id=str(unknown_article),planned_quantity='3',routing_version_id=str(unknown_version))
+    previous_of_count=c.execute('SELECT COUNT(*) FROM erp_production_orders').fetchone()[0];status,_,body=req('erp.php?page=production',data=unknown_of_payload)
+    check(status==200 and c.execute('SELECT COUNT(*) FROM erp_production_orders').fetchone()[0]==previous_of_count+1,'Create actual OF from confirmed line with both units unrecorded')
+    unknown_of=c.execute('SELECT MAX(id) FROM erp_production_orders').fetchone()[0]
+    check(c.execute('SELECT sales_order_line_id FROM erp_sales_order_work_orders WHERE production_order_id=?',(unknown_of,)).fetchone()[0]==unknown_line,'Unknown-unit OF linked to exact commercial line')
+    check(c.execute('SELECT unit_id FROM erp_sales_order_lines WHERE id=?',(unknown_line,)).fetchone()[0] is None and c.execute('SELECT unit_id FROM erp_finished_products WHERE id=?',(unknown_article,)).fetchone()[0] is None,'Unknown units remain unknown; no units invented or historical lines rewritten');c.close()
     check(hashlib.sha256(source.read_bytes()).hexdigest()==original,'Original database untouched')
     print('ARTIFACTS: '+str(base),flush=True)
 finally:

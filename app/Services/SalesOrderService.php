@@ -104,7 +104,7 @@ final class SalesOrderService
     /** Saved, actionable lines with quantity still available for planning. */
     public function workOrderSources(){
         if(!SalesOrderSchema::ready($this->pdo))return [];
-        return $this->all('SELECT * FROM (SELECT l.*,o.order_number,o.customer_reference,o.customer_id commercial_customer_id,c.name customer_name,COALESCE(l.expected_date,o.expected_date) source_due_date,l.quantity-COALESCE((SELECT SUM(p.planned_quantity) FROM erp_sales_order_work_orders w JOIN erp_production_orders p ON p.id=w.production_order_id WHERE w.sales_order_line_id=l.id AND p.status<>"Cancelada"),0) pending_production FROM erp_sales_order_lines l JOIN erp_sales_orders o ON o.id=l.sales_order_id JOIN erp_customers c ON c.id=o.customer_id JOIN erp_finished_products a ON a.id=l.finished_product_id WHERE o.source_system="GesTISSER" AND o.original_id IS NULL AND o.status NOT IN ("Rascunho","Cancelada","Concluída") AND c.is_active=1 AND a.customer_id=o.customer_id AND a.status="Ativo" AND l.unit_id IS NOT NULL AND a.unit_id=l.unit_id) sources WHERE pending_production>0 ORDER BY sales_order_id DESC,line_number');
+        return $this->all('SELECT * FROM (SELECT l.*,a.unit_id article_unit_id,o.order_number,o.customer_reference,o.customer_id commercial_customer_id,c.name customer_name,COALESCE(l.expected_date,o.expected_date) source_due_date,l.quantity-COALESCE((SELECT SUM(p.planned_quantity) FROM erp_sales_order_work_orders w JOIN erp_production_orders p ON p.id=w.production_order_id WHERE w.sales_order_line_id=l.id AND p.status<>"Cancelada"),0) pending_production FROM erp_sales_order_lines l JOIN erp_sales_orders o ON o.id=l.sales_order_id JOIN erp_customers c ON c.id=o.customer_id JOIN erp_finished_products a ON a.id=l.finished_product_id WHERE o.source_system="GesTISSER" AND o.original_id IS NULL AND o.status NOT IN ("Rascunho","Cancelada","Concluída") AND c.is_active=1 AND a.customer_id=o.customer_id AND a.status="Ativo") sources WHERE pending_production>0 ORDER BY sales_order_id DESC,line_number');
     }
     /** Resolve the explicit source before the caller creates any OF or snapshot. */
     public function resolveWorkOrderSource(array $input,$mayLink){
@@ -119,13 +119,15 @@ final class SalesOrderService
         $selected=null;foreach($this->workOrderSources() as $line)if((int)$line['id']===(int)$lineId&&(int)$line['sales_order_id']===(int)$source){$selected=$line;break;}
         if(!$selected)throw new RuntimeException('Linha de encomenda indisponível para produção. Reabra o formulário.');
         if((int)self::text($input,'finished_product_id')!==(int)$selected['finished_product_id'])throw new RuntimeException('O artigo deve corresponder à linha da encomenda selecionada.');
+        if(!self::sameUnit($selected['unit_id'],$selected['article_unit_id']))throw new RuntimeException('A unidade do artigo difere da unidade guardada na encomenda. Verifique as unidades antes de criar a OF.');
         $quantity=self::text($input,'planned_quantity');
         if(!is_numeric($quantity)||!is_finite((float)$quantity)||(float)$quantity<=0||(float)$quantity>(float)$selected['pending_production']+0.000001)throw new RuntimeException('A quantidade deve ser positiva e não ultrapassar a quantidade por planear da linha.');
         return $selected;
     }
+    private static function sameUnit($left,$right){return ($left===null?null:(int)$left)===($right===null?null:(int)$right);}
     public function linkWorkOrder($orderId,$lineId,$ofId,$user){
         list($o,$l)=$this->mutableLine($orderId,$lineId);$of=$this->row('SELECT p.*,a.unit_id FROM erp_production_orders p JOIN erp_finished_products a ON a.id=p.finished_product_id WHERE p.id=?',[$ofId]);
-        if(!$of||$of['customer_id']!=$o['customer_id']||$of['finished_product_id']!=$l['finished_product_id']||$l['unit_id']===null||$of['unit_id']!=$l['unit_id'])throw new RuntimeException('OF, cliente, artigo e unidade devem corresponder à linha.');
+        if(!$of||$of['customer_id']!=$o['customer_id']||$of['finished_product_id']!=$l['finished_product_id']||!self::sameUnit($of['unit_id'],$l['unit_id']))throw new RuntimeException('OF, cliente, artigo e unidade devem corresponder à linha.');
         $this->pdo->prepare('INSERT INTO erp_sales_order_work_orders(sales_order_line_id,production_order_id,linked_by) VALUES (?,?,?)')->execute([$lineId,$ofId,$user]);$this->audit($user,'link_work_order',$orderId,[],['line_id'=>$lineId,'production_order_id'=>$ofId]);
     }
     public function linkDelivery($orderId,$lineId,$movementId,$reference,$user){
