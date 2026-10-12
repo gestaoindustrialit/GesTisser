@@ -1,4 +1,18 @@
 document.addEventListener('DOMContentLoaded',function(){
+  var history=document.querySelector('.so-history');
+  if(history){
+    var items=Array.from(history.querySelectorAll('[data-order-history]'));
+    var tools=history.querySelector('[data-history-tools]');if(tools)tools.hidden=!items.length;
+    var remembered=[];try{remembered=JSON.parse(sessionStorage.getItem('gestisser.salesOrders.expanded')||'[]');if(!Array.isArray(remembered))remembered=[];}catch(error){}
+    items.forEach(function(item){
+      if(remembered.indexOf(item.dataset.orderId)!==-1||location.hash==='#'+item.id)item.open=true;
+      var summary=item.querySelector('summary');
+      function label(){summary.setAttribute('aria-expanded',String(item.open));summary.setAttribute('aria-label',(item.open?'Recolher':'Expandir')+' encomenda '+item.querySelector('.so-order-title strong').textContent);}
+      label();item.addEventListener('toggle',function(){label();try{sessionStorage.setItem('gestisser.salesOrders.expanded',JSON.stringify(items.filter(function(record){return record.open;}).map(function(record){return record.dataset.orderId;})));}catch(error){}});
+    });
+    history.querySelector('[data-expand-orders]').addEventListener('click',function(){items.forEach(function(item){item.open=true;});});
+    history.querySelector('[data-collapse-orders]').addEventListener('click',function(){items.forEach(function(item){item.open=false;});});
+  }
   var form=document.querySelector('[data-sales-order-form]');if(!form)return;
   var body=form.querySelector('[data-sales-lines]'),template=form.querySelector('[data-sales-line-template]'),customer=form.querySelector('[name=customer_id]');
   var next=body.children.length;

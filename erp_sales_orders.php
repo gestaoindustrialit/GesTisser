@@ -5,6 +5,7 @@ function has_shopfloor_only_navigation(array $user): bool{return (int)($user['is
 require_once __DIR__.'/bootstrap/app.php';
 require_once __DIR__.'/erp_migrations.php';
 require_once __DIR__.'/app/Services/SalesOrderService.php';
+require_once __DIR__.'/app/Services/SalesOrderProgress.php';
 $path=app_config('db_path');if(!is_file($path)){http_response_code(503);exit('Base de desenvolvimento indisponível.');}
 $pdo=new PDO('sqlite:'.$path);$pdo->setAttribute(PDO::ATTR_ERRMODE,PDO::ERRMODE_EXCEPTION);$pdo->setAttribute(PDO::ATTR_DEFAULT_FETCH_MODE,PDO::FETCH_ASSOC);$pdo->exec('PRAGMA foreign_keys=ON');$pdo->exec('PRAGMA busy_timeout=5000');$pdo->exec('PRAGMA query_only=ON');
 require_login();$user=current_user($pdo)?:[];
@@ -69,7 +70,7 @@ if(SalesOrderService::text($_GET,'action')==='document'){
     if(!is_file($file)){http_response_code(404);exit('Ficheiro indisponível.');}
     header('Content-Type: application/octet-stream');header('Content-Disposition: attachment; filename="documento-'.$documentId.'.'.preg_replace('/[^a-z0-9]/i','',pathinfo($file,PATHINFO_EXTENSION)).'"');header('X-Content-Type-Options: nosniff');header('Cache-Control: private, no-store');readfile($file);exit;
 }
-$filters=SalesOrderService::filters($_GET);$list=(!$order&&!$editing)?$service->listing($filters):null;
+$filters=SalesOrderService::filters($_GET);$list=!$order?$service->listing($filters):null;
 $pageTitle=$order?'Encomenda '.$order['order_number']:'Encomendas de clientes';$navbarClockControl=[];
 require __DIR__.'/partials/header.php';
 ?>
@@ -80,6 +81,7 @@ require __DIR__.'/partials/header.php';
 <?php if($order&&!$historical&&$writeEnvironment):?><a class="btn btn-outline-primary" href="<?=h(so_url(['id'=>$id,'edit'=>1]))?>"><i class="bi bi-pencil me-1"></i>Editar encomenda</a><?php endif;?>
 <?php if($order&&$mayOF&&$writeEnvironment&&!$historical&&!in_array($order['status'],['Rascunho','Cancelada','Concluída'],true)):?><a class="btn btn-outline-primary" href="<?=h(so_url(['id'=>$id,'tab'=>'ofs']))?>">Criar OF</a><?php endif;?>
 <?php if($order&&gt_erp_user_can($pdo,$user,'erp.reports_export')):?><a class="btn btn-outline-secondary" href="<?=h(so_url(['id'=>$id,'action'=>'pdf']))?>"><i class="bi bi-file-earmark-pdf me-1"></i>Exportar PDF</a><?php endif;?>
+<?php if(!$order):?><a class="btn btn-outline-primary" href="#sales-order-history"><i class="bi bi-clock-history me-1" aria-hidden="true"></i>Histórico</a><?php endif;?>
 <?php if(!$order&&$writeEnvironment):?><a class="btn btn-primary" href="<?=h(so_url(['new'=>1]))?>"><i class="bi bi-plus-lg me-1"></i>Nova encomenda</a><?php endif;?>
 <a class="btn btn-outline-secondary" href="erp.php?page=sales">Clientes</a><a class="btn btn-outline-secondary" href="erp.php?page=orders">Compras a fornecedores</a></div></header>
 <?php if($editing):
@@ -133,13 +135,6 @@ $articles=$service->all('SELECT id,code,description,customer_id,status FROM erp_
 <ul class="list-group"><?php $docs=$service->documents($id);foreach($docs as $doc):?><li class="list-group-item"><strong><?=h($doc['title'])?></strong> · <?=h($doc['document_type'].' · '.$doc['status'])?><?php $url=$doc['file_url']??'';if(preg_match('~^https?://~i',$url)):?> <a href="<?=h($url)?>" target="_blank" rel="noopener">Abrir documento</a><?php elseif($url):?> <a href="<?=h(so_url(['id'=>$id,'action'=>'document','document'=>$doc['id']]))?>">Descarregar documento</a><?php endif;?></li><?php endforeach;foreach($ofs as $of):?><li class="list-group-item"><a href="production_dossier.php?id=<?=(int)$of['id']?>"><?=h('Dossier e documentos · '.$of['order_number'])?></a></li><?php endforeach;if(!$docs&&!$ofs):?><li class="list-group-item text-secondary">Sem documentos associados.</li><?php endif;?></ul>
 <?php endif;?>
 </div></section>
-<?php else:?>
-<section class="card mb-4"><div class="card-body"><form method="get" class="row g-3"><input type="hidden" name="page" value="sales_orders"><?php if($filters['customer']):?><input type="hidden" name="customer" value="<?=$filters['customer']?>"><?php endif;if($filters['article']):?><input type="hidden" name="article" value="<?=$filters['article']?>"><?php endif;?>
-<div class="col-md-4"><label class="form-label" for="so-q">Pesquisar encomenda, cliente ou artigo</label><input class="form-control" id="so-q" name="q" value="<?=h($filters['q'])?>"></div>
-<div class="col-md-2"><label class="form-label" for="filter-status">Estado</label><select class="form-select" id="filter-status" name="status"><option value="">Todos</option><?php $states=$service->all('SELECT DISTINCT status FROM erp_sales_orders ORDER BY status');$states=array_unique(array_merge(SalesOrderService::statuses(),array_column($states,'status')));foreach($states as $s):?><option <?=$filters['status']===$s?'selected':''?>><?=h($s)?></option><?php endforeach;?></select></div>
-<?php foreach(['from'=>'Desde','to'=>'Até'] as $key=>$label):?><div class="col-md-2"><label class="form-label" for="so-<?=$key?>"><?=h($label)?></label><input class="form-control" id="so-<?=$key?>" type="date" name="<?=$key?>" value="<?=h($filters[$key])?>"></div><?php endforeach;?>
-<div class="col-md-2 align-self-end"><div class="form-check mb-2"><input class="form-check-input" type="checkbox" id="so-late" name="late" value="1" <?=$filters['late']==='1'?'checked':''?>><label class="form-check-label" for="so-late">Em atraso</label></div><button class="btn btn-primary w-100">Filtrar</button></div></form></div></section>
-<section class="card"><div class="card-body"><div class="table-responsive"><table class="table table-hover align-middle"><thead><tr><?php foreach(['number'=>'Encomenda','customer'=>'Cliente','date'=>'Data','expected'=>'Entrega prevista','lines'=>'Artigos'] as $key=>$label):?><th><a href="<?=h(so_url(array_merge($filters,['sort'=>$key,'dir'=>$filters['sort']===$key&&$filters['dir']==='asc'?'desc':'asc','p'=>1])))?>"><?=h($label)?></a></th><?php endforeach;?><th>Quantidade por unidade</th><?php foreach(['status'=>'Estado','source'=>'Origem'] as $key=>$label):?><th><a href="<?=h(so_url(array_merge($filters,['sort'=>$key,'dir'=>$filters['sort']===$key&&$filters['dir']==='asc'?'desc':'asc','p'=>1])))?>"><?=h($label)?></a></th><?php endforeach;?><th>Ações</th></tr></thead><tbody><?php foreach($list['rows'] as $r):?><tr><td><a class="fw-semibold" href="<?=h(so_url(['id'=>$r['id']]))?>"><?=h($r['order_number'])?></a></td><td><a href="erp.php?page=customer_profile&amp;id=<?=(int)$r['customer_id']?>"><?=h($r['customer_code'].' — '.$r['customer_name'])?></a></td><td><?=h(so_date($r['order_date']))?></td><td><?=h(so_date($r['expected_date']))?></td><td><?=(int)$r['article_count']?></td><td><?=h(so_quantities($r['quantities']))?></td><td><span class="badge text-bg-light"><?=h($r['status'])?></span></td><td><?=h($r['source_system'])?></td><td><a class="btn btn-sm btn-outline-primary" href="<?=h(so_url(['id'=>$r['id']]))?>">Consultar</a></td></tr><?php endforeach;if(!$list['rows']):?><tr><td colspan="9" class="text-center text-secondary py-4">Sem encomendas para os filtros selecionados.</td></tr><?php endif;?></tbody></table></div>
-<nav aria-label="Paginação" class="d-flex flex-wrap justify-content-between gap-2 mt-3"><span class="small text-secondary"><?=$list['total']?> encomendas · página <?=$list['page']?> / <?=$list['pages']?></span><div class="d-flex gap-2"><?php if($list['page']>1):?><a class="btn btn-sm btn-outline-secondary" href="<?=h(so_url(array_merge($filters,['p'=>$list['page']-1])))?>">Anterior</a><?php endif;if($list['page']<$list['pages']):?><a class="btn btn-sm btn-outline-secondary" href="<?=h(so_url(array_merge($filters,['p'=>$list['page']+1])))?>">Seguinte</a><?php endif;?></div></nav></div></section>
 <?php endif;?>
+<?php if(!$order):require __DIR__.'/partials/sales-order-history.php';endif;?>
 </div><?php require __DIR__.'/partials/footer.php';?>

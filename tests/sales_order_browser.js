@@ -9,6 +9,23 @@ const page=await context.newPage();const errors=[];page.on('pageerror',e=>errors
 const profile=fixture.url+'/erp.php?page=sales_orders&id='+fixture.order;
 for(const width of [1440,1024,768,390]){
 await page.setViewportSize({width,height:1000});
+await page.goto(fixture.url+'/erp.php?page=sales_orders&new=1');
+assert(await page.locator('[data-sales-order-form]').count()===1&&await page.locator('[data-order-history]').count()===1,'New order editor and saved history coexist');
+await page.getByRole('button',{name:'Recolher',exact:true}).click();
+const savedOrder=page.locator('[data-order-history][data-order-id="'+fixture.order+'"]');
+await savedOrder.locator('summary').click();
+assert(await savedOrder.evaluate(el=>el.open),'Order summary expands');
+assert(await savedOrder.getByText('Artigos e evolução',{exact:true}).isVisible(),'Expansion displays line evolution');
+assert(await savedOrder.locator('.so-timeline').isVisible(),'Expansion displays activity history');
+assert(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+1),'Expanded history overflow at '+width);
+await page.screenshot({path:path.join(fixture.base,'order-history-'+width+'.png'),fullPage:true});
+await page.getByRole('button',{name:'Recolher',exact:true}).click();
+await savedOrder.locator('summary').focus();await page.keyboard.press('Enter');
+assert(await savedOrder.evaluate(el=>el.open),'Native disclosure works with keyboard');
+await page.getByRole('button',{name:'Recolher',exact:true}).click();
+await page.getByRole('button',{name:'Expandir todas',exact:true}).click();
+assert(await savedOrder.evaluate(el=>el.open),'Bulk expansion works');
+
 for(const tab of ['overview','articles','ofs','delivery','costs','documents']){
 const response=await page.goto(profile+'&tab='+tab);assert(response.status()===200);
 await page.locator('.customer-profile').waitFor();
