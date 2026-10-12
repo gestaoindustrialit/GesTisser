@@ -124,7 +124,7 @@ Cada encomenda recebe uma única confirmação, numerada pela série própria `C
 
 Usa `logo_report_dark`, como os outros dois documentos. Incorpora imagens locais em data URI, incluindo caminhos de instalações anteriores. Quando só existe um URL HTTP configurado, entrega esse URL ao browser. A imagem remota permanece dependente da disponibilidade desse endereço. Logótipos em falta não bloqueiam a emissão.
 
-A emissão exige sessão, CSRF, permissão `erp.reports_export` e a revisão atual da encomenda. Falhas de escrita/registo revertem a reserva do número. Usa as tabelas existentes de documentos e sequências. O único ajuste de esquema é o campo de requisição descrito abaixo. A pasta de uploads deve permitir escrita e ser preservada nos backups. Mantêm-se as restrições existentes de alterações comerciais a desenvolvimento/teste.
+A emissão exige sessão, CSRF, permissão `erp.reports_export` e a revisão atual da encomenda. Falhas de escrita/registo revertem a reserva do número. Usa as tabelas existentes de documentos e sequências. O único ajuste de esquema é o campo de requisição descrito abaixo. A pasta de uploads deve permitir escrita e ser preservada nos backups. Em produção, as alterações comerciais ficam disponíveis depois da ativação explícita do módulo pelo administrador. Antes da ativação, não são preparadas automaticamente pelo simples acesso à página.
 
 A encomenda inclui o campo separado **Nr. Requisição**, apresentado depois do nome do cliente quando preenchido. O NIF do cliente fica depois da morada e do país. A migração incremental acrescenta `requisition_number` a `erp_sales_orders`, automaticamente no acesso autorizado em desenvolvimento/teste, sem alterar registos ou contadores existentes.
 
@@ -140,3 +140,23 @@ Ficheiros de aplicação para esta atualização:
 - `app/Services/SalesOrderConfirmation.php`
 - `app/Services/SalesOrderConfirmationPrint.php`
 - `app/Services/CommercialNumbering.php` (novo)
+
+## Ativação em produção
+
+Depois de instalar o conjunto completo do módulo, atualizar também:
+- `erp_sales_orders.php`
+- `app/Services/SalesOrderSchema.php`
+- `erp.php`
+- `erp_customer.php`
+- `erp_settings.php`
+- `scripts/migrate_sales_orders.php` (alternativa por terminal)
+
+Criar uma cópia de segurança da base produtiva e manter as pastas de uploads. Entrar como administrador e abrir `erp.php?page=sales_orders`. O botão **Ativar encomendas de clientes** prepara, numa transação, as tabelas/índices de encomendas e o campo `requisition_number`, preserva sequências e registos existentes e guarda `sales_orders_enabled=1` na própria base. A base tem de existir; não é criada nem substituída. Não altera o APP_ENV nem dados de clientes/artigos/OF/stocks. Uma falha reverte a migração e o estado de ativação. Repetir a ativação não reinicia números.
+
+Ativação exige administrador, sessão e CSRF. Depois de ativa, encomendas/confirmar/exportar/OF continuam sujeitos às permissões habituais. A ativação cobre também o botão Nova encomenda na ficha do cliente, a seleção de encomendas na criação da OF e os contadores na Configuração ERP.
+
+Alternativa CLI, executada na pasta da aplicação após o backup:
+```sh
+php scripts/migrate_sales_orders.php --activate-production
+```
+Sem a opção explícita, o script continua a recusar migrações em produção. Não copiar a base de desenvolvimento para produção.

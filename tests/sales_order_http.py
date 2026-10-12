@@ -8,7 +8,9 @@ for name in subprocess.check_output(['git','ls-files','--cached','--others','--e
     dst=app/name;dst.parent.mkdir(parents=True,exist_ok=True);shutil.copyfile(src,dst)
 # No vendor directory: production hosting must export without Composer dependencies.
 source=Path('/workspace/gestisser-env/logs/initial-test-artifacts/database.sqlite');original=hashlib.sha256(source.read_bytes()).hexdigest();db=app/'database.sqlite';shutil.copyfile(source,db)
-env=dict(os.environ,APP_ENV='test',GESTISSER_DB_PATH=str(db),APP_DEBUG='0');php=os.environ.get('SALES_TEST_PHP','/workspace/gestisser-env/bin/php')
+test_environment=os.environ.get('SALES_TEST_ENV','test')
+(app/'storage').mkdir(exist_ok=True);(app/'storage'/'installation.json').write_text(json.dumps({'session_name':'gestisser_test_session','external_services_enabled':False,'cron_enabled':False}))
+env=dict(os.environ,APP_ENV=test_environment,GESTISSER_DB_PATH=str(db),APP_DEBUG='0');php=os.environ.get('SALES_TEST_PHP','/workspace/gestisser-env/bin/php')
 subprocess.run([php,'-r',"require '"+str(app)+"/config.php'; "],env=env,check=True,stdout=subprocess.DEVNULL)
 c=sqlite3.connect(db)
 for uid,admin in [(90001,1),(90002,0),(90003,0)]:
@@ -45,8 +47,19 @@ try:
         except urllib.error.URLError:time.sleep(.1)
     check(status==403,'Unauthorized first access denied before migration')
     c=sqlite3.connect(db);check(c.execute("SELECT COUNT(*) FROM sqlite_master WHERE name LIKE 'erp_sales_order%' AND type='table'").fetchone()[0]==0,'Denied access leaves sales tables absent');c.close()
-    status,_,body=req(route)
-    check(status==200,'First authorized access automatically installs sales schema in PHP 7.0')
+    if test_environment=='production':
+        before_activation=hashlib.sha256(db.read_bytes()).hexdigest();status,_,body=req(route)
+        check(status==200 and b'activate_sales_orders' in body,'Production shows administrative activation action')
+        check(before_activation==hashlib.sha256(db.read_bytes()).hexdigest(),'Production GET does not migrate or alter database')
+        check(req(route,data={'_token':'salesordertesttoken','action':'activate_sales_orders'},uid=90002)[0]==403,'Non-administrator cannot activate production module')
+        check(req(route,data={'_token':'invalid','action':'activate_sales_orders'})[0]==419,'Production activation requires CSRF')
+        check(before_activation==hashlib.sha256(db.read_bytes()).hexdigest(),'Denied activation leaves production fixture unchanged')
+        status,_,body=req(route,data={'_token':'salesordertesttoken','action':'activate_sales_orders'})
+        check(status==200,'Administrator activates production schema and module')
+        c=sqlite3.connect(db);check(c.execute('SELECT setting_value FROM app_settings WHERE setting_key="sales_orders_enabled"').fetchone()[0]=='1','Production activation recorded in this database');c.close()
+    else:
+        status,_,body=req(route)
+        check(status==200,'First authorized access automatically installs sales schema in PHP 7.0')
     c=sqlite3.connect(db);check(c.execute("SELECT COUNT(*) FROM sqlite_master WHERE name IN ('erp_sales_orders','erp_sales_order_lines','erp_sales_order_work_orders','erp_sales_order_deliveries')").fetchone()[0]==4,'All four commercial tables created automatically');c.close()
     before_ready=hashlib.sha256(db.read_bytes()).hexdigest();check(req(route)[0]==200 and hashlib.sha256(db.read_bytes()).hexdigest()==before_ready,'Second access skips migration without database writes')
     check(req(route,90003)[0]==403,'Sales permission required')
