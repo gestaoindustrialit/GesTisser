@@ -101,6 +101,17 @@ final class SalesOrderService
         $this->audit($user,$old?'update':'create',$id,['order'=>$old,'lines'=>$oldLines],['order'=>$this->order($id),'lines'=>$newLines]);return $id;
     }
     private function mutableLine($orderId,$lineId){$o=$this->order($orderId);if(!$o||in_array($o['status'],['Rascunho','Cancelada','Concluída'],true)||$o['source_system']!=='GesTISSER'||$o['original_id']!==null)throw new RuntimeException('A encomenda não permite novas associações.');$l=$this->row('SELECT * FROM erp_sales_order_lines WHERE id=? AND sales_order_id=?',[$lineId,$orderId]);if(!$l)throw new RuntimeException('Linha inválida.');return [$o,$l];}
+    public function validateWorkOrderArticle($lineId,$articleId){
+        $line=$this->row('SELECT sales_order_id FROM erp_sales_order_lines WHERE id=?',[$lineId]);
+        if(!$line)throw new RuntimeException('Linha comercial inválida.');
+        list($order,$line)=$this->mutableLine($line['sales_order_id'],$lineId);
+        $article=$this->row('SELECT customer_id,unit_id FROM erp_finished_products WHERE id=?',[$articleId]);
+        if(!$article||$line['finished_product_id']!=$articleId)throw new RuntimeException('O artigo da OF deve corresponder ao artigo da linha da encomenda.');
+        if($article['customer_id']!=$order['customer_id'])throw new RuntimeException('O cliente do artigo deve corresponder ao cliente da encomenda.');
+        if($line['unit_id']===null)throw new RuntimeException('A linha da encomenda não tem unidade registada. Defina a unidade do artigo e volte a selecionar o artigo na linha da encomenda antes de criar a OF.');
+        if($article['unit_id']!=$line['unit_id'])throw new RuntimeException('A unidade atual do artigo difere da unidade registada na linha da encomenda. Corrija a correspondência antes de criar a OF.');
+        return $line;
+    }
     public function linkWorkOrder($orderId,$lineId,$ofId,$user){
         list($o,$l)=$this->mutableLine($orderId,$lineId);$of=$this->row('SELECT p.*,a.unit_id FROM erp_production_orders p JOIN erp_finished_products a ON a.id=p.finished_product_id WHERE p.id=?',[$ofId]);
         if(!$of||$of['customer_id']!=$o['customer_id']||$of['finished_product_id']!=$l['finished_product_id']||$l['unit_id']===null||$of['unit_id']!=$l['unit_id'])throw new RuntimeException('OF, cliente, artigo e unidade devem corresponder à linha.');
