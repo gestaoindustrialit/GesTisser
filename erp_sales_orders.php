@@ -29,7 +29,7 @@ $mayConfirm=gt_erp_user_can($pdo,$user,'erp.confirm_orders');$mayOF=gt_erp_user_
 $editing=SalesOrderService::text($_GET,'edit')==='1'||SalesOrderService::text($_GET,'new')==='1';
 $historical=$order&&($order['source_system']!=='GesTISSER'||$order['original_id']!==null);
 $writeEnvironment=SalesOrderSchema::developmentAllowed(app_config('env'),__DIR__,$path);
-$error='';
+$error='';$issuedConfirmation=null;
 function so_url(array $params=[]){return 'erp.php?'.http_build_query(array_merge(['page'=>'sales_orders'],$params));}
 function so_number($value,$precision=3){return $value===null?'Sem dados':number_format((float)$value,$precision,',',' ');}
 function so_date($value){return $value&&strtotime($value)!==false?date('d/m/Y',strtotime($value)):'—';}
@@ -39,18 +39,23 @@ if($method==='POST'){
     if(!$writeEnvironment){http_response_code(403);exit('Alterações permitidas apenas na cópia de desenvolvimento.');}
     $action=SalesOrderService::text($_POST,'action');
     $postedId=(int)SalesOrderService::text($_POST,'id','0');if($postedId!==$id){http_response_code(400);exit('Encomenda inválida para esta ficha.');}
-    if(!in_array($action,['save','link_of','link_delivery'],true)){http_response_code(405);exit('Ação não permitida.');}
+    if(!in_array($action,['save','link_of','link_delivery','generate_confirmation'],true)){http_response_code(405);exit('Ação não permitida.');}
+    if($action==='generate_confirmation'&&!gt_erp_user_can($pdo,$user,'erp.reports_export')){http_response_code(403);exit('Sem permissão para emitir documentos.');}
+    if($action==='generate_confirmation'&&!$order){http_response_code(404);exit('Guarde a encomenda antes de emitir.');}
     if(($action==='link_of'&&!$mayOF)||($action==='link_delivery'&&!$mayDeliver)){http_response_code(403);exit('Sem permissão para esta associação.');}
     try {
         $pdo->exec('PRAGMA query_only=OFF');$pdo->beginTransaction();
         if($action==='save')$id=$service->save($_POST,(int)$user['id'],$mayConfirm);
         elseif($action==='link_of')$service->linkWorkOrder($id,(int)SalesOrderService::text($_POST,'line_id'),(int)SalesOrderService::text($_POST,'of_id'),(int)$user['id']);
+        elseif($action==='generate_confirmation'){require_once __DIR__.'/app/Services/SalesOrderConfirmation.php';$issuedConfirmation=(new SalesOrderConfirmation($pdo,(string)app_config('paths.uploads')))->issue($id,(int)SalesOrderService::text($_POST,'revision'),(int)$user['id'],SalesOrderConfirmation::company($pdo,__DIR__),(string)$user['name']);}
         else $service->linkDelivery($id,(int)SalesOrderService::text($_POST,'line_id'),(int)SalesOrderService::text($_POST,'movement_id'),SalesOrderService::text($_POST,'delivery_reference'),(int)$user['id']);
-        $pdo->commit();header('Location: '.so_url(['id'=>$id,'tab'=>$action==='link_of'?'ofs':($action==='link_delivery'?'delivery':'overview'),'saved'=>1]),true,303);exit;
+        $pdo->commit();if(!$issuedConfirmation){header('Location: '.so_url(['id'=>$id,'tab'=>$action==='link_of'?'ofs':($action==='link_delivery'?'delivery':'overview'),'saved'=>1]),true,303);exit;}
     }catch(PDOException $e){if($pdo->inTransaction())$pdo->rollBack();error_log('Sales order database: '.$e->getMessage());$error='Não foi possível guardar. O registo pode já estar associado; verifique e volte a tentar.';http_response_code(422);}
     catch(RuntimeException $e){if($pdo->inTransaction())$pdo->rollBack();$error=$e->getMessage();http_response_code(422);}
     catch(Throwable $e){if($pdo->inTransaction())$pdo->rollBack();error_log('Sales order save: '.$e->getMessage());$error='Não foi possível guardar. Verifique se o registo já está associado e volte a tentar.';http_response_code(422);}
     finally{$pdo->exec('PRAGMA query_only=ON');}
+    if($error!==''&&$issuedConfirmation){@unlink($issuedConfirmation['path']);$issuedConfirmation=null;}
+    if($issuedConfirmation){header('Content-Type: application/pdf');header('Content-Disposition: attachment; filename="'.basename($issuedConfirmation['path']).'"');header('Content-Length: '.strlen($issuedConfirmation['pdf']));header('Cache-Control: private, no-store');header('X-Content-Type-Options: nosniff');echo $issuedConfirmation['pdf'];exit;}
     if($action==='save')$editing=true;
 }
 $lines=$order?$service->lines($id):[];$ofs=$order?$service->workOrders($id):[];
@@ -68,7 +73,11 @@ if(SalesOrderService::text($_GET,'action')==='document'){
     require_once __DIR__.'/app/Services/ArticleDocument.php';
     try{$file=ArticleDocument::absolutePath(__DIR__,(string)$doc['file_url']);}catch(Throwable $e){http_response_code(404);exit('Ficheiro indisponível.');}
     if(!is_file($file)){http_response_code(404);exit('Ficheiro indisponível.');}
-    header('Content-Type: application/octet-stream');header('Content-Disposition: attachment; filename="documento-'.$documentId.'.'.preg_replace('/[^a-z0-9]/i','',pathinfo($file,PATHINFO_EXTENSION)).'"');header('X-Content-Type-Options: nosniff');header('Cache-Control: private, no-store');readfile($file);exit;
+    $confirmation=$doc['document_type']==='Confirmação de encomenda';
+    if($confirmation&&!gt_erp_user_can($pdo,$user,'erp.reports_export')){http_response_code(403);exit('Sem permissão para descarregar a confirmação.');}
+    if($confirmation){$metadata=json_decode((string)$doc['notes'],true);$fileHash=@hash_file('sha256',$file);if(!is_array($metadata)||!is_string($metadata['sha256']??null)||!is_string($fileHash)||!hash_equals($metadata['sha256'],$fileHash)){http_response_code(409);exit('O ficheiro da confirmação não corresponde ao documento emitido.');}}
+    $extension=preg_replace('/[^a-z0-9]/i','',pathinfo($file,PATHINFO_EXTENSION));$filename=$confirmation?preg_replace('/[^A-Za-z0-9._-]/','_',(string)$doc['version']):'documento-'.$documentId;
+    header('Content-Type: '.($extension==='pdf'?'application/pdf':'application/octet-stream'));header('Content-Disposition: attachment; filename="'.$filename.'.'.$extension.'"');header('X-Content-Type-Options: nosniff');header('Cache-Control: private, no-store');readfile($file);exit;
 }
 $filters=SalesOrderService::filters($_GET);$list=!$order?$service->listing($filters):null;
 $pageTitle=$order?'Encomenda '.$order['order_number']:'Encomendas de clientes';$navbarClockControl=[];
@@ -80,7 +89,7 @@ require __DIR__.'/partials/header.php';
 <header class="d-flex flex-wrap justify-content-between align-items-start gap-3 mb-4"><div><a class="btn btn-sm btn-outline-secondary" href="<?=h(so_url())?>"><i class="bi bi-arrow-left me-1"></i>Voltar à lista</a><div class="small text-secondary mt-3"><?=h($order?$order['source_system']:'Gestão comercial')?></div><h1 class="h3 mb-2"><?=h($pageTitle)?></h1><?php if($order):?><a href="erp.php?page=customer_profile&amp;id=<?=(int)$order['customer_id']?>"><?=h($order['customer_code'].' — '.$order['customer_name'])?></a> <span class="badge text-bg-light ms-2"><?=h($order['status'])?></span><?php if(!$order['customer_active']):?> <span class="badge text-bg-secondary">Cliente inativo</span><?php endif;?><?php endif;?></div><div class="d-flex flex-wrap gap-2">
 <?php if($order&&!$historical&&$writeEnvironment):?><a class="btn btn-outline-primary" href="<?=h(so_url(['id'=>$id,'edit'=>1]))?>"><i class="bi bi-pencil me-1"></i>Editar encomenda</a><?php endif;?>
 <?php if($order&&$mayOF&&$writeEnvironment&&!$historical&&!in_array($order['status'],['Rascunho','Cancelada','Concluída'],true)):?><a class="btn btn-outline-primary" href="<?=h(so_url(['id'=>$id,'tab'=>'ofs']))?>">Criar OF</a><?php endif;?>
-<?php if($order&&gt_erp_user_can($pdo,$user,'erp.reports_export')):?><a class="btn btn-outline-secondary" href="<?=h(so_url(['id'=>$id,'action'=>'pdf']))?>"><i class="bi bi-file-earmark-pdf me-1"></i>Exportar PDF</a><?php endif;?>
+<?php if($order&&gt_erp_user_can($pdo,$user,'erp.reports_export')&&$writeEnvironment&&!$historical):?><form method="post" action="<?=h(so_url(['id'=>$id]))?>"><?=csrf_input()?><input type="hidden" name="id" value="<?=$id?>"><input type="hidden" name="revision" value="<?=(int)$order['revision']?>"><button class="btn btn-outline-primary" name="action" value="generate_confirmation"><i class="bi bi-file-earmark-check me-1" aria-hidden="true"></i>Gerar confirmação</button></form><?php endif;?>
 <?php if(!$order):?><a class="btn btn-outline-primary" href="#sales-order-history"><i class="bi bi-clock-history me-1" aria-hidden="true"></i>Histórico</a><?php endif;?>
 <?php if(!$order&&$writeEnvironment):?><a class="btn btn-primary" href="<?=h(so_url(['new'=>1]))?>"><i class="bi bi-plus-lg me-1"></i>Nova encomenda</a><?php endif;?>
 <a class="btn btn-outline-secondary" href="erp.php?page=sales">Clientes</a><a class="btn btn-outline-secondary" href="erp.php?page=orders">Compras a fornecedores</a></div></header>
@@ -132,7 +141,7 @@ $articles=$service->all('SELECT id,code,description,customer_id,status FROM erp_
 <h3 class="h6 mt-4">Histórico de alterações</h3><ul class="list-unstyled"><?php foreach($service->history($id) as $event):$before=json_decode($event['old_values_json'],true);$after=json_decode($event['new_values_json'],true);?><li class="border-bottom py-2"><?=h($event['created_at'].' · '.$event['action'])?><?php if(isset($after['order']['status'])):?> · <?=h(($before['order']['status']??'Novo').' → '.$after['order']['status'])?><?php endif;?></li><?php endforeach;?></ul>
 <?php elseif($tab==='documents'):?>
 <p class="small text-secondary">Documentos associados através do catálogo documental existente e documentos das OF relacionadas.</p>
-<ul class="list-group"><?php $docs=$service->documents($id);foreach($docs as $doc):?><li class="list-group-item"><strong><?=h($doc['title'])?></strong> · <?=h($doc['document_type'].' · '.$doc['status'])?><?php $url=$doc['file_url']??'';if(preg_match('~^https?://~i',$url)):?> <a href="<?=h($url)?>" target="_blank" rel="noopener">Abrir documento</a><?php elseif($url):?> <a href="<?=h(so_url(['id'=>$id,'action'=>'document','document'=>$doc['id']]))?>">Descarregar documento</a><?php endif;?></li><?php endforeach;foreach($ofs as $of):?><li class="list-group-item"><a href="production_dossier.php?id=<?=(int)$of['id']?>"><?=h('Dossier e documentos · '.$of['order_number'])?></a></li><?php endforeach;if(!$docs&&!$ofs):?><li class="list-group-item text-secondary">Sem documentos associados.</li><?php endif;?></ul>
+<ul class="list-group"><?php $docs=$service->documents($id);foreach($docs as $doc):?><li class="list-group-item"><div class="d-flex flex-wrap justify-content-between gap-2"><strong><?=h($doc['title'])?></strong><span class="small text-secondary"><?=h(so_date($doc['created_at']))?></span></div><div class="small text-secondary"><?=h($doc['document_type'].' · '.$doc['status'])?><?php if($doc['version']):?> · Nº <?=h($doc['version'])?><?php endif;?></div><?php $url=$doc['file_url']??'';if(preg_match('~^https?://~i',$url)):?> <a href="<?=h($url)?>" target="_blank" rel="noopener">Abrir documento</a><?php elseif($url):?> <a href="<?=h(so_url(['id'=>$id,'action'=>'document','document'=>$doc['id']]))?>"><i class="bi bi-file-earmark-pdf me-1" aria-hidden="true"></i>Descarregar documento</a><?php endif;?></li><?php endforeach;foreach($ofs as $of):?><li class="list-group-item"><a href="production_dossier.php?id=<?=(int)$of['id']?>"><?=h('Dossier e documentos · '.$of['order_number'])?></a></li><?php endforeach;if(!$docs&&!$ofs):?><li class="list-group-item text-secondary">Sem documentos associados.</li><?php endif;?></ul>
 <?php endif;?>
 </div></section>
 <?php endif;?>
