@@ -6,7 +6,7 @@ for name in subprocess.check_output(['git','ls-files','--cached','--others','--e
     src=root/name
     if not src.is_file() or name.startswith(('work/','storage/')) or src.suffix=='.sqlite':continue
     dst=app/name;dst.parent.mkdir(parents=True,exist_ok=True);shutil.copyfile(src,dst)
-os.symlink(root/'vendor',app/'vendor')
+# No vendor directory: production hosting must export without Composer dependencies.
 source=Path('/workspace/gestisser-env/logs/initial-test-artifacts/database.sqlite');original=hashlib.sha256(source.read_bytes()).hexdigest();db=app/'database.sqlite';shutil.copyfile(source,db)
 env=dict(os.environ,APP_ENV='test',GESTISSER_DB_PATH=str(db),APP_DEBUG='0');php=os.environ.get('SALES_TEST_PHP','/workspace/gestisser-env/bin/php')
 subprocess.run([php,'-r',"require '"+str(app)+"/config.php'; "],env=env,check=True,stdout=subprocess.DEVNULL)
@@ -58,7 +58,7 @@ try:
         check(status==200 and b'&lt;script&gt;' in body and b'<script>alert(1)</script>' not in body,'Escaped profile / '+tab)
     check(req(profile+'&tab=costs',90002)[0]==403,'Direct financial URL denied')
     check(req(profile+'&action=pdf',90002)[0]==403,'PDF export permission required')
-    status,_,body=req(profile+'&action=pdf');check(status==200 and body.startswith(b'%PDF'),'mPDF export generated in PHP 7.0');(base/'encomenda.pdf').write_bytes(body)
+    status,_,body=req(profile+'&action=pdf');check(status==200 and body.startswith(b'%PDF'),'PDF export generated in PHP 7.0 without vendor directory');(base/'encomenda.pdf').write_bytes(body)
     check(req(route+'&id=9999999')[0]==404,'Missing order is 404')
     status,_,body=req('erp.php?page=customer_profile&id='+str(customer)+'&tab=orders');check(status==200 and b'EC-' in body,'Customer commercial list linked to order')
     check(before==hashlib.sha256(db.read_bytes()).hexdigest(),'Profile, PDF, customer integration and denied requests leave database byte-identical')

@@ -27,8 +27,8 @@ await page.getByRole('searchbox',{name:'Pesquisar pela descrição ou código do
 await page.locator('.gt-search-select-menu.is-open [role=option]').filter({hasText:'Artigo de teste'}).click();
 assert(await articleSelect.inputValue()===String(fixture.article),'Description search selects article');
 assert(await page.locator('[name="lines[0][description]"]').inputValue()==='Artigo de teste','Article selection automatically fills description');
-await page.getByRole('button',{name:'Adicionar artigo',exact:true}).click();assert(await page.locator('[data-sales-line]').count()===2,'Add line');
-await page.locator('[data-remove-sales-line]').last().click();assert(await page.locator('[data-sales-line]').count()===1,'Remove unsaved line');
+await page.getByRole('button',{name:'Adicionar artigo',exact:true}).click();assert(await page.locator('[data-sales-line]').count()===2,'Add line');assert(await page.locator('[data-add-sales-line]:visible').count()===1,'Only one plus button visible');assert(await page.locator('[data-sales-line]').last().locator('[data-add-sales-line]').isVisible(),'Plus moves to last row');
+await page.locator('[data-remove-sales-line]').last().click();assert(await page.locator('[data-sales-line]').count()===1,'Remove unsaved line');assert(await page.locator('[data-sales-line]').last().locator('[data-add-sales-line]').isVisible(),'Plus returns to last remaining row');
 const customerSelect=page.locator('[name=customer_id]');
 const otherCustomer=await customerSelect.locator('option').evaluateAll((options,id)=>options.find(o=>o.value&&o.value!==String(id)).value,fixture.customer);
 await customerSelect.selectOption(otherCustomer);

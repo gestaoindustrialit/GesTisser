@@ -56,11 +56,9 @@ $lines=$order?$service->lines($id):[];$ofs=$order?$service->workOrders($id):[];
 if(SalesOrderService::text($_GET,'action')==='pdf'){
     if(!$order){http_response_code(404);exit('Encomenda não encontrada.');}
     if(!gt_erp_user_can($pdo,$user,'erp.reports_export')){http_response_code(403);exit('Sem permissão para exportar.');}
-    require_once __DIR__.'/vendor/autoload.php';
-    $html='<h1>Encomenda '.h($order['order_number']).'</h1><p>'.h($order['customer_code'].' — '.$order['customer_name']).'</p><p>Data: '.h(so_date($order['order_date'])).' · Entrega prevista: '.h(so_date($order['expected_date'])).'</p><p>Estado: '.h($order['status']).' · Origem: '.h($order['source_system']).' · Referência: '.h($order['customer_reference']).'</p><table width="100%" border="1" cellpadding="6"><thead><tr><th>Artigo</th><th>Quantidade</th><th>Unidade</th><th>Preço (€)</th><th>Desconto %</th><th>Valor (€)</th></tr></thead><tbody>';
-    foreach($lines as $l)$html.='<tr><td>'.h($l['article_code'].' — '.$l['description']).'</td><td>'.h(so_number($l['quantity'])).'</td><td>'.h($l['unit_code']?:'Não registada').'</td><td>'.h(so_number($l['unit_price'],4)).'</td><td>'.h(so_number($l['discount_percent'],2)).'</td><td>'.h(so_number($l['line_total'],2)).'</td></tr>';
-    $html.='</tbody></table><p>'.nl2br(h($order['notes'])).'</p><p>Valores comerciais registados na encomenda. Não constitui documento fiscal.</p>';
-    $pdf=new \Mpdf\Mpdf(['tempDir'=>app_config('paths.cache')]);$pdf->WriteHTML($html);$pdf->Output('encomenda-'.$id.'.pdf','D');exit;
+    require_once __DIR__.'/app/Services/SalesOrderPdf.php';
+    $pdf=SalesOrderPdf::render($order,$lines);
+    header('Content-Type: application/pdf');header('Content-Disposition: attachment; filename="encomenda-'.$id.'.pdf"');header('Content-Length: '.strlen($pdf));header('X-Content-Type-Options: nosniff');header('Cache-Control: private, no-store');echo $pdf;exit;
 }
 if(SalesOrderService::text($_GET,'action')==='document'){
     $documentId=filter_input(INPUT_GET,'document',FILTER_VALIDATE_INT)?:0;
@@ -99,7 +97,7 @@ $articles=$service->all('SELECT id,code,description,customer_id,status FROM erp_
 <div class="col-12"><label class="form-label" for="so-notes">Observações</label><textarea class="form-control" name="notes" id="so-notes" rows="2"><?=h(SalesOrderService::text($edit,'notes'))?></textarea></div>
 <div class="col-12"><h3 class="h6">Artigos encomendados</h3><p class="small text-secondary">Preços e descontos pertencem à encomenda. As linhas existentes são preservadas.</p><div class="table-responsive"><table class="table align-middle sales-order-lines"><thead><tr><th>Artigo *</th><th>Descrição</th><th>Qtd. *</th><th>Preço U.</th><th>Desc. %</th><th>Entrega prevista</th><th></th></tr></thead><tbody data-sales-lines>
 <?php foreach($editLines as $i=>$l):if(!is_array($l))continue;require __DIR__.'/partials/sales_order_edit_line.php';endforeach;?>
-</tbody></table></div><button class="btn btn-sm btn-outline-primary" type="button" data-add-sales-line>Adicionar artigo</button><template data-sales-line-template><?php $i='__INDEX__';$l=[];require __DIR__.'/partials/sales_order_edit_line.php';?></template></div>
+</tbody></table></div><template data-sales-line-template><?php $i='__INDEX__';$l=[];require __DIR__.'/partials/sales_order_edit_line.php';?></template></div>
 <div class="col-12 d-flex gap-2"><button class="btn btn-primary">Guardar encomenda</button><a class="btn btn-outline-secondary" href="<?=h(so_url($id?['id'=>$id]:[]))?>">Cancelar</a></div>
 </form><?php endif;?></div></section>
 <?php elseif($order):?>
