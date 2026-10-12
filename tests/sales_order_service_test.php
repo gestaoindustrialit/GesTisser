@@ -30,8 +30,12 @@ check((float)$ls[0]['line_total']===225.0&&(float)$ls[1]['line_total']===30.0&&$
 check(count(SalesOrderService::totals($ls,'quantity'))===3,'Mixed and unknown units never aggregated together');
 check($ls[0]['delivered']===0&&$ls[0]['pending']===100.0,'No production or delivery inferred');
 $sourceInput=['sales_order_id'=>(string)$id,'sales_order_line_id'=>(string)$ls[0]['id'],'finished_product_id'=>'1','planned_quantity'=>'40'];
-check(count($s->workOrderSources())===2,'Only actionable saved order lines with matching known units are OF sources');
+check(count($s->workOrderSources())===3,'Saved order lines remain visible even when their units are unrecorded');
 check((int)$s->resolveWorkOrderSource($sourceInput,true)['id']===(int)$ls[0]['id'],'Saved order line resolved by exact identifiers');
+$unknownSource=$sourceInput;$unknownSource['sales_order_line_id']=(string)$ls[2]['id'];$unknownSource['finished_product_id']='5';$unknownSource['planned_quantity']='5';
+check($s->resolveWorkOrderSource($unknownSource,true)['unit_id']===null,'Matching unrecorded units remain unrecorded and allow exact line selection');
+$db->beginTransaction();$db->exec('UPDATE erp_finished_products SET unit_id=1 WHERE id=5');check(count($s->workOrderSources())===3,'Unit mismatch is visible instead of silently hiding the order');$db->rollBack();
+$unitMismatch=$sourceInput;$db->beginTransaction();$db->exec('UPDATE erp_finished_products SET unit_id=2 WHERE id=1');try{$s->resolveWorkOrderSource($unitMismatch,true);throw new Exception('Mismatch was accepted');}catch(RuntimeException $e){check(strpos($e->getMessage(),'unidade')!==false,'Real unit mismatch remains rejected with an explicit message');}$db->rollBack();
 check($s->resolveWorkOrderSource(['sales_order_id'=>'none'],false)===null,'Sem Encomenda is an explicit source without commercial permissions');
 rejected($db,function()use($s){$s->resolveWorkOrderSource([],true);},'Missing explicit source rejected');
 rejected($db,function()use($s,$sourceInput){$s->resolveWorkOrderSource($sourceInput,false);},'Commercial source permission enforced');
@@ -51,7 +55,7 @@ rejected($db,function()use($s,$edit){$s->save($edit,1,true);},'Concurrent stale 
 $db->exec("INSERT INTO erp_production_orders VALUES(1,1,1,'OF1',60,60,'Fechada','2026-01-05'),(2,1,1,'OF2',40,20,'Em produção','2026-01-07'),(3,2,1,'OF3',5,5,'Fechada',NULL);");
 $before=$db->query('SELECT * FROM erp_production_orders')->fetchAll();
 $db->beginTransaction();$s->linkWorkOrder($id,$ls[0]['id'],1,1);$s->linkWorkOrder($id,$ls[0]['id'],2,1);$db->commit();
-check(count($s->workOrderSources())===1,'Fully planned line excluded from new OF sources');
+check(count($s->workOrderSources())===2,'Fully planned line excluded from new OF sources');
 $db->beginTransaction();$db->exec("UPDATE erp_production_orders SET status='Cancelada' WHERE id=1");$remaining=$s->resolveWorkOrderSource($sourceInput,true);check((float)$remaining['pending_production']===60.0,'Cancelled OF releases only its quantity for planning');$db->rollBack();
 $l=$s->lines($id)[0];check($l['of_count']===2&&$l['produced']===80.0&&$l['planned']===100.0&&$l['delivered']===0,'Several OF per line; partial production and closed OF never imply delivery');
 check($db->query('SELECT * FROM erp_production_orders')->fetchAll()===$before,'Existing OF unchanged');

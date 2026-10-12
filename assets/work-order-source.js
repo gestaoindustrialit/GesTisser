@@ -5,7 +5,7 @@ document.addEventListener('DOMContentLoaded',function(){
   var lineOptions=Array.from(line.options).map(function(option){return option.cloneNode(true);});
   var articleOptions=Array.from(article.options).map(function(option){return option.cloneNode(true);});
   function refresh(select){if(select._gtSearchableSelect)select._gtSearchableSelect.refresh();}
-  function rebuild(select,options,value){select.textContent='';options.forEach(function(option){select.appendChild(option.cloneNode(true));});select.value=value;refresh(select);}
+  function rebuild(select,options,value){var fragment=document.createDocumentFragment();options.forEach(function(option){fragment.appendChild(option.cloneNode(true));});select.textContent='';select.appendChild(fragment);select.value=value;refresh(select);}
   function syncArticle(initial){
     var noOrder=source.value==='none',selected=line.options[line.selectedIndex];
     var selectedId=selected&&selected.dataset.articleId||'';
