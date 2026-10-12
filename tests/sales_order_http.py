@@ -69,12 +69,38 @@ try:
     status,_,body=req(profile+'&edit=1',data=data);check(status==200,'Edit recorded commercial values')
     check(req(profile+'&edit=1',data=data)[0]==422,'Stale revision rejected over HTTP')
     status,_,body=req('erp.php?page=production&sales_order_line='+str(line))
-    check(status==200 and ('name="sales_order_line_id" value="'+str(line)+'"').encode() in body and b'name="planned_quantity" value="100"' in body,'Current OF form receives commercial line and pending quantity')
+    (base/'production-form.html').write_bytes(body)
+    check(status==200 and b'data-of-sales-line' in body and ('value="'+str(line)+'" data-order-id="'+str(order)+'"').encode() in body and re.search(rb'name="planned_quantity" value="100(?:\.0)?"',body),'Current OF form receives commercial line and pending quantity')
     # association permissions without granting writes
     check(req(profile,data={'_token':'salesordertesttoken','action':'link_of','id':str(order)},uid=90002)[0]==403,'OF association permission required')
     check(req(profile,data={'_token':'salesordertesttoken','action':'link_delivery','id':str(order)},uid=90002)[0]==403,'Delivery confirmation permission required')
     fixture={'url':url,'cookie':sessions[90001],'order':order,'customer':customer,'article':article,'base':str(base)};(base/'fixture.json').write_text(json.dumps(fixture))
     subprocess.run(['node',str(root/'tests/sales_order_browser.js'),str(base/'fixture.json')],env=dict(env,BOOTSTRAP_ASSETS='/workspace/gestisser-env'),check=True)
+    # Real OF creation exercises the shared transaction, snapshots and commercial FK.
+    c=sqlite3.connect(db)
+    c.execute('INSERT INTO erp_customer_delivery_addresses(customer_id,label,address,postal_code,city,country,transporter) VALUES(?,"Entrega","Rua teste","1000","Lisboa","Portugal","Teste")',(customer,));address=c.execute('SELECT last_insert_rowid()').fetchone()[0]
+    c.execute('INSERT INTO erp_article_routings(finished_product_id,name) VALUES(?,"Routing HTTP")',(article,));routing=c.execute('SELECT last_insert_rowid()').fetchone()[0]
+    c.execute('INSERT INTO erp_article_routing_versions(routing_id,version_no,status,effective_from) VALUES(?,1,"active","2020-01-01")',(routing,));routing_version=c.execute('SELECT last_insert_rowid()').fetchone()[0];c.commit()
+    payload={'_token':'salesordertesttoken','action':'create_finished_order','sales_order_id':str(order),'sales_order_line_id':str(line),'finished_product_id':str(article),'planned_quantity':'40','delivery_address_id':str(address),'routing_version_id':str(routing_version),'customer_order':'Forged reference'}
+    before_of=c.execute('SELECT COUNT(*) FROM erp_production_orders').fetchone()[0]
+    for key,value in [('sales_order_id',''),('sales_order_id','999999'),('sales_order_line_id','999999'),('finished_product_id','999999'),('planned_quantity','101')]:
+        bad=dict(payload);bad[key]=value;status,_,body=req('erp.php?page=production',data=bad)
+        check(b'Erro:' in body and c.execute('SELECT COUNT(*) FROM erp_production_orders').fetchone()[0]==before_of,'Invalid OF source rolls back creation: '+key)
+    status,_,body=req('erp.php?page=production',data=payload)
+    check(status==200 and c.execute('SELECT COUNT(*) FROM erp_production_orders').fetchone()[0]==before_of+1,'Create real OF from saved commercial line')
+    new_of=c.execute('SELECT MAX(id) FROM erp_production_orders').fetchone()[0]
+    check(c.execute('SELECT sales_order_line_id FROM erp_sales_order_work_orders WHERE production_order_id=?',(new_of,)).fetchone()[0]==line,'OF automatically linked to exact saved order line')
+    snapshot=json.loads(c.execute('SELECT snapshot_json FROM erp_technical_sheets WHERE production_order_id=?',(new_of,)).fetchone()[0])
+    check(snapshot['_order']['customer_order']==c.execute('SELECT order_number FROM erp_sales_orders WHERE id=?',(order,)).fetchone()[0],'Snapshot uses saved order reference instead of forged POST text')
+    excessive=dict(payload,planned_quantity='70');status,_,body=req('erp.php?page=production',data=excessive)
+    check(b'Erro:' in body and c.execute('SELECT COUNT(*) FROM erp_production_orders').fetchone()[0]==before_of+1,'Pending quantity rechecked after earlier OF')
+    no_order=dict(payload,sales_order_id='none',sales_order_line_id='0',planned_quantity='10');status,_,body=req('erp.php?page=production',data=no_order)
+    check(status==200 and c.execute('SELECT COUNT(*) FROM erp_production_orders').fetchone()[0]==before_of+2,'Explicit Sem Encomenda creates unlinked OF')
+    standalone=c.execute('SELECT MAX(id) FROM erp_production_orders').fetchone()[0]
+    snapshot=json.loads(c.execute('SELECT snapshot_json FROM erp_technical_sheets WHERE production_order_id=?',(standalone,)).fetchone()[0])
+    check(snapshot['_order']['customer_order']=='Sem Encomenda' and not c.execute('SELECT 1 FROM erp_sales_order_work_orders WHERE production_order_id=?',(standalone,)).fetchone(),'Standalone OF snapshot explicitly records Sem Encomenda without commercial FK')
+    c.close()
+
     # Real stored OF and delivery evidence drives the independent history meters.
     c=sqlite3.connect(db)
     c.execute('INSERT INTO erp_products(code,description,unit_id) VALUES("HISTORY_PRODUCT","Produto histórico",?)',(unit,));product=c.execute('SELECT last_insert_rowid()').fetchone()[0]
