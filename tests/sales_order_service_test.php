@@ -29,6 +29,15 @@ check($o['order_number']==='EC-00001'&&count($ls)===3,'Separate commercial numbe
 check((float)$ls[0]['line_total']===225.0&&(float)$ls[1]['line_total']===30.0&&$ls[2]['line_total']===null,'Recorded commercial prices, discounts and absent values');
 check(count(SalesOrderService::totals($ls,'quantity'))===3,'Mixed and unknown units never aggregated together');
 check($ls[0]['delivered']===0&&$ls[0]['pending']===100.0,'No production or delivery inferred');
+$sourceInput=['sales_order_id'=>(string)$id,'sales_order_line_id'=>(string)$ls[0]['id'],'finished_product_id'=>'1','planned_quantity'=>'40'];
+check(count($s->workOrderSources())===2,'Only actionable saved order lines with matching known units are OF sources');
+check((int)$s->resolveWorkOrderSource($sourceInput,true)['id']===(int)$ls[0]['id'],'Saved order line resolved by exact identifiers');
+check($s->resolveWorkOrderSource(['sales_order_id'=>'none'],false)===null,'Sem Encomenda is an explicit source without commercial permissions');
+rejected($db,function()use($s){$s->resolveWorkOrderSource([],true);},'Missing explicit source rejected');
+rejected($db,function()use($s,$sourceInput){$s->resolveWorkOrderSource($sourceInput,false);},'Commercial source permission enforced');
+foreach(['sales_order_id'=>'999','finished_product_id'=>'2','planned_quantity'=>'101','sales_order_line_id'=>'999'] as $key=>$value){$badSource=$sourceInput;$badSource[$key]=$value;rejected($db,function()use($s,$badSource){$s->resolveWorkOrderSource($badSource,true);},'Forged or excessive OF source rejected: '.$key);}
+rejected($db,function()use($s,$ls){$s->resolveWorkOrderSource(['sales_order_id'=>'none','sales_order_line_id'=>(string)$ls[0]['id']],true);},'Sem Encomenda cannot conceal a linked commercial line');
+foreach(['Rascunho','Cancelada','Concluída'] as $state){$db->beginTransaction();$db->prepare('UPDATE erp_sales_orders SET status=? WHERE id=?')->execute([$state,$id]);check(count($s->workOrderSources())===0,'Unplannable order excluded: '.$state);$db->rollBack();}
 rejected($db,function()use($s,$input){$s->save($input,1,false);},'Confirmation permission enforced');
 $db->exec("INSERT INTO erp_finished_products VALUES(6,'GEN','Genérico',NULL,1,'Ativo',0)");$generic=$input;$generic['lines'][0]['finished_product_id']='6';rejected($db,function()use($s,$generic){$s->save($generic,1,true);},'Generic articles rejected when selecting customer articles');
 $wrong=$input;$wrong['lines'][0]['finished_product_id']='3';rejected($db,function()use($s,$wrong){$s->save($wrong,1,true);},'Foreign-customer article rejected despite equal customer names');
@@ -42,6 +51,8 @@ rejected($db,function()use($s,$edit){$s->save($edit,1,true);},'Concurrent stale 
 $db->exec("INSERT INTO erp_production_orders VALUES(1,1,1,'OF1',60,60,'Fechada','2026-01-05'),(2,1,1,'OF2',40,20,'Em produção','2026-01-07'),(3,2,1,'OF3',5,5,'Fechada',NULL);");
 $before=$db->query('SELECT * FROM erp_production_orders')->fetchAll();
 $db->beginTransaction();$s->linkWorkOrder($id,$ls[0]['id'],1,1);$s->linkWorkOrder($id,$ls[0]['id'],2,1);$db->commit();
+check(count($s->workOrderSources())===1,'Fully planned line excluded from new OF sources');
+$db->beginTransaction();$db->exec("UPDATE erp_production_orders SET status='Cancelada' WHERE id=1");$remaining=$s->resolveWorkOrderSource($sourceInput,true);check((float)$remaining['pending_production']===60.0,'Cancelled OF releases only its quantity for planning');$db->rollBack();
 $l=$s->lines($id)[0];check($l['of_count']===2&&$l['produced']===80.0&&$l['planned']===100.0&&$l['delivered']===0,'Several OF per line; partial production and closed OF never imply delivery');
 check($db->query('SELECT * FROM erp_production_orders')->fetchAll()===$before,'Existing OF unchanged');
 rejected($db,function()use($s,$id,$ls){$s->linkWorkOrder($id,$ls[0]['id'],3,1);},'Cross-customer OF association rejected');
