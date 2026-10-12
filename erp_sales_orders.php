@@ -1,23 +1,31 @@
 <?php
-// Own bootstrap: ensure only the sales schema in development, then read-only consultation.
+// Own bootstrap: authorized schema preparation, explicit production activation, then read-only consultation.
 function db(){return $GLOBALS['pdo'];}
 function has_shopfloor_only_navigation(array $user): bool{return (int)($user['is_admin']??0)!==1&&((int)($user['pin_only_login']??0)===1||(string)($user['access_profile']??'')==='Utilizador');}
 require_once __DIR__.'/bootstrap/app.php';
 require_once __DIR__.'/erp_migrations.php';
 require_once __DIR__.'/app/Services/SalesOrderService.php';
 require_once __DIR__.'/app/Services/SalesOrderProgress.php';
-$path=app_config('db_path');if(!is_file($path)){http_response_code(503);exit('Base de desenvolvimento indisponível.');}
+$path=app_config('db_path');if(!is_file($path)){http_response_code(503);exit('Base de dados indisponível.');}
 $pdo=new PDO('sqlite:'.$path);$pdo->setAttribute(PDO::ATTR_ERRMODE,PDO::ERRMODE_EXCEPTION);$pdo->setAttribute(PDO::ATTR_DEFAULT_FETCH_MODE,PDO::FETCH_ASSOC);$pdo->exec('PRAGMA foreign_keys=ON');$pdo->exec('PRAGMA busy_timeout=5000');$pdo->exec('PRAGMA query_only=ON');
 require_login();$user=current_user($pdo)?:[];
 if(!gt_erp_user_can($pdo,$user,'erp.view')||!gt_erp_user_can($pdo,$user,'erp.sales')){http_response_code(403);exit('Sem permissão para consultar encomendas de clientes.');}
 $method=$_SERVER['REQUEST_METHOD']??'GET';if(!in_array($method,['GET','POST'],true)){http_response_code(405);header('Allow: GET, POST');exit('Método não permitido.');}
-try {
-    if(!SalesOrderSchema::ensure($pdo,app_config('env'),__DIR__,$path)){
-        http_response_code(503);exit('A preparação automática de encomendas está disponível apenas na cópia de desenvolvimento.');
-    }
-} catch(Throwable $e){
-    error_log('Sales order schema preparation failed: '.$e->getMessage());
-    http_response_code(503);exit('Não foi possível preparar as encomendas. Verifique a permissão de escrita da base SQLite e da respetiva pasta no servidor.');
+$setupError='';
+if($method==='POST'&&SalesOrderService::text($_POST,'action')==='activate_sales_orders'){
+    if((int)($user['is_admin']??0)!==1){http_response_code(403);exit('Só o administrador pode ativar as encomendas.');}
+    $token=$_POST['_token']??'';if(!is_string($token)||$token===''||!hash_equals(csrf_token(),$token)){http_response_code(419);exit('Pedido inválido. Atualize a página.');}
+    try{SalesOrderSchema::activate($pdo);header('Location: erp.php?page=sales_orders',true,303);exit;}
+    catch(Throwable $e){error_log('Sales order activation failed: '.$e->getMessage());$setupError='Não foi possível ativar. Verifique a permissão de escrita da base SQLite e da respetiva pasta.';}
+}
+try{$ready=SalesOrderSchema::ensure($pdo,app_config('env'),__DIR__,$path);}
+catch(Throwable $e){error_log('Sales order schema preparation failed: '.$e->getMessage());$ready=false;$setupError='Não foi possível preparar as encomendas. Verifique a permissão de escrita da base SQLite e da respetiva pasta.';}
+if(!$ready||!SalesOrderSchema::enabled($pdo,app_config('env'),__DIR__,$path)){
+    $pageTitle='Ativar encomendas de clientes';$navbarClockControl=[];
+    if($setupError!=='')http_response_code(503);
+    require __DIR__.'/partials/header.php';
+    ?><main class="container py-4"><section class="card shadow-sm"><div class="card-body p-4"><h1 class="h4">Ativar encomendas de clientes</h1><p>A ativação prepara a estrutura das encomendas nesta base de dados e permite criar encomendas, confirmações e OF associadas.</p><p>Os clientes, artigos, OF, stocks e documentos existentes são preservados. Faça uma cópia de segurança da base de dados antes da ativação.</p><?php if($setupError!==''):?><div class="alert alert-danger"><?=h($setupError)?></div><?php endif;?><?php if((int)($user['is_admin']??0)===1):?><form method="post" action="erp.php?page=sales_orders"><?=csrf_input()?><button class="btn btn-primary" name="action" value="activate_sales_orders"><i class="bi bi-check-circle me-1" aria-hidden="true"></i>Ativar encomendas de clientes</button></form><?php else:?><p class="text-secondary">Peça ao administrador para ativar este módulo.</p><?php endif;?></div></section></main><?php
+    require __DIR__.'/partials/footer.php';exit;
 }
 $service=new SalesOrderService($pdo);$id=filter_input(INPUT_GET,'id',FILTER_VALIDATE_INT)?:0;
 if(isset($_GET['id'])&&$id<1){http_response_code(404);exit('Encomenda não encontrada.');}
@@ -28,7 +36,7 @@ $financial=gt_erp_user_can($pdo,$user,'erp.costs_view');if($tab==='costs'&&!$fin
 $mayConfirm=gt_erp_user_can($pdo,$user,'erp.confirm_orders');$mayOF=gt_erp_user_can($pdo,$user,'erp.work_orders_create');$mayDeliver=gt_erp_user_can($pdo,$user,'erp.shipments_confirm');
 $editing=SalesOrderService::text($_GET,'edit')==='1'||SalesOrderService::text($_GET,'new')==='1';
 $historical=$order&&($order['source_system']!=='GesTISSER'||$order['original_id']!==null);
-$writeEnvironment=SalesOrderSchema::developmentAllowed(app_config('env'),__DIR__,$path);
+$writeEnvironment=SalesOrderSchema::enabled($pdo,app_config('env'),__DIR__,$path);
 $error='';$issuedConfirmation=null;
 function so_url(array $params=[]){return 'erp.php?'.http_build_query(array_merge(['page'=>'sales_orders'],$params));}
 function so_number($value,$precision=3){return $value===null?'Sem dados':number_format((float)$value,$precision,',',' ');}
@@ -36,7 +44,7 @@ function so_date($value){return $value&&strtotime($value)!==false?date('d/m/Y',s
 function so_quantities(array $groups){$parts=[];foreach($groups as $g)$parts[]=so_number($g['quantity']).' '.$g['unit'];return $parts?implode(' · ',$parts):'Sem dados';}
 if($method==='POST'){
     $token=$_POST['_token']??'';if(!is_string($token)||$token===''||!hash_equals(csrf_token(),$token)){http_response_code(419);exit('Pedido inválido. Atualize a página.');}
-    if(!$writeEnvironment){http_response_code(403);exit('Alterações permitidas apenas na cópia de desenvolvimento.');}
+    if(!$writeEnvironment){http_response_code(403);exit('O módulo de encomendas de clientes não está ativo.');}
     $action=SalesOrderService::text($_POST,'action');
     $postedId=(int)SalesOrderService::text($_POST,'id','0');if($postedId!==$id){http_response_code(400);exit('Encomenda inválida para esta ficha.');}
     if(!in_array($action,['save','link_of','link_delivery','generate_confirmation'],true)){http_response_code(405);exit('Ação não permitida.');}

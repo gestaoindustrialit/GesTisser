@@ -152,7 +152,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     ? 'Foi eliminada 1 Ordem de Fabrico e todo o respetivo histórico.'
                     : 'Foram eliminadas '.$deletedOrders.' Ordens de Fabrico e todo o respetivo histórico.';
             } elseif ($action === 'set_commercial_sequence') {
-                if(!SalesOrderSchema::developmentAllowed(app_config('env'),__DIR__,app_config('db_path')))throw new RuntimeException('Alterações comerciais permitidas apenas na cópia de desenvolvimento.');
+                if(!SalesOrderSchema::enabled($pdo,app_config('env'),__DIR__,app_config('db_path')))throw new RuntimeException('Ative as encomendas de clientes antes de alterar a numeração.');
                 $code=(string)($_POST['commercial_sequence']??'');
                 $next=filter_var($_POST['commercial_next_number']??null,FILTER_VALIDATE_INT,['options'=>['min_range'=>1]]);
                 if($next===false)throw new InvalidArgumentException('Indique um número válido.');
@@ -181,7 +181,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     $saveSequence->execute([trim((string)($_POST['sequence_prefix'][$index]??'')),max(1,(int)($_POST['sequence_next_number'][$index]??1)),min(12,max(1,(int)($_POST['sequence_padding'][$index]??5))),trim((string)($_POST['sequence_suffix'][$index]??'')),(int)$rawId]);
                     $sequenceCode=$pdo->prepare('SELECT code FROM erp_number_sequences WHERE id=?');$sequenceCode->execute([(int)$rawId]);$code=(string)$sequenceCode->fetchColumn();
                     if(in_array($code,['sales_order','sales_order_confirmation'],true)){
-                        if(!SalesOrderSchema::developmentAllowed(app_config('env'),__DIR__,app_config('db_path')))throw new RuntimeException('Alterações comerciais permitidas apenas na cópia de desenvolvimento.');
+                        if(!SalesOrderSchema::enabled($pdo,app_config('env'),__DIR__,app_config('db_path')))throw new RuntimeException('Ative as encomendas de clientes antes de alterar a numeração.');
                         CommercialNumbering::configure($pdo,$code,max(1,(int)($_POST['sequence_next_number'][$index]??1)));
                     }
                 }

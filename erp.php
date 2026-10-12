@@ -308,7 +308,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             } elseif ($action === 'create_finished_order' && gt_erp_user_can($pdo,$user,'erp.work_orders_create')) {
                 require_once __DIR__.'/app/Services/SalesOrderService.php';
                 $salesLinkService=new SalesOrderService($pdo);
-                $salesSource=$salesLinkService->resolveWorkOrderSource($_POST,gt_erp_user_can($pdo,$user,'erp.sales')&&SalesOrderSchema::developmentAllowed(app_config('env'),__DIR__,app_config('db_path')));
+                $salesSource=$salesLinkService->resolveWorkOrderSource($_POST,gt_erp_user_can($pdo,$user,'erp.sales')&&SalesOrderSchema::enabled($pdo,app_config('env'),__DIR__,app_config('db_path')));
                 $salesLineId=$salesSource?(int)$salesSource['id']:0;
                 $_POST['customer_order']=$salesSource?$salesSource['order_number']:'Sem Encomenda';
                 $orderNumber=NumberSequenceService::take($pdo,'work_order');
@@ -496,7 +496,7 @@ $salesOrderContext=null;$workOrderSources=[];$workOrderSourceOrders=[];
 $selectedSalesOrder='';$selectedSalesLine=0;
 if($page==='production'&&gt_erp_user_can($pdo,$user,'erp.work_orders_create')){
     require_once __DIR__.'/app/Services/SalesOrderService.php';
-    if(gt_erp_user_can($pdo,$user,'erp.sales')&&SalesOrderSchema::developmentAllowed(app_config('env'),__DIR__,app_config('db_path')))$workOrderSources=(new SalesOrderService($pdo))->workOrderSources();
+    if(gt_erp_user_can($pdo,$user,'erp.sales')&&SalesOrderSchema::enabled($pdo,app_config('env'),__DIR__,app_config('db_path')))$workOrderSources=(new SalesOrderService($pdo))->workOrderSources();
     foreach($workOrderSources as $source){$workOrderSourceOrders[$source['sales_order_id']]=$source;
         if((int)$source['id']===(int)($_GET['sales_order_line']??0)){$salesOrderContext=$source;$selectedSalesOrder=(string)$source['sales_order_id'];$selectedSalesLine=(int)$source['id'];}}
     if($_SERVER['REQUEST_METHOD']==='POST'&&($_POST['action']??'')==='create_finished_order'){$selectedSalesOrder=SalesOrderService::text($_POST,'sales_order_id');$selectedSalesLine=(int)SalesOrderService::text($_POST,'sales_order_line_id');}
