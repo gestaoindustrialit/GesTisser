@@ -53,6 +53,9 @@ try:
     check(status==200 and b'EC-' in body,'Create via authenticated POST and redirect')
     c=sqlite3.connect(db);order=c.execute('SELECT id FROM erp_sales_orders WHERE customer_id=?',(customer,)).fetchone()[0];line=c.execute('SELECT id FROM erp_sales_order_lines WHERE sales_order_id=?',(order,)).fetchone()[0];c.close();profile=route+'&id='+str(order)
     before=hashlib.sha256(db.read_bytes()).hexdigest()
+    for path in [route,route+'&new=1']:
+        status,_,body=req(path);check(status==200 and b'data-order-history' in body and b'Hist'+bytes([195,179])+b'rico de encomendas' in body,'Saved order history visible on list and new form')
+    check(before==hashlib.sha256(db.read_bytes()).hexdigest(),'History rendering leaves database byte-identical')
     for tab in ['overview','articles','ofs','delivery','costs','documents']:
         status,_,body=req(profile+'&tab='+tab)
         check(status==200 and b'&lt;script&gt;' in body and b'<script>alert(1)</script>' not in body,'Escaped profile / '+tab)
@@ -97,6 +100,20 @@ try:
     snapshot=json.loads(c.execute('SELECT snapshot_json FROM erp_technical_sheets WHERE production_order_id=?',(standalone,)).fetchone()[0])
     check(snapshot['_order']['customer_order']=='Sem Encomenda' and not c.execute('SELECT 1 FROM erp_sales_order_work_orders WHERE production_order_id=?',(standalone,)).fetchone(),'Standalone OF snapshot explicitly records Sem Encomenda without commercial FK')
     c.close()
+
+    # Real stored OF and delivery evidence drives the independent history meters.
+    c=sqlite3.connect(db)
+    c.execute('INSERT INTO erp_products(code,description,unit_id) VALUES("HISTORY_PRODUCT","Produto histórico",?)',(unit,));product=c.execute('SELECT last_insert_rowid()').fetchone()[0]
+    c.execute('INSERT INTO erp_production_orders(order_number,customer_id,product_id,finished_product_id,planned_quantity,produced_quantity,status) VALUES("HISTORY_OF",?,?,?,60,25,"Em produção")',(customer,product,article));of=c.execute('SELECT last_insert_rowid()').fetchone()[0]
+    c.execute('INSERT INTO erp_stock_movements(movement_number,movement_type,item_type,item_id,quantity,created_by) VALUES("HISTORY_OUT","Saída","finished_product",?,-20,90001)',(article,));movement=c.execute('SELECT last_insert_rowid()').fetchone()[0];c.commit();c.close()
+    check(req(profile,data={'_token':'salesordertesttoken','action':'link_of','id':str(order),'line_id':str(line),'of_id':str(of)})[0]==200,'Existing OF linked for real evolution evidence')
+    status,_,body=req(route+'&new=1')
+    check(status==200 and b'class="so-progress so-progress-production" max="100" value="25"' in body and b'class="so-progress so-progress-delivery" max="100" value="0"' in body,'History shows 25 percent production without inferring delivery')
+    check(b'HISTORY_OF' in body and 'OF associada'.encode() in body,'Expandable history contains associated OF and audit event')
+    check(req(profile,data={'_token':'salesordertesttoken','action':'link_delivery','id':str(order),'line_id':str(line),'movement_id':str(movement),'delivery_reference':'GUIA-HISTORY'})[0]==200,'Confirmed outgoing movement associated to order line')
+    unchanged=hashlib.sha256(db.read_bytes()).hexdigest();status,_,body=req(route)
+    check(status==200 and b'class="so-progress so-progress-delivery" max="100" value="20"' in body and 'Entrega associada'.encode() in body,'Delivery progress and activity reflect registered evidence')
+    check(unchanged==hashlib.sha256(db.read_bytes()).hexdigest(),'Progress and expanded history perform zero database writes')
     check(hashlib.sha256(source.read_bytes()).hexdigest()==original,'Original database untouched')
     print('ARTIFACTS: '+str(base),flush=True)
 finally:
