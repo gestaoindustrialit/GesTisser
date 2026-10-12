@@ -14,12 +14,32 @@ final class SalesOrderConfirmation
     {
         $company=[];foreach(['name','address','email','phone','tax_number','fax'] as $key)$company[$key]=(string)app_setting($pdo,'company_'.$key,$key==='name'?'TISSER':'');
         $company['terms']=(string)app_setting($pdo,'sales_order_confirmation_terms',self::DEFAULT_TERMS);
-        $company['logo_data']='';$configured=(string)app_setting($pdo,'logo_report_dark','');
-        $path=$configured!==''?realpath($root.'/'.ltrim($configured,'/')):false;$realRoot=realpath($root);
-        if($path&&$realRoot&&strpos($path,$realRoot.DIRECTORY_SEPARATOR)===0&&is_file($path)&&filesize($path)<=4*1024*1024&&in_array(strtolower(pathinfo($path,PATHINFO_EXTENSION)),['png','jpg','jpeg','webp'],true)){
-            $bytes=file_get_contents($path);if(is_string($bytes))$company['logo_data']='data:image/'.pathinfo($path,PATHINFO_EXTENSION).';base64,'.base64_encode($bytes);
-        }
+        $configured=trim((string)app_setting($pdo,'logo_report_dark',''));
+        if($configured==='')$configured=trim((string)app_setting($pdo,'logo_navbar_light',''));
+        $company['logo_data']=self::logoData($configured,$root);
         return $company;
+    }
+    /** Resolve branding locally, including URLs retained from another installation. */
+    public static function logoData(string $configured,string $root): string
+    {
+        $configured=trim($configured);if($configured==='')return '';
+        $urlPath=parse_url($configured,PHP_URL_PATH);
+        $normalized=str_replace('\\','/',rawurldecode(is_string($urlPath)?$urlPath:$configured));
+        $rootPath=realpath($root);if(!$rootPath)throw new RuntimeException('A pasta da aplicação não está disponível.');
+        $candidates=[$rootPath.'/'.ltrim($normalized,'/'),$normalized];
+        $assets=strpos($normalized,'assets/');if($assets!==false)$candidates[]=$rootPath.'/'.substr($normalized,$assets);
+        $basename=basename($normalized);if($basename!==''&&$basename!=='.'&&$basename!=='..')$candidates[]=$rootPath.'/assets/uploads/'.$basename;
+        foreach(array_unique($candidates) as $candidate){
+            $path=realpath($candidate);
+            if(!$path||strpos($path,$rootPath.DIRECTORY_SEPARATOR)!==0||!is_file($path)||!is_readable($path)||filesize($path)>4*1024*1024)continue;
+            $bytes=@file_get_contents($path);if(!is_string($bytes)||$bytes==='')continue;
+            $info=@getimagesizefromstring($bytes);$mime=is_array($info)?(string)($info['mime']??''):'';
+            if(!in_array($mime,['image/png','image/jpeg','image/webp'],true))throw new RuntimeException('O logótipo configurado não é compatível com este PDF. Carregue a versão PNG ou JPG no Perfil da empresa, em Logótipo para relatórios.');
+            $data='data:'.$mime.';base64,'.base64_encode($bytes);
+            if(!ProductionDossierPdf::reportImage($data))throw new RuntimeException('Não foi possível incorporar o logótipo no PDF. Carregue a versão PNG ou JPG no Perfil da empresa.');
+            return $data;
+        }
+        throw new RuntimeException('O ficheiro do logótipo configurado não foi encontrado nesta instalação. Volte a carregar o Logótipo para relatórios no Perfil da empresa.');
     }
     public function issue(int $orderId,int $revision,int $userId,array $company,string $issuer): array
     {

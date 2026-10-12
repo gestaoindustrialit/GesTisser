@@ -132,3 +132,7 @@ Ficheiros de aplicação desta alteração:
 - `app/Services/SalesOrderPdf.php`
 
 Mantêm-se as restrições existentes de alterações comerciais a desenvolvimento/teste. A cópia destes ficheiros, por si só, não ativa a emissão no ambiente de produção.
+
+### Carregamento do logótipo da confirmação
+
+Resolve o logótipo para relatórios a partir de caminhos relativos, caminhos absolutos locais e URLs guardados de instalações anteriores, lendo apenas ficheiros dentro da aplicação. Se não existir logótipo para relatórios configurado, usa o logótipo da barra de navegação. Não faz pedidos HTTP para incorporar o logótipo. Ficheiros em falta ou incompatíveis interrompem a emissão com indicação para carregar PNG/JPG no Perfil da empresa, evitando um PDF emitido silenciosamente sem imagem. PNG/JPG são suportados pelo PDF nativo; WEBP depende de GD. SVG exige uma versão PNG/JPG para este documento. PDFs já arquivados permanecem intactos; a correção aplica-se a novas emissões.
