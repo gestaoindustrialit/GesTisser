@@ -15,8 +15,10 @@ for uid,admin in [(90001,1),(90002,0),(90003,0)]:
     c.execute('INSERT OR REPLACE INTO users(id,name,email,password,is_admin,is_active,access_profile) VALUES(?,?,?,?,?,1,?)',(uid,'Order test',str(uid)+'@example.invalid','unused',admin,'SalesTest'))
 for p in ['erp.view','erp.sales','erp.customers']:c.execute('INSERT OR REPLACE INTO erp_user_permissions(user_id,permission_code,is_allowed) VALUES(90002,?,1)',(p,))
 c.execute("INSERT INTO erp_customers(code,name,is_active) VALUES('SALES_TEST','<script>alert(1)</script>',1)");customer=c.execute('SELECT last_insert_rowid()').fetchone()[0]
+c.execute("INSERT INTO erp_customers(code,name,is_active) VALUES('SALES_OTHER','Outro cliente',1)");other_customer=c.execute('SELECT last_insert_rowid()').fetchone()[0]
 c.execute("INSERT INTO erp_units(code,name) VALUES('test-un','Unidade de teste')");unit=c.execute('SELECT last_insert_rowid()').fetchone()[0]
-c.execute("INSERT INTO erp_finished_products(code,description,customer_id,unit_id,status) VALUES('SALES_ART','Artigo de teste',?,?,'Ativo')",(customer,unit));article=c.execute('SELECT last_insert_rowid()').fetchone()[0];c.commit();c.close()
+c.execute("INSERT INTO erp_finished_products(code,description,customer_id,unit_id,status) VALUES('SALES_ART','Artigo de teste',?,?,'Ativo')",(customer,unit));article=c.execute('SELECT last_insert_rowid()').fetchone()[0]
+c.execute("INSERT INTO erp_finished_products(code,description,customer_id,unit_id,status) VALUES('SALES_OTHER_ART','Artigo de teste de outro cliente',?,?,'Ativo'),('SALES_GENERIC','Artigo de teste genérico',NULL,?,'Ativo')",(other_customer,unit,unit));c.commit();c.close()
 sessions={}
 for uid in (90001,90002,90003):
     code="require '"+str(app)+"/bootstrap/config.php';require '"+str(app)+"/bootstrap/session.php';$_SESSION['user_id']="+str(uid)+";$_SESSION['_csrf_token']='salesordertesttoken';echo session_id();"

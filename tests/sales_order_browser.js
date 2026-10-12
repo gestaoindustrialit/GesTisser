@@ -20,8 +20,20 @@ console.log('PASS (browser): all order tabs, native layout and no page overflow 
 }
 await page.goto(fixture.url+'/erp.php?page=sales_orders&new=1&customer='+fixture.customer);
 assert(await page.locator('[name=customer_id]').inputValue()===String(fixture.customer),'Customer preselection');
+const articleSelect=page.locator('[data-sales-lines] select[name$="[finished_product_id]"]').first();
+assert(await articleSelect.locator('option[value]:not([value=""])').evaluateAll((options,customer)=>options.every(o=>o.dataset.customer===String(customer)),fixture.customer),'Only selected customer articles remain in the actual select');
+await articleSelect.locator('..').locator('button[role=combobox]').click();
+await page.getByRole('searchbox',{name:'Pesquisar pela descrição ou código do artigo…',exact:true}).fill('Artigo de teste');
+await page.locator('.gt-search-select-menu.is-open [role=option]').filter({hasText:'Artigo de teste'}).click();
+assert(await articleSelect.inputValue()===String(fixture.article),'Description search selects article');
+assert(await page.locator('[name="lines[0][description]"]').inputValue()==='Artigo de teste','Article selection automatically fills description');
 await page.getByRole('button',{name:'Adicionar artigo',exact:true}).click();assert(await page.locator('[data-sales-line]').count()===2,'Add line');
 await page.locator('[data-remove-sales-line]').last().click();assert(await page.locator('[data-sales-line]').count()===1,'Remove unsaved line');
+const customerSelect=page.locator('[name=customer_id]');
+const otherCustomer=await customerSelect.locator('option').evaluateAll((options,id)=>options.find(o=>o.value&&o.value!==String(id)).value,fixture.customer);
+await customerSelect.selectOption(otherCustomer);
+assert(await articleSelect.inputValue()===''&&await page.locator('[name="lines[0][description]"]').inputValue()==='','Changing customer clears foreign article and description');
+assert(await articleSelect.locator('option[value]:not([value=""])').evaluateAll((options,id)=>options.every(o=>o.dataset.customer===id),otherCustomer),'Customer change rebuilds search options without foreign or generic articles');
 await page.goto(fixture.url+'/erp.php?page=customer_profile&id='+fixture.customer+'&tab=orders');
 await page.locator('.customer-profile a[href="erp.php?page=sales_orders&id='+fixture.order+'"]').click();assert(page.url().includes('page=sales_orders&id='+fixture.order),'Customer-to-order navigation');
 await page.goto(profile+'&tab=articles');await page.locator('section a[href*="page=article_profile&id="]').click();assert(page.url().includes('page=article_profile&id='+fixture.article),'Order-to-article navigation');
