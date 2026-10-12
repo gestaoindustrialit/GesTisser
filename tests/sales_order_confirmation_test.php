@@ -18,8 +18,8 @@ SalesOrderSchema::migrate($db);$orders=new SalesOrderService($db);$db->beginTran
 $root=sys_get_temp_dir().'/confirmation-test-'.bin2hex(random_bytes(5));$company=['name'=>'Tisser, Lda','address'=>'Zona Industrial do Cerrado, Rua 13, 416','phone'=>'+351 220813858','fax'=>'+351 220813858','email'=>'tisser@example.invalid','tax_number'=>'508757509','terms'=>SalesOrderConfirmation::DEFAULT_TERMS,'logo_data'=>''];$service=new SalesOrderConfirmation($db,$root);
 try{
     $db->beginTransaction();$first=$service->issue($id,1,1,$company,'Responsável');$db->commit();
-    confirmation_check($first['number']==='CONF-00001'&&strpos($first['pdf'],'%PDF-1.4')===0,'First issued confirmation has independent sequential number and real PDF');
-    confirmation_check(file_get_contents($first['path'])===$first['pdf'],'Archived file exactly matches issued bytes');
+    confirmation_check($first['number']==='CONF-00001'&&strpos($first['content'],'<!doctype html>')!==false,'First issued confirmation has independent sequential number and printable A4 document');
+    confirmation_check(file_get_contents($first['path'])===$first['content'],'Archived file exactly matches issued bytes');
     $metadata=json_decode($db->query('SELECT notes FROM erp_product_documents WHERE id='.$first['id'])->fetchColumn(),true);
     confirmation_check($metadata['customer']['tax_number']==='506309681'&&(float)$metadata['lines'][0]['unit_price']===.320&&(float)$metadata['lines'][0]['line_total']===4800.0,'Snapshot includes customer NIF and recorded commercial amounts');
     $db->exec("UPDATE erp_customers SET name='Nome alterado' WHERE id=1;UPDATE erp_finished_products SET description='Artigo alterado',composition='Composição nova' WHERE id=1");
@@ -29,7 +29,7 @@ try{
     $next=NumberSequenceService::peek($db,'sales_order_confirmation');$db->beginTransaction();try{$service->issue($id,99,1,$company,'Responsável');throw new Exception('Stale issuance accepted');}catch(RuntimeException $e){$db->rollBack();}
     confirmation_check(NumberSequenceService::peek($db,'sales_order_confirmation')===$next,'Stale revision rejected without consuming a number');
     $db->beginTransaction();try{$service->issue($id,1,999,$company,'Responsável');throw new Exception('Invalid author accepted');}catch(PDOException $e){$db->rollBack();}
-    confirmation_check(count(glob($root.'/sales-orders/'.$id.'/confirmations/*.pdf'))===2&&NumberSequenceService::peek($db,'sales_order_confirmation')===$next,'Failed catalogue insert removes new file and rollback restores sequence');
+    confirmation_check(count(glob($root.'/sales-orders/'.$id.'/confirmations/*.html'))===2&&NumberSequenceService::peek($db,'sales_order_confirmation')===$next,'Failed catalogue insert removes new file and rollback restores sequence');
     file_put_contents($root.'/blocked','not a directory');$blocked=new SalesOrderConfirmation($db,$root.'/blocked');$db->beginTransaction();try{$blocked->issue($id,1,1,$company,'Responsável');throw new Exception('Filesystem failure ignored');}catch(RuntimeException $e){$db->rollBack();}
     confirmation_check(NumberSequenceService::peek($db,'sales_order_confirmation')===$next&&(int)$db->query('SELECT COUNT(*) FROM erp_product_documents')->fetchColumn()===2,'Filesystem failure cannot register a document or consume its number');
     confirmation_check($db->query('PRAGMA foreign_key_check')->fetchAll()===[],'Issuance preserves foreign key integrity');

@@ -135,20 +135,22 @@ try:
     check(c.execute('SELECT unit_id FROM erp_sales_order_lines WHERE id=?',(unknown_line,)).fetchone()[0] is None and c.execute('SELECT unit_id FROM erp_finished_products WHERE id=?',(unknown_article,)).fetchone()[0] is None,'Unknown units remain unknown; no units invented or historical lines rewritten');c.close()
     # Explicit numbered issuance archives exact bytes; GET never consumes numbers.
     c=sqlite3.connect(db);revision=c.execute('SELECT revision FROM erp_sales_orders WHERE id=?',(order,)).fetchone()[0]
+    c.execute('INSERT OR REPLACE INTO app_settings(setting_key,setting_value) VALUES("logo_report_dark","docs/mapper-reference/ui/assets/logo-tisser-blue.png")');c.commit()
     emission={'_token':'salesordertesttoken','action':'generate_confirmation','id':str(order),'revision':str(revision)}
     for expected in ['CONF-00001','CONF-00002']:
         status,headers,pdf=req(profile,data=emission)
-        check(status==200 and pdf.startswith(b'%PDF-1.4') and expected in headers.get('Content-Disposition',''),'Issue archived numbered PDF '+expected)
+        check(status==200 and b'<!doctype html>' in pdf and expected.encode() in pdf and 'text/html' in headers.get('Content-Type',''),'Issue archived numbered printable confirmation '+expected)
         doc=c.execute('SELECT id,notes FROM erp_product_documents WHERE entity_type="sales_order" AND entity_id=? AND version=?',(order,expected)).fetchone()
         metadata=json.loads(doc[1]);check(metadata['number']==expected and metadata['sha256']==hashlib.sha256(pdf).hexdigest(),'Archive snapshot and checksum match issued PDF')
         download=profile+'&action=document&document='+str(doc[0])
-        status,headers,reprint=req(download);check(status==200 and reprint==pdf and headers.get('Content-Type')=='application/pdf','Download preserves archived number and exact PDF bytes')
+        status,headers,reprint=req(download);check(status==200 and reprint==pdf and 'text/html' in headers.get('Content-Type',''),'Download preserves archived number and exact archived document bytes')
         check(req(download,uid=90002)[0]==403,'Archived confirmation requires report export permission')
     next_number=c.execute('SELECT next_number FROM erp_number_sequences WHERE code="sales_order_confirmation"').fetchone()[0]
     check(req(profile,data=dict(emission,revision='999'))[0]==422,'Reject stale numbered issuance')
     check(req(profile,data=dict(emission,_token='invalid'))[0]==419,'Require CSRF for numbered issuance')
     check(req(profile,data=emission,uid=90002)[0]==403,'Require permission for numbered issuance')
     check(c.execute('SELECT next_number FROM erp_number_sequences WHERE code="sales_order_confirmation"').fetchone()[0]==next_number,'Denied issuance and reprints do not consume numbers');c.close()
+    subprocess.run(['node',str(root/'tests/sales_order_confirmation_print_browser.js'),str(base/'fixture.json'),str(base/'confirmation-browser.pdf')],check=True,timeout=90)
     check(hashlib.sha256(source.read_bytes()).hexdigest()==original,'Original database untouched')
     print('ARTIFACTS: '+str(base),flush=True)
 finally:
