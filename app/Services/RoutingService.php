@@ -137,9 +137,9 @@ final class RoutingService
     public function snapshotForOrder(int $orderId,int $articleId,float $quantity,int $userId,bool $override=false,string $reason='',int $versionId=0): int
     {
         $v=$versionId>0
-            ?$this->one('SELECT v.* FROM erp_article_routing_versions v JOIN erp_article_routings r ON r.id=v.routing_id WHERE v.id=? AND r.finished_product_id=?',[$versionId,$articleId])
+            ?$this->one('SELECT v.* FROM erp_article_routing_versions v JOIN erp_article_routings r ON r.id=v.routing_id WHERE v.id=? AND r.finished_product_id=? AND v.status IN ("active","archived")',[$versionId,$articleId])
             :$this->one('SELECT v.* FROM erp_article_routing_versions v JOIN erp_article_routings r ON r.id=v.routing_id WHERE r.finished_product_id=? AND v.status="active" AND (v.effective_from IS NULL OR v.effective_from<=date("now")) ORDER BY v.effective_from DESC,v.version_no DESC LIMIT 1',[$articleId]);
-        if($versionId>0&&!$v)throw new DomainException('A versão de routing selecionada não pertence ao artigo.');
+        if($versionId>0&&!$v)throw new DomainException('Selecione uma versão de routing salva (ativa ou arquivada) que pertença ao artigo.');
         if(!$v){if(!$override)throw new DomainException('O artigo não tem um routing ativo; a OF não pode ser libertada.');if(trim($reason)==='')throw new DomainException('A libertação administrativa sem routing exige um motivo.');$this->audit($userId,'release_without_routing','production_order',$orderId,[],[],$reason);return 0;}
         $steps=$this->all('SELECT s.*,o.code operation_code,o.name operation_name,o.checklist_template_id,o.checklist_timing,o.labour_time_only FROM erp_article_routing_steps s JOIN erp_operations o ON o.id=s.operation_id WHERE s.routing_version_id=? AND s.is_active=1 ORDER BY s.sort_order',[(int)$v['id']]);
         $total=0;foreach($steps as &$s){$s['planned_minutes']=$this->plannedMinutes($s,$quantity);$s['materials']=$this->all('SELECT sm.*,rm.code,rm.description,rm.product_category,u.code unit_code FROM erp_routing_step_materials sm JOIN erp_raw_materials rm ON rm.id=sm.material_id LEFT JOIN erp_units u ON u.id=rm.primary_unit_id WHERE sm.routing_step_id=? ORDER BY rm.product_category,rm.code',[(int)$s['id']]);$total+=$s['planned_minutes'];}unset($s);
