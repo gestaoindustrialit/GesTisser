@@ -142,4 +142,5 @@ foreach($cards as $card): ?><div class="col-12 col-sm-6 col-xl-4"><div class="ca
 <?php if($data && $tab!=='overview'): ?><nav aria-label="Paginação" class="d-flex flex-wrap justify-content-between align-items-center gap-2 mt-3"><span class="small text-secondary"><?= (int)$data['total'] ?> registos · página <?= (int)$data['page'] ?> / <?= (int)$data['pages'] ?></span><div class="d-flex gap-2"><?php if($data['page']>1): ?><a class="btn btn-sm btn-outline-secondary" href="<?= h(cp_url($id,$tab,array_merge($filters,['p'=>$data['page']-1]))) ?>">Anterior</a><?php endif; ?><?php if($data['page']<$data['pages']): ?><a class="btn btn-sm btn-outline-secondary" href="<?= h(cp_url($id,$tab,array_merge($filters,['p'=>$data['page']+1]))) ?>">Seguinte</a><?php endif; ?></div></nav><?php endif; ?>
 </div></section>
 </div>
+<?php if(app_config('env')==='gestisser-dev'&&in_array($tab,['ofs','costs','trace'],true)){$legacyCustomerId=$id;echo '<div class="container">';require __DIR__.'/partials/legacy-of-list.php';echo '</div>';} ?>
 <?php require __DIR__.'/partials/footer.php'; ?>

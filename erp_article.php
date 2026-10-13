@@ -181,4 +181,5 @@ $technical=$article;$technical['theoretical_weight']=ArticleTheoreticalWeight::g
 <?php if($tab==='documents'): $latestSheet=$service->latestSheet($id); ?><a class="btn btn-sm btn-outline-secondary" href="<?= h(ap_url($id,'history')) ?>"><i class="bi bi-clipboard2-check me-1" aria-hidden="true"></i>Fichas técnicas usadas nas OF</a><?php if($latestSheet): ?><a class="btn btn-sm btn-outline-secondary" href="erp_technical_sheet.php?id=<?= (int)$latestSheet['id'] ?>" target="_blank" rel="noopener"><i class="bi bi-file-earmark-text me-1" aria-hidden="true"></i>Última ficha técnica de OF · <?= h(ap_date($latestSheet['created_at'])) ?></a><?php endif; ?><?php endif; ?>
 <?php endif; ?>
 </div></section></div>
+<?php if(app_config('env')==='gestisser-dev'&&in_array($tab,['history','costs','trace'],true)){$legacyArticleId=$id;echo '<div class="container">';require __DIR__.'/partials/legacy-of-list.php';echo '</div>';} ?>
 <?php require __DIR__.'/partials/footer.php'; ?>

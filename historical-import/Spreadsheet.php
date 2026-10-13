@@ -146,9 +146,15 @@ final class HistoricalSpreadsheet
                     foreach (self::contracts() as $key=>$contract) {
                         // Optional matching fields can be added by the external normalizer.
                         $allowed = array_merge($contract['columns'], ['cliente_nif','fornecedor_nif','artigo_referencia','materia_prima_referencia']);
+                        if($key==='ofs') $allowed=array_merge($allowed,['unidade','tempo_preparacao_horas','tempo_execucao_horas','tempo_total_horas','custo_mao_obra','custo_materiais','outros_custos','custo_total','custo_unitario','moeda','tipo_custo','origem_custo','metodo_calculo']);
+                        if($key==='of_operacoes') $allowed=array_merge($allowed,['operacao_codigo','operacao_nome','unidade','custo_registado','moeda','tipo_custo','origem_registo']);
                         if (!array_diff($contract['columns'],$headers) && !array_diff($headers,$allowed)) { $entity = $key; break; }
                     }
-                    if ($entity === null) throw new RuntimeException('Cabeçalhos não correspondem a nenhum template; manter todas as colunas.');
+                    if ($entity === null) {
+                        $suspected=in_array('of_legacy_id',$headers,true)||in_array('horas_reais',$headers,true)?'of_operacoes':(in_array('quantidade_planeada',$headers,true)||in_array('cliente_codigo',$headers,true)&&in_array('numero_of',$headers,true)?'ofs':null);
+                        if($suspected){$contract=self::contracts()[$suspected];$missing=array_diff($contract['columns'],$headers);throw new RuntimeException('Cabeçalhos incompatíveis com '.$contract['file'].'. Colunas em falta: '.implode(', ',$missing).'. Rever também colunas não autorizadas.');}
+                        throw new RuntimeException('Cabeçalhos não correspondem a nenhum template; manter todas as colunas.');
+                    }
                     continue;
                 }
                 if (max(array_keys($values)) >= count($headers)) throw new RuntimeException('Dados fora das colunas na linha '.$line.'.');

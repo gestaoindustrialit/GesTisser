@@ -1,3 +1,5 @@
+> **Atualização Fase 4 — OFs:** utilizar [o guia da camada histórica independente](../docs/legacy-of-history.md) e `legacy_of_import.php`. Os adaptadores antigos de OFs/operações para tabelas operacionais foram removidos e estão bloqueados mesmo com configuração `enabled=true`. As secções abaixo descrevem a implementação anterior; as regras antigas de estados finais, ligação a `erp_products` e operações do catálogo não se aplicam ao novo fluxo histórico. Não ativar o fluxo antigo para importar OFs.
+
 # Importação histórica Bobinas — primeira fase
 
 O módulo está preparado para exportar templates, receber Excel normalizados, fazer matching e dry-run, apresentar problemas e guardar relatórios privados. Nenhuma importação de dados reais foi executada. A execução real está desativada por defeito.
