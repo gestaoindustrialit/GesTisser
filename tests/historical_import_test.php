@@ -43,19 +43,22 @@ $bad=$batch;$bad['ofs']['rows'][0]['data']['cliente_codigo']='NONE';$badReport=(
 $pdo->exec('PRAGMA query_only=OFF');HistoricalImporter::setup($pdo);$report=(new HistoricalValidator($pdo))->validate($batch);
 check(HistoricalImporter::blockers($report,HistoricalImporter::configuration()),'Default import enabled');
 $config=['enabled'=>true,'reviewed_schema_hash'=>$report['schema_hash'],'entities'=>array_keys($batch)];
+expectFailure(function()use($pdo,$batch,$report,$config,$root){HistoricalImporter::run($pdo,$batch,$report,$config,1,$root);},'Operational OF adapter should remain blocked');
+// Unrelated older adapters remain covered using synthetic fixtures only.
+unset($batch['ofs'],$batch['of_operacoes']);$batch['movimentos_historicos']['rows'][0]['data']['of_numero']='';$report=(new HistoricalValidator($pdo))->validate($batch);
 // Explicit TEST import, only on synthetic fixtures. Real data is never imported.
 mkdir($root.'/app/Services',0700,true);copy(__DIR__.'/../app/Services/BackupManager.php',$root.'/app/Services/BackupManager.php');
-$run=HistoricalImporter::run($pdo,$batch,$report,$config,1,$root);check($run['inserted']===4,'Incorrect insert count');check($pdo->query('SELECT physical_qty FROM erp_stock_balances')->fetchColumn()==500,'Stock balance changed');
-check($pdo->query('SELECT planned_minutes FROM erp_production_order_operations')->fetchColumn()==90,'Hour conversion wrong');
+$run=HistoricalImporter::run($pdo,$batch,$report,$config,1,$root);check($run['inserted']===2,'Incorrect insert count');check($pdo->query('SELECT physical_qty FROM erp_stock_balances')->fetchColumn()==500,'Stock balance changed');
+check($pdo->query('SELECT COUNT(*) FROM erp_production_order_operations')->fetchColumn()==0,'Historical operational operation was created');
 check($pdo->query('PRAGMA foreign_key_check')->fetch()===false,'Invalid FK');
-$report=(new HistoricalValidator($pdo))->validate($batch);check($report['errors']===0,'Rerun errors');$run=HistoricalImporter::run($pdo,$batch,$report,$config,1,$root);check($run['inserted']===0 && $run['skipped']===4,'Not idempotent');
+$report=(new HistoricalValidator($pdo))->validate($batch);check($report['errors']===0,'Rerun errors');$run=HistoricalImporter::run($pdo,$batch,$report,$config,1,$root);check($run['inserted']===0 && $run['skipped']===2,'Not idempotent');
 $bad=$batch;$bad['rolos_rafia']['rows'][0]['data']['peso_atual_kg']='9';check((new HistoricalValidator($pdo))->validate($bad)['errors']>0,'Changed legacy record silently accepted');
 // Inject a constraint failure on the last entity: all earlier inserts and maps must roll back.
 $pdo->exec('CREATE UNIQUE INDEX synthetic_failure ON erp_stock_movements(quantity)');
-$new=$batch;foreach($new as $entity=>&$in) {$in['rows'][0]['data']['legacy_id'].='NEW'; if($entity==='ofs')$in['rows'][0]['data']['numero_of']='OF-OLD-2';if($entity==='of_operacoes'){$in['rows'][0]['data']['of_legacy_id']='OF1NEW';$in['rows'][0]['data']['numero_of']='OF-OLD-2';}if($entity==='movimentos_historicos')$in['rows'][0]['data']['of_numero']='OF-OLD-2';}unset($in);
+$new=$batch;foreach($new as $entity=>&$in) {$in['rows'][0]['data']['legacy_id'].='NEW'; if($entity==='ofs')$in['rows'][0]['data']['numero_of']='OF-OLD-2';if($entity==='of_operacoes'){$in['rows'][0]['data']['of_legacy_id']='OF1NEW';$in['rows'][0]['data']['numero_of']='OF-OLD-2';}}unset($in);
 $report=(new HistoricalValidator($pdo))->validate($new);check($report['errors']===0,'New batch invalid');$config['reviewed_schema_hash']=$report['schema_hash'];
 expectFailure(function()use($pdo,$new,$report,$config,$root){HistoricalImporter::run($pdo,$new,$report,$config,1,$root);},'Transaction failure ignored');
-check($pdo->query('SELECT COUNT(*) FROM erp_production_orders')->fetchColumn()==1,'Partial OF persisted');check($pdo->query('SELECT COUNT(*) FROM erp_legacy_import_map')->fetchColumn()==4,'Partial maps persisted');check($pdo->query('SELECT status FROM erp_legacy_import_runs ORDER BY id DESC LIMIT 1')->fetchColumn()==='failed','Failure run not logged');
+check($pdo->query('SELECT COUNT(*) FROM erp_production_orders')->fetchColumn()==0,'Partial OF persisted');check($pdo->query('SELECT COUNT(*) FROM erp_legacy_import_map')->fetchColumn()==2,'Partial maps persisted');check($pdo->query('SELECT status FROM erp_legacy_import_runs ORDER BY id DESC LIMIT 1')->fetchColumn()==='failed','Failure run not logged');
 require_once __DIR__.'/../app/Services/SimpleXlsx.php';
 $zipPath=HistoricalSpreadsheet::templateZip();$zip=new ZipArchive();check($zip->open($zipPath)===true,'Templates ZIP invalid');
 foreach(HistoricalSpreadsheet::contracts() as $entity=>$contract) {
@@ -63,7 +66,7 @@ foreach(HistoricalSpreadsheet::contracts() as $entity=>$contract) {
  $workbook=new ZipArchive();$workbook->open($path);$xml=$workbook->getFromName('xl/worksheets/sheet1.xml');check(strpos($xml,'state="frozen"')!==false && strpos($xml,'autoFilter')!==false,'Freeze/filter missing');$workbook->close();
 }
 $zip->close();unlink($zipPath);
-$contract=HistoricalSpreadsheet::contracts()['ofs'];$path=SimpleXlsx::create([$contract['columns'],array_values($batch['ofs']['rows'][0]['data'])]);$parsed=HistoricalSpreadsheet::read($path);check($parsed['rows'][0]['data']['legacy_id']==='OF1','XLSX row parse failed');
+$contract=HistoricalSpreadsheet::contracts()['ofs'];$path=SimpleXlsx::create([$contract['columns'],array_values(input('ofs',['legacy_id'=>'OF1','numero_of'=>'OF-OLD-1'])['rows'][0]['data'])]);$parsed=HistoricalSpreadsheet::read($path);check($parsed['rows'][0]['data']['legacy_id']==='OF1','XLSX row parse failed');
 $zip=new ZipArchive();$zip->open($path);$xml=$zip->getFromName('xl/worksheets/sheet1.xml');$zip->addFromString('xl/worksheets/sheet1.xml',str_replace('t="inlineStr"><is><t xml:space="preserve">OF1','t="inlineStr"><f>1+1</f><is><t xml:space="preserve">OF1',$xml));$zip->close();expectFailure(function()use($path){HistoricalSpreadsheet::read($path);},'Formula accepted');unlink($path);
 $path=SimpleXlsx::create([$contract['columns']]);$zip=new ZipArchive();$zip->open($path);$zip->addFromString('evil.xml','<!DOCTYPE x [<!ENTITY x SYSTEM "file:///etc/passwd">]><x>&x;</x>');$zip->close();expectFailure(function()use($path){HistoricalSpreadsheet::read($path);},'XXE accepted');unlink($path);
 $pdo=null;

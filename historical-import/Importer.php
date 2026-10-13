@@ -19,6 +19,7 @@ final class HistoricalImporter
     public static function blockers(array $report,array $config)
     {
         $reasons=[];
+        foreach(['ofs','of_operacoes'] as $historicalEntity) if(isset($report['entities'][$historicalEntity])) $reasons[]='OFs Bobinas: usar legacy_of_import.php; escrita em tabelas operacionais proibida.';
         if(empty($config['enabled'])) $reasons[]='Importação real desativada até validar a base atual e os destinos.';
         if(($config['reviewed_schema_hash']??'')!==$report['schema_hash']) $reasons[]='Esquema atual ainda não aprovado ou alterado desde a revisão.';
         foreach($report['destinations']??[] as $entity=>$destination) if(isset($report['entities'][$entity]) && $report['entities'][$entity]['validas']>0 && !$destination['ready']) $reasons[]='Esquema de destino incompatível: '.$entity;
@@ -99,17 +100,7 @@ final class HistoricalImporter
     private static function target($entity,array $row,array $resolved,$userId)
     {
         $d=$row['data'];$r=$row['refs'];
-        if($entity==='ofs') {
-            // No routing, planner, reservations, product bridge creation or stock services.
-            if(!in_array($d['estado'],['Concluída','Encerrada','Fechada','Cancelada'],true)) throw new RuntimeException('OF histórica exige estado final explicitamente normalizado.');
-            return ['erp_production_orders',['order_number'=>$d['numero_of'],'customer_id'=>$r['customer'],'product_id'=>$r['legacy_product'],'finished_product_id'=>$r['product'],'planned_quantity'=>$d['quantidade_planeada'],'produced_quantity'=>$d['quantidade_produzida']===''?0:$d['quantidade_produzida'],'status'=>$d['estado'],'created_at'=>$d['data_criacao'],'due_date'=>null,'notes'=>$d['observacoes']??'','created_by'=>$userId]];
-        }
-        if($entity==='of_operacoes') {
-            $parent=$r['ofs'];$of=$parent['id']??($resolved['ofs'][$parent['batch_field']][$parent['value']]??null);
-            if(!$of) throw new RuntimeException('OF pai não resolvida dentro da transação.');
-            if(!in_array($d['estado'],['Concluída','Cancelada'],true)) throw new RuntimeException('Operação histórica exige estado final.');
-            return ['erp_production_order_operations',['production_order_id'=>$of,'operation_id'=>$r['operation'],'sequence_no'=>$d['sequencia'],'planned_minutes'=>(int)round(($d['horas_previstas']===''?0:$d['horas_previstas'])*60),'status'=>$d['estado']]];
-        }
+        if(in_array($entity,['ofs','of_operacoes'],true)) throw new RuntimeException('Escrita histórica operacional proibida. Usar LegacyOfHistory.');
         if(in_array($entity,['rolos_rafia','lotes_tintas'],true)) {
             $data=['raw_material_id'=>$r['raw_material'],'entry_number'=>$d['numero_entrada'],'supplier_lot'=>$d['lote_fornecedor'],'weight_kg'=>$d['peso_atual_kg'],'initial_weight_kg'=>$d['peso_inicial_kg'],'barcode'=>$d['barcode'],'label_date'=>$d['data_entrada'],'validated_by'=>$userId,'status'=>$d['estado']?:'AVAILABLE','warehouse_id'=>$r['warehouse_id']??null,'location_id'=>$r['location_id']??null];
             if($entity==='rolos_rafia') { $data['metres']=$d['metros_atuais'];$data['initial_metres']=$d['metros_iniciais']; }

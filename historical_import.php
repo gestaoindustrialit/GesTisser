@@ -126,6 +126,7 @@ $navbarClockControl=[];
 require __DIR__.'/partials/header.php';
 ?>
 <div class="container-fluid py-4">
+<p class="alert alert-info">OFs e operações Bobinas: <a href="legacy_of_import.php">usar a camada histórica independente</a>. A escrita operacional destas entidades foi bloqueada.</p>
 <h1 class="h3">Importação histórica Bobinas</h1>
 <p class="text-secondary">Exportar → normalizar externamente → upload → dry-run → resolver → importar explicitamente.</p>
 <div class="alert alert-warning">Importação real desativada por defeito. Não são criados clientes, fornecedores, artigos ou matérias-primas. Movimentos documentais não alteram saldos.</div>
