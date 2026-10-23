@@ -86,7 +86,7 @@ final class SalesOrderService
             $article=(int)self::text($l,'finished_product_id');$a=$this->row('SELECT a.*,u.code unit_code FROM erp_finished_products a LEFT JOIN erp_units u ON u.id=a.unit_id WHERE a.id=?',[$article]);
             if(!$a)throw new RuntimeException('Artigo inexistente.');
             $same=$before&&$article==$before['finished_product_id']&&$old['customer_id']==$customer;
-            if(!$same&&($a['status']!=='Ativo'||($a['customer_id']&&$a['customer_id']!=$customer)))throw new RuntimeException('O artigo deve estar ativo e pertencer ao cliente selecionado, ou ser genérico.');
+            if(!$same&&($a['status']!=='Ativo'||(int)$a['customer_id']!==$customer))throw new RuntimeException('O artigo deve estar ativo e pertencer ao cliente selecionado.');
             $qty=self::number(self::text($l,'quantity'));if($qty<=0)throw new RuntimeException('A quantidade deve ser positiva.');$price=self::number(self::text($l,'unit_price'),true);$discount=self::number(self::text($l,'discount_percent'),true);if($discount!==null&&$discount>100)throw new RuntimeException('Desconto inválido.');
             if($before&&($before['of_count']||$this->row('SELECT id FROM erp_sales_order_deliveries WHERE sales_order_line_id=? LIMIT 1',[$lineId]))&&(!$same||$qty!=(float)$before['quantity']))throw new RuntimeException('Não altere cliente, artigo ou quantidade de uma linha com OF ou entregas associadas.');
             // Preserve stored commercial totals unless the user changes price, discount or quantity.
@@ -94,9 +94,9 @@ final class SalesOrderService
             $newLines[]=['id'=>$lineId,'finished_product_id'=>$article,'article_code'=>$same?$before['article_code']:$a['code'],'description'=>self::text($l,'description')?:($same?$before['description']:$a['description']),'quantity'=>$qty,'unit_id'=>$same?$before['unit_id']:$a['unit_id'],'unit_code'=>$same?$before['unit_code']:$a['unit_code'],'unit_price'=>$price,'discount_percent'=>$discount,'line_total'=>$unchanged?$before['line_total']:($price===null?null:round($qty*$price*(1-($discount??0)/100),2)),'expected_date'=>self::date(self::text($l,'expected_date'))];
         }
         if(count($seen)!==count($oldLines))throw new RuntimeException('Não é permitido eliminar linhas existentes.');
-        $values=[$customer,$date,$expected,self::text($input,'customer_reference'),$status,self::text($input,'notes'),$user];
-        if($old){$s=$this->pdo->prepare('UPDATE erp_sales_orders SET customer_id=?,order_date=?,expected_date=?,customer_reference=?,status=?,notes=?,updated_by=?,revision=revision+1,updated_at=CURRENT_TIMESTAMP WHERE id=? AND revision=?');$s->execute(array_merge($values,[$id,(int)self::text($input,'revision')]));if($s->rowCount()!==1)throw new RuntimeException('A encomenda foi alterada entretanto. Reabra a ficha antes de guardar.');}
-        else{$number=NumberSequenceService::take($this->pdo,'sales_order');$s=$this->pdo->prepare('INSERT INTO erp_sales_orders(customer_id,order_date,expected_date,customer_reference,status,notes,created_by,order_number,updated_by) VALUES (?,?,?,?,?,?,?,?,?)');$s->execute(array_merge($values,[$number,$user]));$id=(int)$this->pdo->lastInsertId();}
+        $values=[$customer,$date,$expected,self::text($input,'customer_reference'),self::text($input,'requisition_number',$old['requisition_number']??''),$status,self::text($input,'notes'),$user];
+        if($old){$s=$this->pdo->prepare('UPDATE erp_sales_orders SET customer_id=?,order_date=?,expected_date=?,customer_reference=?,requisition_number=?,status=?,notes=?,updated_by=?,revision=revision+1,updated_at=CURRENT_TIMESTAMP WHERE id=? AND revision=?');$s->execute(array_merge($values,[$id,(int)self::text($input,'revision')]));if($s->rowCount()!==1)throw new RuntimeException('A encomenda foi alterada entretanto. Reabra a ficha antes de guardar.');}
+        else{$number=NumberSequenceService::take($this->pdo,'sales_order');$s=$this->pdo->prepare('INSERT INTO erp_sales_orders(customer_id,order_date,expected_date,customer_reference,requisition_number,status,notes,created_by,order_number,updated_by) VALUES (?,?,?,?,?,?,?,?,?,?)');$s->execute(array_merge($values,[$number,$user]));$id=(int)$this->pdo->lastInsertId();}
         foreach($newLines as $index=>$l){$lineId=$l['id'];unset($l['id']);$values=array_values($l);if($lineId)$this->pdo->prepare('UPDATE erp_sales_order_lines SET finished_product_id=?,article_code=?,description=?,quantity=?,unit_id=?,unit_code=?,unit_price=?,discount_percent=?,line_total=?,expected_date=? WHERE id=? AND sales_order_id=?')->execute(array_merge($values,[$lineId,$id]));else $this->pdo->prepare('INSERT INTO erp_sales_order_lines(finished_product_id,article_code,description,quantity,unit_id,unit_code,unit_price,discount_percent,line_total,expected_date,sales_order_id,line_number) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)')->execute(array_merge($values,[$id,$index+1]));}
         $this->audit($user,$old?'update':'create',$id,['order'=>$old,'lines'=>$oldLines],['order'=>$this->order($id),'lines'=>$newLines]);return $id;
     }
@@ -116,9 +116,37 @@ final class SalesOrderService
         if($article['unit_id']!=$line['unit_id'])throw new RuntimeException('A unidade atual do artigo difere da unidade registada na linha da encomenda. Corrija a correspondência antes de criar a OF.');
         return $line;
     }
+    /** Saved, actionable lines with quantity still available for planning. */
+    public function workOrderSources(){
+        if(!SalesOrderSchema::ready($this->pdo))return [];
+        return $this->all('SELECT * FROM (SELECT l.*,a.unit_id article_unit_id,o.order_number,o.customer_reference,o.customer_id commercial_customer_id,c.name customer_name,COALESCE(l.expected_date,o.expected_date) source_due_date,l.quantity-COALESCE((SELECT SUM(p.planned_quantity) FROM erp_sales_order_work_orders w JOIN erp_production_orders p ON p.id=w.production_order_id WHERE w.sales_order_line_id=l.id AND p.status<>"Cancelada"),0) pending_production FROM erp_sales_order_lines l JOIN erp_sales_orders o ON o.id=l.sales_order_id JOIN erp_customers c ON c.id=o.customer_id JOIN erp_finished_products a ON a.id=l.finished_product_id WHERE o.source_system="GesTISSER" AND o.original_id IS NULL AND o.status NOT IN ("Rascunho","Cancelada","Concluída") AND c.is_active=1 AND a.customer_id=o.customer_id AND a.status="Ativo") sources WHERE pending_production>0 ORDER BY sales_order_id DESC,line_number');
+    }
+    /** Resolve the explicit source before the caller creates any OF or snapshot. */
+    public function resolveWorkOrderSource(array $input,$mayLink){
+        $source=self::text($input,'sales_order_id');$lineId=self::text($input,'sales_order_line_id','0');
+        if($source==='none'){
+            if($lineId!==''&&$lineId!=='0')throw new RuntimeException('Sem Encomenda não pode conter uma linha comercial.');
+            return null;
+        }
+        if(!ctype_digit($source)||(int)$source<1)throw new RuntimeException('Selecione uma encomenda guardada ou Sem Encomenda.');
+        if(!$mayLink)throw new RuntimeException('Sem permissão para criar OF a partir de encomendas.');
+        if(!ctype_digit($lineId)||(int)$lineId<1)throw new RuntimeException('Selecione um artigo da encomenda.');
+        $selected=null;foreach($this->workOrderSources() as $line)if((int)$line['id']===(int)$lineId&&(int)$line['sales_order_id']===(int)$source){$selected=$line;break;}
+        if(!$selected)throw new RuntimeException('Linha de encomenda indisponível para produção. Reabra o formulário.');
+        if((int)self::text($input,'finished_product_id')!==(int)$selected['finished_product_id'])throw new RuntimeException('O artigo deve corresponder à linha da encomenda selecionada.');
+        $quantity=self::text($input,'planned_quantity');
+        if(!is_numeric($quantity)||!is_finite((float)$quantity)||(float)$quantity<=0||(float)$quantity>(float)$selected['pending_production']+0.000001)throw new RuntimeException('A quantidade deve ser positiva e não ultrapassar a quantidade por planear da linha.');
+        if($selected['unit_id']===null && $selected['article_unit_id']!==null){
+            $resolved=$this->validateWorkOrderArticle((int)$selected['id'],(int)$selected['finished_product_id']);
+            $selected['unit_id']=$resolved['unit_id'];$selected['unit_code']=$resolved['unit_code'];
+        }
+        if(!self::sameUnit($selected['unit_id'],$selected['article_unit_id']))throw new RuntimeException('A unidade do artigo difere da unidade guardada na encomenda. Verifique as unidades antes de criar a OF.');
+        return $selected;
+    }
+    private static function sameUnit($left,$right){return ($left===null?null:(int)$left)===($right===null?null:(int)$right);}
     public function linkWorkOrder($orderId,$lineId,$ofId,$user){
         list($o,$l)=$this->mutableLine($orderId,$lineId);$of=$this->row('SELECT p.*,a.unit_id FROM erp_production_orders p JOIN erp_finished_products a ON a.id=p.finished_product_id WHERE p.id=?',[$ofId]);
-        if(!$of||$of['customer_id']!=$o['customer_id']||$of['finished_product_id']!=$l['finished_product_id']||$l['unit_id']===null||$of['unit_id']!=$l['unit_id'])throw new RuntimeException('OF, cliente, artigo e unidade devem corresponder à linha.');
+        if(!$of||$of['customer_id']!=$o['customer_id']||$of['finished_product_id']!=$l['finished_product_id']||!self::sameUnit($of['unit_id'],$l['unit_id']))throw new RuntimeException('OF, cliente, artigo e unidade devem corresponder à linha.');
         $this->pdo->prepare('INSERT INTO erp_sales_order_work_orders(sales_order_line_id,production_order_id,linked_by) VALUES (?,?,?)')->execute([$lineId,$ofId,$user]);$this->audit($user,'link_work_order',$orderId,[],['line_id'=>$lineId,'production_order_id'=>$ofId]);
     }
     public function linkDelivery($orderId,$lineId,$movementId,$reference,$user){

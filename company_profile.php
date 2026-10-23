@@ -1,5 +1,6 @@
 <?php
 require_once __DIR__ . '/helpers.php';
+require_once __DIR__.'/app/Services/SalesOrderConfirmation.php';
 require_login();
 
 $userId = (int) $_SESSION['user_id'];
@@ -61,11 +62,15 @@ try {
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     if (!$isAdmin) {
         $flashError = 'Apenas administradores podem editar os dados da empresa.';
+    } elseif (!validate_csrf_or_abort(false)) {
+        $flashError='Pedido inválido. Atualize a página antes de guardar.';
     } elseif (($_POST['action'] ?? '') === 'save_company_profile') {
         $companyName = trim((string) ($_POST['company_name'] ?? ''));
         $companyAddress = trim((string) ($_POST['company_address'] ?? ''));
         $companyEmail = trim((string) ($_POST['company_email'] ?? ''));
         $companyPhone = trim((string) ($_POST['company_phone'] ?? ''));
+        $companyFax = trim((string) ($_POST['company_fax'] ?? app_setting($pdo,'company_fax','')));
+        $confirmationTerms = trim((string) ($_POST['sales_order_confirmation_terms'] ?? app_setting($pdo,'sales_order_confirmation_terms',SalesOrderConfirmation::DEFAULT_TERMS)));
         $companyTaxNumber = trim((string) ($_POST['company_tax_number'] ?? ''));
         $payrollNightStart = trim((string) ($_POST['payroll_night_start'] ?? '22:00'));
         $payrollNightEnd = trim((string) ($_POST['payroll_night_end'] ?? '07:00'));
@@ -97,6 +102,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
         if (preg_match('/^([01]\d|2[0-3]):[0-5]\d$/', $payrollNightStart) !== 1 || preg_match('/^([01]\d|2[0-3]):[0-5]\d$/', $payrollNightEnd) !== 1) {
             $flashError = 'Indique horas válidas para o início e fim do horário noturno.';
+        } elseif (mb_strlen($confirmationTerms)>500) {
+            $flashError='As condições da confirmação devem ter no máximo 500 caracteres.';
         } elseif ($companyTaxNumber !== '' && preg_match('/^\d{9}$/', $companyTaxNumber) !== 1) {
             $flashError = 'O NIF da empresa deve conter 9 algarismos.';
         } elseif (preg_match('/^(\d{1,2}):(\d{2})$/', $companyDailyObjective, $dailyObjectiveMatches) !== 1 || (int) $dailyObjectiveMatches[1] > 23 || (int) $dailyObjectiveMatches[2] > 59) {
@@ -114,6 +121,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             set_app_setting($pdo, 'company_address', $companyAddress);
             set_app_setting($pdo, 'company_email', $companyEmail);
             set_app_setting($pdo, 'company_phone', $companyPhone);
+            set_app_setting($pdo, 'company_fax', $companyFax);
+            set_app_setting($pdo, 'sales_order_confirmation_terms', $confirmationTerms);
             set_app_setting($pdo, 'company_tax_number', $companyTaxNumber);
             set_app_setting($pdo, 'payroll_night_start', $payrollNightStart);
             set_app_setting($pdo, 'payroll_night_end', $payrollNightEnd);
@@ -226,6 +235,8 @@ $companyName = (string) app_setting($pdo, 'company_name', '');
 $companyAddress = (string) app_setting($pdo, 'company_address', '');
 $companyEmail = (string) app_setting($pdo, 'company_email', '');
 $companyPhone = (string) app_setting($pdo, 'company_phone', '');
+$companyFax = (string) app_setting($pdo, 'company_fax', '');
+$confirmationTerms = trim((string) app_setting($pdo,'sales_order_confirmation_terms',SalesOrderConfirmation::DEFAULT_TERMS))?:SalesOrderConfirmation::DEFAULT_TERMS;
 $companyTaxNumber = (string) app_setting($pdo, 'company_tax_number', '');
 $payrollNightStart = (string) app_setting($pdo, 'payroll_night_start', '22:00');
 $payrollNightEnd = (string) app_setting($pdo, 'payroll_night_end', '07:00');
@@ -262,6 +273,7 @@ require __DIR__ . '/partials/header.php';
 <?php if ($flashError): ?><div class="alert alert-danger"><?= h($flashError) ?></div><?php endif; ?>
 
 <form method="post" enctype="multipart/form-data" class="card shadow-sm soft-card">
+    <?=csrf_input()?>
     <input type="hidden" name="action" value="save_company_profile">
     <div class="card-body p-4">
         <div class="row g-3">
@@ -285,6 +297,8 @@ require __DIR__ . '/partials/header.php';
                 <label class="form-label">NIF da empresa</label>
                 <input class="form-control" name="company_tax_number" inputmode="numeric" maxlength="9" value="<?= h($companyTaxNumber) ?>" <?= !$isAdmin ? 'readonly' : '' ?>>
             </div>
+            <div class="col-md-6"><label class="form-label">Fax</label><input class="form-control" name="company_fax" value="<?=h($companyFax)?>" <?=!$isAdmin?'readonly':''?>></div>
+            <div class="col-12"><label class="form-label">Condições da confirmação de encomenda</label><textarea class="form-control" name="sales_order_confirmation_terms" rows="3" maxlength="500" <?=!$isAdmin?'readonly':''?>><?=h($confirmationTerms)?></textarea><div class="form-text">Texto do rodapé dos novos documentos. Se deixar em branco, são usadas as variações padrão de ±3% e ±10 mm.</div></div>
             <div class="col-12"><hr><h2 class="h5">Configuração Payroll / Assiduidade</h2><p class="small text-muted mb-0">O intervalo noturno pode atravessar a meia-noite.</p></div>
             <div class="col-md-3"><label class="form-label">Início do horário noturno</label><input class="form-control" type="time" name="payroll_night_start" value="<?= h($payrollNightStart) ?>" required></div>
             <div class="col-md-3"><label class="form-label">Fim do horário noturno</label><input class="form-control" type="time" name="payroll_night_end" value="<?= h($payrollNightEnd) ?>" required></div>

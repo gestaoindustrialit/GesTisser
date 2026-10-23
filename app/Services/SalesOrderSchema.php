@@ -10,17 +10,31 @@ final class SalesOrderSchema
         return $root!==false&&$databasePath!==false&&basename($root)==='gestisser-dev'
             &&strpos($databasePath,$root.DIRECTORY_SEPARATOR)===0;
     }
+    public static function enabled(PDO $pdo,$environment,$root,$databasePath) {
+        if(self::developmentAllowed($environment,$root,$databasePath))return true;
+        if(!$pdo->query('SELECT 1 FROM sqlite_master WHERE type="table" AND name="app_settings"')->fetchColumn())return false;
+        $stmt=$pdo->prepare('SELECT setting_value FROM app_settings WHERE setting_key=?');$stmt->execute(['sales_orders_enabled']);
+        return $stmt->fetchColumn()==='1';
+    }
+    /** Explicit administrative activation, using the existing local database only. */
+    public static function activate(PDO $pdo) {
+        $queryOnly=(int)$pdo->query('PRAGMA query_only')->fetchColumn();
+        try{$pdo->exec('PRAGMA query_only=OFF');self::migrate($pdo,true);}
+        finally{$pdo->exec('PRAGMA query_only='.($queryOnly?'ON':'OFF'));}
+    }
     public static function ready(PDO $pdo) {
         $objects=['erp_sales_orders','erp_sales_order_lines','erp_sales_order_work_orders','erp_sales_order_deliveries',
             'idx_sales_orders_customer_date','idx_sales_orders_date','idx_sales_orders_expected','idx_sales_lines_article','idx_sales_of_line','idx_sales_delivery_line'];
         $s=$pdo->prepare('SELECT COUNT(*) FROM sqlite_master WHERE name IN ('.implode(',',array_fill(0,count($objects),'?')).') AND type IN ("table","index")');
         $s->execute($objects);if((int)$s->fetchColumn()!==count($objects))return false;
+        $columns=$pdo->query('PRAGMA table_info(erp_sales_orders)')->fetchAll(PDO::FETCH_ASSOC);
+        if(!in_array('requisition_number',array_column($columns,'name'),true))return false;
         $s=$pdo->prepare("SELECT 1 FROM sqlite_master WHERE type='table' AND name='erp_number_sequences'");$s->execute();if(!$s->fetchColumn())return false;
         $s=$pdo->prepare('SELECT 1 FROM erp_number_sequences WHERE code=?');$s->execute(['sales_order']);return (bool)$s->fetchColumn();
     }
     public static function ensure(PDO $pdo,$environment,$root,$databasePath) {
         if(self::ready($pdo))return true;
-        if(!self::developmentAllowed($environment,$root,$databasePath))return false;
+        if(!self::enabled($pdo,$environment,$root,$databasePath))return false;
         $queryOnly=(int)$pdo->query('PRAGMA query_only')->fetchColumn();
         try {
             $pdo->exec('PRAGMA query_only=OFF');
@@ -28,7 +42,7 @@ final class SalesOrderSchema
         } finally {$pdo->exec('PRAGMA query_only='.($queryOnly?'ON':'OFF'));}
         return self::ready($pdo);
     }
-    public static function migrate(PDO $pdo) {
+    public static function migrate(PDO $pdo,$activate=false) {
         $pdo->beginTransaction();
         try {
             foreach([
@@ -43,7 +57,13 @@ final class SalesOrderSchema
                 'CREATE TABLE IF NOT EXISTS erp_sales_order_deliveries (id INTEGER PRIMARY KEY AUTOINCREMENT, sales_order_line_id INTEGER NOT NULL REFERENCES erp_sales_order_lines(id) ON DELETE RESTRICT, stock_movement_id INTEGER NOT NULL UNIQUE REFERENCES erp_stock_movements(id) ON DELETE RESTRICT, delivery_reference TEXT NOT NULL, confirmed_by INTEGER NOT NULL REFERENCES users(id), created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP)',
                 'CREATE INDEX IF NOT EXISTS idx_sales_delivery_line ON erp_sales_order_deliveries(sales_order_line_id)'
             ] as $sql)$pdo->exec($sql);
+            $columns=$pdo->query('PRAGMA table_info(erp_sales_orders)')->fetchAll(PDO::FETCH_ASSOC);
+            if(!in_array('requisition_number',array_column($columns,'name'),true))$pdo->exec('ALTER TABLE erp_sales_orders ADD COLUMN requisition_number TEXT');
             $pdo->prepare('INSERT OR IGNORE INTO erp_number_sequences(code,prefix,next_number,padding) VALUES (?,?,1,5)')->execute(['sales_order','EC-']);
+            if($activate){
+                $pdo->prepare('UPDATE app_settings SET setting_value=? WHERE setting_key=?')->execute(['1','sales_orders_enabled']);
+                $pdo->prepare('INSERT OR IGNORE INTO app_settings(setting_key,setting_value) VALUES (?,?)')->execute(['sales_orders_enabled','1']);
+            }
             $pdo->commit();
         } catch(Throwable $e){if($pdo->inTransaction())$pdo->rollBack();throw $e;}
     }

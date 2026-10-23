@@ -15,6 +15,19 @@ schema_check(SalesOrderSchema::ensure($db,'development','/application','/applica
 schema_check((int)$db->query("SELECT next_number FROM erp_number_sequences WHERE code='sales_order'")->fetchColumn()===8,'Repair preserves current numbering');
 $db->exec('PRAGMA query_only=OFF');$db->exec("DELETE FROM erp_number_sequences WHERE code='sales_order'");$db->exec('PRAGMA query_only=ON');
 schema_check(!SalesOrderSchema::ready($db)&&SalesOrderSchema::ensure($db,'test','/application','/application/database.sqlite'),'Missing commercial sequence detected and prepared');
+$production=schema_db();$production->exec('CREATE TABLE app_settings(setting_key TEXT UNIQUE,setting_value TEXT)');$production->exec('PRAGMA query_only=ON');
+schema_check(!SalesOrderSchema::enabled($production,'production','/application','/application/database.sqlite'),'Production requires explicit activation');
+SalesOrderSchema::activate($production);
+schema_check(SalesOrderSchema::ready($production)&&SalesOrderSchema::enabled($production,'production','/application','/application/database.sqlite'),'Explicit activation prepares and enables production module');
+schema_check((int)$production->query('PRAGMA query_only')->fetchColumn()===1,'Activation restores read-only connection mode');
+$production->exec('PRAGMA query_only=OFF');$production->exec('UPDATE erp_number_sequences SET next_number=20 WHERE code="sales_order"');$production->exec('PRAGMA query_only=ON');SalesOrderSchema::activate($production);
+schema_check((int)$production->query('SELECT next_number FROM erp_number_sequences WHERE code="sales_order"')->fetchColumn()===20,'Repeated activation preserves configured counter');
+$failedActivation=schema_db();try{SalesOrderSchema::activate($failedActivation);throw new LogicException('Activation without settings accepted');}catch(PDOException $e){}
+schema_check(!$failedActivation->query('SELECT 1 FROM sqlite_master WHERE name="erp_sales_orders"')->fetchColumn(),'Failed activation rolls back schema and enable flag');
+$legacy=schema_db();$legacy->exec('CREATE TABLE erp_sales_orders(id INTEGER PRIMARY KEY,order_number TEXT,customer_id INTEGER,order_date TEXT,expected_date TEXT,status TEXT)');$legacy->exec('INSERT INTO erp_sales_orders VALUES(7,"EC-00007",1,"2026-10-12",NULL,"Confirmada")');
+SalesOrderSchema::migrate($legacy);
+schema_check(in_array('requisition_number',array_column($legacy->query('PRAGMA table_info(erp_sales_orders)')->fetchAll(PDO::FETCH_ASSOC),'name'),true),'Existing order schema gains requisition column');
+schema_check($legacy->query('SELECT order_number FROM erp_sales_orders WHERE id=7')->fetchColumn()==='EC-00007','Incremental requisition migration preserves saved orders');
 $broken=new PDO('sqlite::memory:');$broken->setAttribute(PDO::ATTR_ERRMODE,PDO::ERRMODE_EXCEPTION);$broken->exec('CREATE TABLE erp_number_sequences(code TEXT)');$broken->exec('PRAGMA query_only=ON');
 try {SalesOrderSchema::ensure($broken,'gestisser-dev','/application','/application/database.sqlite');throw new LogicException('Expected failure');}catch(PDOException $e){}
 schema_check((int)$broken->query('PRAGMA query_only')->fetchColumn()===1&&!$broken->inTransaction(),'Failure restores read-only mode and rolls back transaction');

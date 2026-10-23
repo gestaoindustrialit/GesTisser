@@ -1,22 +1,31 @@
 <?php
-// Own bootstrap: ensure only the sales schema in development, then read-only consultation.
+// Own bootstrap: authorized schema preparation, explicit production activation, then read-only consultation.
 function db(){return $GLOBALS['pdo'];}
 function has_shopfloor_only_navigation(array $user): bool{return (int)($user['is_admin']??0)!==1&&((int)($user['pin_only_login']??0)===1||(string)($user['access_profile']??'')==='Utilizador');}
 require_once __DIR__.'/bootstrap/app.php';
 require_once __DIR__.'/erp_migrations.php';
 require_once __DIR__.'/app/Services/SalesOrderService.php';
-$path=app_config('db_path');if(!is_file($path)){http_response_code(503);exit('Base de desenvolvimento indisponível.');}
+require_once __DIR__.'/app/Services/SalesOrderProgress.php';
+$path=app_config('db_path');if(!is_file($path)){http_response_code(503);exit('Base de dados indisponível.');}
 $pdo=new PDO('sqlite:'.$path);$pdo->setAttribute(PDO::ATTR_ERRMODE,PDO::ERRMODE_EXCEPTION);$pdo->setAttribute(PDO::ATTR_DEFAULT_FETCH_MODE,PDO::FETCH_ASSOC);$pdo->exec('PRAGMA foreign_keys=ON');$pdo->exec('PRAGMA busy_timeout=5000');$pdo->exec('PRAGMA query_only=ON');
 require_login();$user=current_user($pdo)?:[];
 if(!gt_erp_user_can($pdo,$user,'erp.view')||!gt_erp_user_can($pdo,$user,'erp.sales')){http_response_code(403);exit('Sem permissão para consultar encomendas de clientes.');}
 $method=$_SERVER['REQUEST_METHOD']??'GET';if(!in_array($method,['GET','POST'],true)){http_response_code(405);header('Allow: GET, POST');exit('Método não permitido.');}
-try {
-    if(!SalesOrderSchema::ensure($pdo,app_config('env'),__DIR__,$path)){
-        http_response_code(503);exit('A preparação automática de encomendas está disponível apenas na cópia de desenvolvimento.');
-    }
-} catch(Throwable $e){
-    error_log('Sales order schema preparation failed: '.$e->getMessage());
-    http_response_code(503);exit('Não foi possível preparar as encomendas. Verifique a permissão de escrita da base SQLite e da respetiva pasta no servidor.');
+$setupError='';
+if($method==='POST'&&SalesOrderService::text($_POST,'action')==='activate_sales_orders'){
+    if((int)($user['is_admin']??0)!==1){http_response_code(403);exit('Só o administrador pode ativar as encomendas.');}
+    $token=$_POST['_token']??'';if(!is_string($token)||$token===''||!hash_equals(csrf_token(),$token)){http_response_code(419);exit('Pedido inválido. Atualize a página.');}
+    try{SalesOrderSchema::activate($pdo);header('Location: erp.php?page=sales_orders',true,303);exit;}
+    catch(Throwable $e){error_log('Sales order activation failed: '.$e->getMessage());$setupError='Não foi possível ativar. Verifique a permissão de escrita da base SQLite e da respetiva pasta.';}
+}
+try{$ready=SalesOrderSchema::ensure($pdo,app_config('env'),__DIR__,$path);}
+catch(Throwable $e){error_log('Sales order schema preparation failed: '.$e->getMessage());$ready=false;$setupError='Não foi possível preparar as encomendas. Verifique a permissão de escrita da base SQLite e da respetiva pasta.';}
+if(!$ready||!SalesOrderSchema::enabled($pdo,app_config('env'),__DIR__,$path)){
+    $pageTitle='Ativar encomendas de clientes';$navbarClockControl=[];
+    if($setupError!=='')http_response_code(503);
+    require __DIR__.'/partials/header.php';
+    ?><main class="container py-4"><section class="card shadow-sm"><div class="card-body p-4"><h1 class="h4">Ativar encomendas de clientes</h1><p>A ativação prepara a estrutura das encomendas nesta base de dados e permite criar encomendas, confirmações e OF associadas.</p><p>Os clientes, artigos, OF, stocks e documentos existentes são preservados. Faça uma cópia de segurança da base de dados antes da ativação.</p><?php if($setupError!==''):?><div class="alert alert-danger"><?=h($setupError)?></div><?php endif;?><?php if((int)($user['is_admin']??0)===1):?><form method="post" action="erp.php?page=sales_orders"><?=csrf_input()?><button class="btn btn-primary" name="action" value="activate_sales_orders"><i class="bi bi-check-circle me-1" aria-hidden="true"></i>Ativar encomendas de clientes</button></form><?php else:?><p class="text-secondary">Peça ao administrador para ativar este módulo.</p><?php endif;?></div></section></main><?php
+    require __DIR__.'/partials/footer.php';exit;
 }
 $service=new SalesOrderService($pdo);$id=filter_input(INPUT_GET,'id',FILTER_VALIDATE_INT)?:0;
 if(isset($_GET['id'])&&$id<1){http_response_code(404);exit('Encomenda não encontrada.');}
@@ -27,40 +36,43 @@ $financial=gt_erp_user_can($pdo,$user,'erp.costs_view');if($tab==='costs'&&!$fin
 $mayConfirm=gt_erp_user_can($pdo,$user,'erp.confirm_orders');$mayOF=gt_erp_user_can($pdo,$user,'erp.work_orders_create');$mayDeliver=gt_erp_user_can($pdo,$user,'erp.shipments_confirm');
 $editing=SalesOrderService::text($_GET,'edit')==='1'||SalesOrderService::text($_GET,'new')==='1';
 $historical=$order&&($order['source_system']!=='GesTISSER'||$order['original_id']!==null);
-$writeEnvironment=SalesOrderSchema::developmentAllowed(app_config('env'),__DIR__,$path);
-$error='';
+$writeEnvironment=SalesOrderSchema::enabled($pdo,app_config('env'),__DIR__,$path);
+$error='';$issuedConfirmation=null;
 function so_url(array $params=[]){return 'erp.php?'.http_build_query(array_merge(['page'=>'sales_orders'],$params));}
 function so_number($value,$precision=3){return $value===null?'Sem dados':number_format((float)$value,$precision,',',' ');}
 function so_date($value){return $value&&strtotime($value)!==false?date('d/m/Y',strtotime($value)):'—';}
 function so_quantities(array $groups){$parts=[];foreach($groups as $g)$parts[]=so_number($g['quantity']).' '.$g['unit'];return $parts?implode(' · ',$parts):'Sem dados';}
 if($method==='POST'){
     $token=$_POST['_token']??'';if(!is_string($token)||$token===''||!hash_equals(csrf_token(),$token)){http_response_code(419);exit('Pedido inválido. Atualize a página.');}
-    if(!$writeEnvironment){http_response_code(403);exit('Alterações permitidas apenas na cópia de desenvolvimento.');}
+    if(!$writeEnvironment){http_response_code(403);exit('O módulo de encomendas de clientes não está ativo.');}
     $action=SalesOrderService::text($_POST,'action');
     $postedId=(int)SalesOrderService::text($_POST,'id','0');if($postedId!==$id){http_response_code(400);exit('Encomenda inválida para esta ficha.');}
-    if(!in_array($action,['save','link_of','link_delivery'],true)){http_response_code(405);exit('Ação não permitida.');}
+    if(!in_array($action,['save','link_of','link_delivery','generate_confirmation'],true)){http_response_code(405);exit('Ação não permitida.');}
+    if($action==='generate_confirmation'&&!gt_erp_user_can($pdo,$user,'erp.reports_export')){http_response_code(403);exit('Sem permissão para emitir documentos.');}
+    if($action==='generate_confirmation'&&!$order){http_response_code(404);exit('Guarde a encomenda antes de emitir.');}
     if(($action==='link_of'&&!$mayOF)||($action==='link_delivery'&&!$mayDeliver)){http_response_code(403);exit('Sem permissão para esta associação.');}
     try {
         $pdo->exec('PRAGMA query_only=OFF');$pdo->beginTransaction();
         if($action==='save')$id=$service->save($_POST,(int)$user['id'],$mayConfirm);
         elseif($action==='link_of')$service->linkWorkOrder($id,(int)SalesOrderService::text($_POST,'line_id'),(int)SalesOrderService::text($_POST,'of_id'),(int)$user['id']);
+        elseif($action==='generate_confirmation'){require_once __DIR__.'/app/Services/SalesOrderConfirmation.php';$issuedConfirmation=(new SalesOrderConfirmation($pdo,(string)app_config('paths.uploads')))->issue($id,(int)SalesOrderService::text($_POST,'revision'),(int)$user['id'],SalesOrderConfirmation::company($pdo,__DIR__),(string)$user['name']);}
         else $service->linkDelivery($id,(int)SalesOrderService::text($_POST,'line_id'),(int)SalesOrderService::text($_POST,'movement_id'),SalesOrderService::text($_POST,'delivery_reference'),(int)$user['id']);
-        $pdo->commit();header('Location: '.so_url(['id'=>$id,'tab'=>$action==='link_of'?'ofs':($action==='link_delivery'?'delivery':'overview'),'saved'=>1]),true,303);exit;
+        $pdo->commit();if(!$issuedConfirmation){header('Location: '.so_url(['id'=>$id,'tab'=>$action==='link_of'?'ofs':($action==='link_delivery'?'delivery':'overview'),'saved'=>1]),true,303);exit;}
     }catch(PDOException $e){if($pdo->inTransaction())$pdo->rollBack();error_log('Sales order database: '.$e->getMessage());$error='Não foi possível guardar. O registo pode já estar associado; verifique e volte a tentar.';http_response_code(422);}
     catch(RuntimeException $e){if($pdo->inTransaction())$pdo->rollBack();$error=$e->getMessage();http_response_code(422);}
     catch(Throwable $e){if($pdo->inTransaction())$pdo->rollBack();error_log('Sales order save: '.$e->getMessage());$error='Não foi possível guardar. Verifique se o registo já está associado e volte a tentar.';http_response_code(422);}
     finally{$pdo->exec('PRAGMA query_only=ON');}
+    if($error!==''&&$issuedConfirmation){if(!empty($issuedConfirmation['created_file']))@unlink($issuedConfirmation['path']);$issuedConfirmation=null;}
+    if($issuedConfirmation){header('Content-Type: '.$issuedConfirmation['mime']);if($issuedConfirmation['mime']==='application/pdf')header('Content-Disposition: attachment; filename="'.basename($issuedConfirmation['path']).'"');header('Content-Length: '.strlen($issuedConfirmation['content']));header('Cache-Control: private, no-store');header('X-Content-Type-Options: nosniff');echo $issuedConfirmation['content'];exit;}
     if($action==='save')$editing=true;
 }
 $lines=$order?$service->lines($id):[];$ofs=$order?$service->workOrders($id):[];
 if(SalesOrderService::text($_GET,'action')==='pdf'){
     if(!$order){http_response_code(404);exit('Encomenda não encontrada.');}
     if(!gt_erp_user_can($pdo,$user,'erp.reports_export')){http_response_code(403);exit('Sem permissão para exportar.');}
-    require_once __DIR__.'/vendor/autoload.php';
-    $html='<h1>Encomenda '.h($order['order_number']).'</h1><p>'.h($order['customer_code'].' — '.$order['customer_name']).'</p><p>Data: '.h(so_date($order['order_date'])).' · Entrega prevista: '.h(so_date($order['expected_date'])).'</p><p>Estado: '.h($order['status']).' · Origem: '.h($order['source_system']).' · Referência: '.h($order['customer_reference']).'</p><table width="100%" border="1" cellpadding="6"><thead><tr><th>Artigo</th><th>Quantidade</th><th>Unidade</th><th>Preço (€)</th><th>Desconto %</th><th>Valor (€)</th></tr></thead><tbody>';
-    foreach($lines as $l)$html.='<tr><td>'.h($l['article_code'].' — '.$l['description']).'</td><td>'.h(so_number($l['quantity'])).'</td><td>'.h($l['unit_code']?:'Não registada').'</td><td>'.h(so_number($l['unit_price'],4)).'</td><td>'.h(so_number($l['discount_percent'],2)).'</td><td>'.h(so_number($l['line_total'],2)).'</td></tr>';
-    $html.='</tbody></table><p>'.nl2br(h($order['notes'])).'</p><p>Valores comerciais registados na encomenda. Não constitui documento fiscal.</p>';
-    $pdf=new \Mpdf\Mpdf(['tempDir'=>app_config('paths.cache')]);$pdf->WriteHTML($html);$pdf->Output('encomenda-'.$id.'.pdf','D');exit;
+    require_once __DIR__.'/app/Services/SalesOrderPdf.php';
+    $pdf=SalesOrderPdf::render($order,$lines);
+    header('Content-Type: application/pdf');header('Content-Disposition: attachment; filename="encomenda-'.$id.'.pdf"');header('Content-Length: '.strlen($pdf));header('X-Content-Type-Options: nosniff');header('Cache-Control: private, no-store');echo $pdf;exit;
 }
 if(SalesOrderService::text($_GET,'action')==='document'){
     $documentId=filter_input(INPUT_GET,'document',FILTER_VALIDATE_INT)?:0;
@@ -69,19 +81,25 @@ if(SalesOrderService::text($_GET,'action')==='document'){
     require_once __DIR__.'/app/Services/ArticleDocument.php';
     try{$file=ArticleDocument::absolutePath(__DIR__,(string)$doc['file_url']);}catch(Throwable $e){http_response_code(404);exit('Ficheiro indisponível.');}
     if(!is_file($file)){http_response_code(404);exit('Ficheiro indisponível.');}
-    header('Content-Type: application/octet-stream');header('Content-Disposition: attachment; filename="documento-'.$documentId.'.'.preg_replace('/[^a-z0-9]/i','',pathinfo($file,PATHINFO_EXTENSION)).'"');header('X-Content-Type-Options: nosniff');header('Cache-Control: private, no-store');readfile($file);exit;
+    $confirmation=$doc['document_type']==='Confirmação de encomenda';
+    if($confirmation&&!gt_erp_user_can($pdo,$user,'erp.reports_export')){http_response_code(403);exit('Sem permissão para descarregar a confirmação.');}
+    if($confirmation){$metadata=json_decode((string)$doc['notes'],true);$fileHash=@hash_file('sha256',$file);if(!is_array($metadata)||!is_string($metadata['sha256']??null)||!is_string($fileHash)||!hash_equals($metadata['sha256'],$fileHash)){http_response_code(409);exit('O ficheiro da confirmação não corresponde ao documento emitido.');}}
+    $extension=preg_replace('/[^a-z0-9]/i','',pathinfo($file,PATHINFO_EXTENSION));$filename=$confirmation?preg_replace('/[^A-Za-z0-9._-]/','_',(string)$doc['version']):'documento-'.$documentId;
+    $printable=$confirmation&&$extension==='html';
+    header('Content-Type: '.($printable?'text/html; charset=UTF-8':($extension==='pdf'?'application/pdf':'application/octet-stream')));if(!$printable)header('Content-Disposition: attachment; filename="'.$filename.'.'.$extension.'"');header('X-Content-Type-Options: nosniff');header('Cache-Control: private, no-store');readfile($file);exit;
 }
-$filters=SalesOrderService::filters($_GET);$list=(!$order&&!$editing)?$service->listing($filters):null;
+$filters=SalesOrderService::filters($_GET);$list=!$order?$service->listing($filters):null;
 $pageTitle=$order?'Encomenda '.$order['order_number']:'Encomendas de clientes';$navbarClockControl=[];
 require __DIR__.'/partials/header.php';
 ?>
-<link rel="stylesheet" href="assets/customer-profile.css"><script defer src="assets/sales-orders.js"></script>
+<link rel="stylesheet" href="assets/customer-profile.css"><link rel="stylesheet" href="assets/sales-orders.css?v=<?= h((string)filemtime(__DIR__.'/assets/sales-orders.css')) ?>"><script defer src="assets/sales-orders.js?v=<?= h((string)filemtime(__DIR__.'/assets/sales-orders.js')) ?>"></script>
 <div class="container-fluid py-4 customer-profile">
 <?php if($error):?><div class="alert alert-danger" role="alert"><?=h($error)?></div><?php elseif(SalesOrderService::text($_GET,'saved')==='1'):?><div class="alert alert-success" role="status">Encomenda atualizada com sucesso.</div><?php endif;?>
 <header class="d-flex flex-wrap justify-content-between align-items-start gap-3 mb-4"><div><a class="btn btn-sm btn-outline-secondary" href="<?=h(so_url())?>"><i class="bi bi-arrow-left me-1"></i>Voltar à lista</a><div class="small text-secondary mt-3"><?=h($order?$order['source_system']:'Gestão comercial')?></div><h1 class="h3 mb-2"><?=h($pageTitle)?></h1><?php if($order):?><a href="erp.php?page=customer_profile&amp;id=<?=(int)$order['customer_id']?>"><?=h($order['customer_code'].' — '.$order['customer_name'])?></a> <span class="badge text-bg-light ms-2"><?=h($order['status'])?></span><?php if(!$order['customer_active']):?> <span class="badge text-bg-secondary">Cliente inativo</span><?php endif;?><?php endif;?></div><div class="d-flex flex-wrap gap-2">
 <?php if($order&&!$historical&&$writeEnvironment):?><a class="btn btn-outline-primary" href="<?=h(so_url(['id'=>$id,'edit'=>1]))?>"><i class="bi bi-pencil me-1"></i>Editar encomenda</a><?php endif;?>
 <?php if($order&&$mayOF&&$writeEnvironment&&!$historical&&!in_array($order['status'],['Rascunho','Cancelada','Concluída'],true)):?><a class="btn btn-outline-primary" href="<?=h(so_url(['id'=>$id,'tab'=>'ofs']))?>">Criar OF</a><?php endif;?>
-<?php if($order&&gt_erp_user_can($pdo,$user,'erp.reports_export')):?><a class="btn btn-outline-secondary" href="<?=h(so_url(['id'=>$id,'action'=>'pdf']))?>"><i class="bi bi-file-earmark-pdf me-1"></i>Exportar PDF</a><?php endif;?>
+<?php if($order&&gt_erp_user_can($pdo,$user,'erp.reports_export')&&$writeEnvironment&&!$historical):?><form method="post" target="_blank" action="<?=h(so_url(['id'=>$id]))?>"><?=csrf_input()?><input type="hidden" name="id" value="<?=$id?>"><input type="hidden" name="revision" value="<?=(int)$order['revision']?>"><button class="btn btn-outline-primary" name="action" value="generate_confirmation"><i class="bi bi-file-earmark-check me-1" aria-hidden="true"></i>Gerar confirmação</button></form><?php endif;?>
+<?php if(!$order):?><a class="btn btn-outline-primary" href="#sales-order-history"><i class="bi bi-clock-history me-1" aria-hidden="true"></i>Histórico</a><?php endif;?>
 <?php if(!$order&&$writeEnvironment):?><a class="btn btn-primary" href="<?=h(so_url(['new'=>1]))?>"><i class="bi bi-plus-lg me-1"></i>Nova encomenda</a><?php endif;?>
 <a class="btn btn-outline-secondary" href="erp.php?page=sales">Clientes</a><a class="btn btn-outline-secondary" href="erp.php?page=orders">Compras a fornecedores</a></div></header>
 <?php if($editing):
@@ -94,12 +112,12 @@ $articles=$service->all('SELECT id,code,description,customer_id,status FROM erp_
 <?php if($historical||!$writeEnvironment):?><p class="text-secondary">Esta encomenda é apenas de consulta.</p><?php else:?>
 <form method="post" class="row g-3" data-sales-order-form><?=csrf_input()?><input type="hidden" name="action" value="save"><input type="hidden" name="id" value="<?=$id?>"><input type="hidden" name="revision" value="<?=h(SalesOrderService::text($edit,'revision','0'))?>">
 <div class="col-md-4"><label class="form-label" for="so-customer">Cliente *</label><select class="form-select" name="customer_id" id="so-customer" required><option value="">Selecione…</option><?php foreach($customers as $c):if(!$c['is_active']&&$c['id']!=($order['customer_id']??0))continue;?><option value="<?=(int)$c['id']?>" <?=$c['id']==($edit['customer_id']??0)?'selected':''?>><?=h($c['code'].' — '.$c['name'])?></option><?php endforeach;?></select></div>
-<?php foreach(['order_date'=>'Data da encomenda *','expected_date'=>'Entrega prevista','customer_reference'=>'Referência do cliente'] as $field=>$label):?><div class="col-md-<?=$field==='customer_reference'?'4':'2'?>"><label class="form-label" for="so-<?=$field?>"><?=h($label)?></label><input class="form-control" id="so-<?=$field?>" name="<?=$field?>" type="<?=$field==='customer_reference'?'text':'date'?>" <?=$field==='order_date'?'required':''?> value="<?=h(SalesOrderService::text($edit,$field))?>"></div><?php endforeach;?>
+<?php foreach(['order_date'=>'Data da encomenda *','expected_date'=>'Entrega prevista','customer_reference'=>'Referência do cliente','requisition_number'=>'Nr. Requisição'] as $field=>$label):?><div class="col-md-<?=in_array($field,['customer_reference','requisition_number'],true)?'3':'2'?>"><label class="form-label" for="so-<?=$field?>"><?=h($label)?></label><input class="form-control" id="so-<?=$field?>" name="<?=$field?>" type="<?=in_array($field,['customer_reference','requisition_number'],true)?'text':'date'?>" <?=$field==='order_date'?'required':''?> value="<?=h(SalesOrderService::text($edit,$field))?>"></div><?php endforeach;?>
 <div class="col-md-4"><label class="form-label" for="so-status">Estado comercial</label><select class="form-select" name="status" id="so-status"><?php $states=SalesOrderService::statuses();if($order&&!in_array($order['status'],$states,true))$states[]=$order['status'];foreach($states as $s):if(!$mayConfirm&&$s!==($order['status']??'Rascunho'))continue;?><option <?=($edit['status']??'Rascunho')===$s?'selected':''?>><?=h($s)?></option><?php endforeach;?></select></div>
 <div class="col-12"><label class="form-label" for="so-notes">Observações</label><textarea class="form-control" name="notes" id="so-notes" rows="2"><?=h(SalesOrderService::text($edit,'notes'))?></textarea></div>
-<div class="col-12"><h3 class="h6">Artigos encomendados</h3><p class="small text-secondary">Preços e descontos pertencem à encomenda. As linhas existentes são preservadas.</p><div class="table-responsive"><table class="table align-middle"><thead><tr><th>Artigo *</th><th>Descrição</th><th>Quantidade *</th><th>Preço unitário (€)</th><th>Desconto %</th><th>Entrega prevista</th><th></th></tr></thead><tbody data-sales-lines>
+<div class="col-12"><h3 class="h6">Artigos encomendados</h3><p class="small text-secondary">Preços e descontos pertencem à encomenda. As linhas existentes são preservadas.</p><div class="table-responsive"><table class="table align-middle sales-order-lines"><thead><tr><th>Artigo *</th><th>Descrição</th><th>Qtd. *</th><th>Preço U.</th><th>Desc. %</th><th>Entrega prevista</th><th></th></tr></thead><tbody data-sales-lines>
 <?php foreach($editLines as $i=>$l):if(!is_array($l))continue;require __DIR__.'/partials/sales_order_edit_line.php';endforeach;?>
-</tbody></table></div><button class="btn btn-sm btn-outline-primary" type="button" data-add-sales-line>Adicionar artigo</button><template data-sales-line-template><?php $i='__INDEX__';$l=[];require __DIR__.'/partials/sales_order_edit_line.php';?></template></div>
+</tbody></table></div><template data-sales-line-template><?php $i='__INDEX__';$l=[];require __DIR__.'/partials/sales_order_edit_line.php';?></template></div>
 <div class="col-12 d-flex gap-2"><button class="btn btn-primary">Guardar encomenda</button><a class="btn btn-outline-secondary" href="<?=h(so_url($id?['id'=>$id]:[]))?>">Cancelar</a></div>
 </form><?php endif;?></div></section>
 <?php elseif($order):?>
@@ -107,7 +125,7 @@ $articles=$service->all('SELECT id,code,description,customer_id,status FROM erp_
 <nav class="cp-tabs mb-4" aria-label="Separadores da encomenda"><div class="d-flex flex-wrap gap-2"><?php $icons=['overview'=>'bi-grid','articles'=>'bi-box-seam','ofs'=>'bi-clipboard2-check','delivery'=>'bi-truck','costs'=>'bi-graph-up','documents'=>'bi-folder2-open'];foreach($tabs as $key=>$label):if($key==='costs'&&!$financial)continue;?><a class="btn btn-sm <?=$tab===$key?'btn-primary':'btn-outline-secondary'?>" <?=$tab===$key?'aria-current="page"':''?> href="<?=h(so_url(['id'=>$id,'tab'=>$key]))?>"><i class="bi <?=h($icons[$key])?> me-1" aria-hidden="true"></i><?=h($label)?></a><?php endforeach;?></div></nav>
 <section class="card"><div class="card-body"><h2 class="h5 mb-3"><?=h($tabs[$tab])?></h2>
 <?php if($tab==='overview'):?>
-<dl class="row cp-details"><?php foreach(['order_date'=>'Data da encomenda','expected_date'=>'Entrega prevista','customer_reference'=>'Referência do cliente','status'=>'Estado comercial','source_system'=>'Origem','original_number'=>'Número original'] as $key=>$label):?><dt class="col-sm-3"><?=h($label)?></dt><dd class="col-sm-9"><?=h(in_array($key,['order_date','expected_date'],true)?so_date($order[$key]):($order[$key]?:'—'))?></dd><?php endforeach;?></dl>
+<dl class="row cp-details"><?php foreach(['order_date'=>'Data da encomenda','expected_date'=>'Entrega prevista','customer_reference'=>'Referência do cliente','requisition_number'=>'Nr. Requisição','status'=>'Estado comercial','source_system'=>'Origem','original_number'=>'Número original'] as $key=>$label):?><dt class="col-sm-3"><?=h($label)?></dt><dd class="col-sm-9"><?=h(in_array($key,['order_date','expected_date'],true)?so_date($order[$key]):($order[$key]?:'—'))?></dd><?php endforeach;?></dl>
 <h3 class="h6 mt-4">Produção e logística</h3><?php foreach($lines as $l):?><p class="mb-1"><?=h($l['article_code'])?> · <?=h($l['production_state'])?> · <?=h($l['logistic_state'])?></p><?php endforeach;?>
 <h3 class="h6 mt-4">Observações</h3><p><?=nl2br(h($order['notes']?:'Sem observações.'))?></p>
 <h3 class="h6 mt-4">Últimas atividades</h3><?php $history=$service->history($id);foreach(array_slice($history,0,5) as $event):?><p class="small mb-1"><?=h(so_date($event['created_at']).' · '.$event['action'])?></p><?php endforeach;if(!$history):?><p class="text-secondary">Sem alterações registadas.</p><?php endif;?>
@@ -132,16 +150,9 @@ $articles=$service->all('SELECT id,code,description,customer_id,status FROM erp_
 <h3 class="h6 mt-4">Histórico de alterações</h3><ul class="list-unstyled"><?php foreach($service->history($id) as $event):$before=json_decode($event['old_values_json'],true);$after=json_decode($event['new_values_json'],true);?><li class="border-bottom py-2"><?=h($event['created_at'].' · '.$event['action'])?><?php if(isset($after['order']['status'])):?> · <?=h(($before['order']['status']??'Novo').' → '.$after['order']['status'])?><?php endif;?></li><?php endforeach;?></ul>
 <?php elseif($tab==='documents'):?>
 <p class="small text-secondary">Documentos associados através do catálogo documental existente e documentos das OF relacionadas.</p>
-<ul class="list-group"><?php $docs=$service->documents($id);foreach($docs as $doc):?><li class="list-group-item"><strong><?=h($doc['title'])?></strong> · <?=h($doc['document_type'].' · '.$doc['status'])?><?php $url=$doc['file_url']??'';if(preg_match('~^https?://~i',$url)):?> <a href="<?=h($url)?>" target="_blank" rel="noopener">Abrir documento</a><?php elseif($url):?> <a href="<?=h(so_url(['id'=>$id,'action'=>'document','document'=>$doc['id']]))?>">Descarregar documento</a><?php endif;?></li><?php endforeach;foreach($ofs as $of):?><li class="list-group-item"><a href="production_dossier.php?id=<?=(int)$of['id']?>"><?=h('Dossier e documentos · '.$of['order_number'])?></a></li><?php endforeach;if(!$docs&&!$ofs):?><li class="list-group-item text-secondary">Sem documentos associados.</li><?php endif;?></ul>
+<ul class="list-group"><?php $docs=$service->documents($id);foreach($docs as $doc):?><li class="list-group-item"><div class="d-flex flex-wrap justify-content-between gap-2"><strong><?=h($doc['title'])?></strong><span class="small text-secondary"><?=h(so_date($doc['created_at']))?></span></div><div class="small text-secondary"><?=h($doc['document_type'].' · '.$doc['status'])?><?php if($doc['version']):?> · Nº <?=h($doc['version'])?><?php endif;?></div><?php $url=$doc['file_url']??'';if(preg_match('~^https?://~i',$url)):?> <a href="<?=h($url)?>" target="_blank" rel="noopener">Abrir documento</a><?php elseif($url):?> <a href="<?=h(so_url(['id'=>$id,'action'=>'document','document'=>$doc['id']]))?>"><i class="bi bi-file-earmark-pdf me-1" aria-hidden="true"></i><?= $doc['document_type']==='Confirmação de encomenda'&&strtolower(pathinfo($url,PATHINFO_EXTENSION))==='html'?'Abrir / Guardar PDF':'Descarregar documento' ?></a><?php endif;?></li><?php endforeach;foreach($ofs as $of):?><li class="list-group-item"><a href="production_dossier.php?id=<?=(int)$of['id']?>"><?=h('Dossier e documentos · '.$of['order_number'])?></a></li><?php endforeach;if(!$docs&&!$ofs):?><li class="list-group-item text-secondary">Sem documentos associados.</li><?php endif;?></ul>
 <?php endif;?>
 </div></section>
-<?php else:?>
-<section class="card mb-4"><div class="card-body"><form method="get" class="row g-3"><input type="hidden" name="page" value="sales_orders"><?php if($filters['customer']):?><input type="hidden" name="customer" value="<?=$filters['customer']?>"><?php endif;if($filters['article']):?><input type="hidden" name="article" value="<?=$filters['article']?>"><?php endif;?>
-<div class="col-md-4"><label class="form-label" for="so-q">Pesquisar encomenda, cliente ou artigo</label><input class="form-control" id="so-q" name="q" value="<?=h($filters['q'])?>"></div>
-<div class="col-md-2"><label class="form-label" for="filter-status">Estado</label><select class="form-select" id="filter-status" name="status"><option value="">Todos</option><?php $states=$service->all('SELECT DISTINCT status FROM erp_sales_orders ORDER BY status');$states=array_unique(array_merge(SalesOrderService::statuses(),array_column($states,'status')));foreach($states as $s):?><option <?=$filters['status']===$s?'selected':''?>><?=h($s)?></option><?php endforeach;?></select></div>
-<?php foreach(['from'=>'Desde','to'=>'Até'] as $key=>$label):?><div class="col-md-2"><label class="form-label" for="so-<?=$key?>"><?=h($label)?></label><input class="form-control" id="so-<?=$key?>" type="date" name="<?=$key?>" value="<?=h($filters[$key])?>"></div><?php endforeach;?>
-<div class="col-md-2 align-self-end"><div class="form-check mb-2"><input class="form-check-input" type="checkbox" id="so-late" name="late" value="1" <?=$filters['late']==='1'?'checked':''?>><label class="form-check-label" for="so-late">Em atraso</label></div><button class="btn btn-primary w-100">Filtrar</button></div></form></div></section>
-<section class="card"><div class="card-body"><div class="table-responsive"><table class="table table-hover align-middle"><thead><tr><?php foreach(['number'=>'Encomenda','customer'=>'Cliente','date'=>'Data','expected'=>'Entrega prevista','lines'=>'Artigos'] as $key=>$label):?><th><a href="<?=h(so_url(array_merge($filters,['sort'=>$key,'dir'=>$filters['sort']===$key&&$filters['dir']==='asc'?'desc':'asc','p'=>1])))?>"><?=h($label)?></a></th><?php endforeach;?><th>Quantidade por unidade</th><?php foreach(['status'=>'Estado','source'=>'Origem'] as $key=>$label):?><th><a href="<?=h(so_url(array_merge($filters,['sort'=>$key,'dir'=>$filters['sort']===$key&&$filters['dir']==='asc'?'desc':'asc','p'=>1])))?>"><?=h($label)?></a></th><?php endforeach;?><th>Ações</th></tr></thead><tbody><?php foreach($list['rows'] as $r):?><tr><td><a class="fw-semibold" href="<?=h(so_url(['id'=>$r['id']]))?>"><?=h($r['order_number'])?></a></td><td><a href="erp.php?page=customer_profile&amp;id=<?=(int)$r['customer_id']?>"><?=h($r['customer_code'].' — '.$r['customer_name'])?></a></td><td><?=h(so_date($r['order_date']))?></td><td><?=h(so_date($r['expected_date']))?></td><td><?=(int)$r['article_count']?></td><td><?=h(so_quantities($r['quantities']))?></td><td><span class="badge text-bg-light"><?=h($r['status'])?></span></td><td><?=h($r['source_system'])?></td><td><a class="btn btn-sm btn-outline-primary" href="<?=h(so_url(['id'=>$r['id']]))?>">Consultar</a></td></tr><?php endforeach;if(!$list['rows']):?><tr><td colspan="9" class="text-center text-secondary py-4">Sem encomendas para os filtros selecionados.</td></tr><?php endif;?></tbody></table></div>
-<nav aria-label="Paginação" class="d-flex flex-wrap justify-content-between gap-2 mt-3"><span class="small text-secondary"><?=$list['total']?> encomendas · página <?=$list['page']?> / <?=$list['pages']?></span><div class="d-flex gap-2"><?php if($list['page']>1):?><a class="btn btn-sm btn-outline-secondary" href="<?=h(so_url(array_merge($filters,['p'=>$list['page']-1])))?>">Anterior</a><?php endif;if($list['page']<$list['pages']):?><a class="btn btn-sm btn-outline-secondary" href="<?=h(so_url(array_merge($filters,['p'=>$list['page']+1])))?>">Seguinte</a><?php endif;?></div></nav></div></section>
 <?php endif;?>
+<?php if(!$order):require __DIR__.'/partials/sales-order-history.php';endif;?>
 </div><?php require __DIR__.'/partials/footer.php';?>
