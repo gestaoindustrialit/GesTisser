@@ -2,6 +2,8 @@
 require_once __DIR__ . '/helpers.php';
 require_once __DIR__ . '/erp_migrations.php';
 require_once __DIR__ . '/erp_work_order_cleanup.php';
+require_once __DIR__.'/app/Services/CommercialNumbering.php';
+require_once __DIR__.'/app/Services/SalesOrderSchema.php';
 require_login();
 
 $userId = (int) $_SESSION['user_id'];
@@ -149,6 +151,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $flashSuccess = $deletedOrders === 1
                     ? 'Foi eliminada 1 Ordem de Fabrico e todo o respetivo histórico.'
                     : 'Foram eliminadas '.$deletedOrders.' Ordens de Fabrico e todo o respetivo histórico.';
+            } elseif ($action === 'set_commercial_sequence') {
+                if(!SalesOrderSchema::enabled($pdo,app_config('env'),__DIR__,app_config('db_path')))throw new RuntimeException('Ative as encomendas de clientes antes de alterar a numeração.');
+                $code=(string)($_POST['commercial_sequence']??'');
+                $next=filter_var($_POST['commercial_next_number']??null,FILTER_VALIDATE_INT,['options'=>['min_range'=>1]]);
+                if($next===false)throw new InvalidArgumentException('Indique um número válido.');
+                $pdo->beginTransaction();$result=CommercialNumbering::configure($pdo,$code,$next);
+                gt_erp_audit($pdo,$userId,'reset_sequence','erp_number_sequences',$result['id'],['next_number'=>$result['old']],['next_number'=>$next]);$pdo->commit();
+                $flashSuccess='Próximo número atualizado para '.$result['number'].'.';
             } elseif ($action === 'reset_work_order_sequence') {
                 $nextNumber = filter_var($_POST['work_order_next_number'] ?? null, FILTER_VALIDATE_INT, ['options'=>['min_range'=>1]]);
                 if ($nextNumber === false) throw new InvalidArgumentException('Indique um número válido para a próxima OF.');
@@ -166,7 +176,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 if ($biSettings['bi_tv_refresh_seconds']<30||$biSettings['bi_tv_rotate_seconds']<30||$biSettings['bi_target_deadline_percent']<$biSettings['bi_warning_deadline_percent']||$biSettings['bi_warning_waste_percent']<$biSettings['bi_target_waste_percent']) throw new InvalidArgumentException('Reveja os limites do BI: atualização e deslocamento mínimos de 30 s e limites de aviso coerentes.');
                 $pdo->beginTransaction();$saveSetting=$pdo->prepare('INSERT INTO erp_settings(key,value,updated_by,updated_at) VALUES (?,?,?,CURRENT_TIMESTAMP) ON CONFLICT(key) DO UPDATE SET value=excluded.value,updated_by=excluded.updated_by,updated_at=CURRENT_TIMESTAMP');
                 $saveSetting->execute(['allow_negative_stock',$allowNegativeStock?'1':'0',$userId]);$saveSetting->execute(['raw_material_code_pattern',$codePattern,$userId]);foreach($biSettings as $key=>$value)$saveSetting->execute([$key,(string)$value,$userId]);
-                $saveSequence=$pdo->prepare('UPDATE erp_number_sequences SET prefix=?,next_number=?,padding=?,suffix=?,updated_at=CURRENT_TIMESTAMP WHERE id=?');foreach((array)($_POST['sequence_id']??[]) as $index=>$rawId)$saveSequence->execute([trim((string)($_POST['sequence_prefix'][$index]??'')),max(1,(int)($_POST['sequence_next_number'][$index]??1)),min(12,max(1,(int)($_POST['sequence_padding'][$index]??5))),trim((string)($_POST['sequence_suffix'][$index]??'')),(int)$rawId]);
+                $saveSequence=$pdo->prepare('UPDATE erp_number_sequences SET prefix=?,next_number=?,padding=?,suffix=?,updated_at=CURRENT_TIMESTAMP WHERE id=?');
+                foreach((array)($_POST['sequence_id']??[]) as $index=>$rawId){
+                    $saveSequence->execute([trim((string)($_POST['sequence_prefix'][$index]??'')),max(1,(int)($_POST['sequence_next_number'][$index]??1)),min(12,max(1,(int)($_POST['sequence_padding'][$index]??5))),trim((string)($_POST['sequence_suffix'][$index]??'')),(int)$rawId]);
+                    $sequenceCode=$pdo->prepare('SELECT code FROM erp_number_sequences WHERE id=?');$sequenceCode->execute([(int)$rawId]);$code=(string)$sequenceCode->fetchColumn();
+                    if(in_array($code,['sales_order','sales_order_confirmation'],true)){
+                        if(!SalesOrderSchema::enabled($pdo,app_config('env'),__DIR__,app_config('db_path')))throw new RuntimeException('Ative as encomendas de clientes antes de alterar a numeração.');
+                        CommercialNumbering::configure($pdo,$code,max(1,(int)($_POST['sequence_next_number'][$index]??1)));
+                    }
+                }
                 gt_erp_audit($pdo,$userId,'update','erp_settings',null,[],['allow_negative_stock'=>$allowNegativeStock,'raw_material_code_pattern'=>$codePattern,'business_intelligence'=>$biSettings]);$pdo->commit();$flashSuccess='Configuração do ERP atualizada com sucesso.';
             }
         } catch (Throwable $exception) {
@@ -177,6 +195,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 }
 $settings = $pdo->query('SELECT key, value FROM erp_settings')->fetchAll(PDO::FETCH_KEY_PAIR);
 $sequences = $pdo->query('SELECT id, code, prefix, next_number, padding, suffix FROM erp_number_sequences ORDER BY code')->fetchAll(PDO::FETCH_ASSOC);
+$commercialSequences=['sales_order'=>['code'=>'sales_order','prefix'=>'EC-','next_number'=>1,'padding'=>5,'suffix'=>''],'sales_order_confirmation'=>['code'=>'sales_order_confirmation','prefix'=>'CONF-','next_number'=>1,'padding'=>5,'suffix'=>'']];
+foreach($sequences as $sequence)if(isset($commercialSequences[$sequence['code']]))$commercialSequences[$sequence['code']]=$sequence;
 $workOrderSequence = null;
 foreach ($sequences as $sequence) if ($sequence['code'] === 'work_order') $workOrderSequence = $sequence;
 $operationTypes = $pdo->query('SELECT id,code,name FROM erp_operation_types ORDER BY name COLLATE NOCASE')->fetchAll(PDO::FETCH_ASSOC);
@@ -197,6 +217,8 @@ $sequenceLabels = [
     'stock_movement' => 'Movimentos de stock',
     'supplier' => 'Fornecedores',
     'work_order' => 'Ordens de fabrico',
+    'sales_order' => 'Encomendas de clientes',
+    'sales_order_confirmation' => 'Confirmações de encomenda',
 ];
 
 $pageTitle = 'Configuração ERP';
@@ -325,6 +347,14 @@ require __DIR__ . '/partials/header.php';
     </div>
 </div>
 
+<?php foreach(['sales_order'=>'Encomendas de clientes','sales_order_confirmation'=>'Confirmações de encomenda'] as $sequenceCode=>$sequenceLabel):$commercialSequence=$commercialSequences[$sequenceCode];?>
+<form method="post" class="card card-body border-primary mb-3">
+    <?=csrf_input()?><input type="hidden" name="action" value="set_commercial_sequence"><input type="hidden" name="commercial_sequence" value="<?=h($sequenceCode)?>">
+    <div class="row g-3 align-items-end"><div class="col-lg-7"><h2 class="h5 mb-1">Numeração · <?=h($sequenceLabel)?></h2><p class="text-muted mb-0">Altere o próximo número sem modificar documentos existentes. Números já utilizados não podem ser reutilizados.</p></div>
+    <div class="col-md-3"><label class="form-label" for="next-<?=h($sequenceCode)?>">Próximo número</label><input class="form-control" id="next-<?=h($sequenceCode)?>" name="commercial_next_number" type="number" min="1" step="1" required value="<?=(int)$commercialSequence['next_number']?>"><div class="form-text">Próximo: <strong><?=h(NumberSequenceService::format($commercialSequence))?></strong></div></div>
+    <div class="col-md-2"><button class="btn btn-outline-primary w-100"><i class="bi bi-save me-1"></i>Guardar contador</button></div></div>
+</form>
+<?php endforeach;?>
 <?php if ($workOrderSequence): ?>
 <form method="post" class="card shadow-sm soft-card border-primary mb-4">
     <?= csrf_input() ?><input type="hidden" name="action" value="reset_work_order_sequence">

@@ -102,3 +102,68 @@ Os dados de teste foram criados exclusivamente em bases em memória ou cópias d
 - Custo previsto/real na ficha usa fechos registados, sem estimar custos ausentes. Não há ligação a faturação nem cálculo de margem.
 - Consulta documental reutilizada; não se criou um novo carregador de anexos. A preparação Bobinas é apenas simulação, sem execução.
 - Validação de performance limitada à paginação e consultas com índices em dados de teste. Volumes reais e Safari em Mac/iPad não foram testados; o navegador usado foi Chromium.
+
+O campo Artigo pesquisa por descrição ou código e apresenta apenas artigos do cliente selecionado. Selecionar um artigo preenche automaticamente a descrição da linha. Mudar de cliente limpa seleções incompatíveis. Novas linhas também usam a pesquisa; a validação no servidor rejeita artigos de outro cliente e artigos genéricos para novas seleções. Os valores históricos de linhas existentes continuam preservados.
+
+O botão de adicionar artigo é um ícone + na última linha; a sua posição acompanha adições e remoções. A exportação usa SalesOrderPdf, um gerador A4 sem Composer/vendor, com paginação e valores comerciais registados. A rota mantém as permissões de exportação e não escreve na base de dados.
+
+A criação de OF exige uma escolha explícita entre uma encomenda guardada apta para produção e “Sem Encomenda”. Para encomendas, o formulário restringe a escolha às linhas com quantidade ainda por planear, preenche artigo, quantidade e data prevista e associa automaticamente a OF à linha por identificador. Rascunhos, canceladas e concluídas não são oferecidas. Linhas sem unidade registada continuam visíveis; diferenças de unidade são verificadas antes da criação. No servidor, a origem, a pertença do artigo e a quantidade disponível são validadas antes da criação, na mesma transação das fichas e dos snapshots. A referência vem da encomenda guardada. OF sem encomenda ficam identificadas como “Sem Encomenda” no snapshot e não criam relações comerciais. Mantêm-se routing, morada de entrega, transportador e as permissões existentes. Sem migrações.
+
+O histórico fica visível na listagem e por baixo do formulário de nova encomenda. Cada encomenda expande para mostrar quantidades por artigo, evolução de produção e entrega, OF associadas e atividades de auditoria. O estado comercial mantém-se separado das quantidades efetivamente registadas; produzir não implica entregar. O resumo usa a média dos percentuais de cada linha, sem somar unidades diferentes, com barras limitadas visualmente a 100%. A consulta é paginada (20 encomendas) e não altera dados. Disclosure nativo com teclado, controlos para expandir/recolher todas, memória de expansão na sessão do browser e CSS responsivo.
+
+Correção de dados legados: uma encomenda confirmada com unidade não registada no artigo e na linha pode gerar OF ligada, mantendo ambas as unidades como não registadas. Uma unidade efetivamente diferente continua bloqueada com mensagem explícita; não são alterados artigos nem linhas históricas. A atualização do seletor pesquisável foi agrupada por campo, evitando redesenhar o catálogo por cada opção inserida. Com mais de 2000 artigos, a seleção “Sem Encomenda” passou de 2008 atualizações na versão anterior para 4, com pesquisa por descrição e clique reais no browser.
+
+
+## Confirmação de encomenda numerada
+
+Na ficha de uma encomenda guardada, **Gerar confirmação** abre uma nova aba A4 com **Imprimir / Guardar PDF**, seguindo a Ficha Técnica e a Folha de Acompanhamento. O browser carrega o logótipo em `<img>` e imprime o documento; não se usa o descodificador de imagens do PDF nativo para esta confirmação. PNG, JPG, SVG e WEBP são apresentados pelo browser, independentemente do suporte GD do servidor.
+
+Inclui logótipo e contactos da empresa, NIF, identificação/morada do cliente, datas, referência, moeda EUR, quantidades, descrição técnica, preços, descontos e total sem IVA. Não constitui documento fiscal. Campos não registados não são presumidos. As variações padrão de quantidade ±3% e largura/comprimento ±10 mm foram repostas. São apresentadas no rodapé no lugar de Processado por, que foi removido. Texto editável no Perfil da empresa; uma configuração vazia usa as variações padrão.
+
+Cada encomenda recebe uma única confirmação, numerada pela série própria `CONF-00001`, `CONF-00002`, etc. Novos cliques reutilizam o primeiro registo de documento e não avançam o contador. Depois de alterar e guardar a encomenda, o botão atualiza a confirmação com os dados mais recentes, mantendo o mesmo número e identificador. Sem alterações, reabre a versão existente. Encomendas que tenham várias confirmações emitidas pelo comportamento anterior passam a reutilizar a primeira; os documentos antigos são preservados. O documento HTML imprimível e os dados comerciais usados são arquivados na encomenda; **Documentos → Abrir / Guardar PDF** reabre a versão emitida sem consumir outro número. Uma atualização da confirmação usa os dados guardados da encomenda e os dados atuais do cliente/artigo. As versões anteriores do ficheiro são preservadas e a atualização fica auditada. PDFs já emitidos pelo gerador anterior continuam descarregáveis. O PDF da nova confirmação é guardado no computador pelo diálogo de impressão do browser; o servidor arquiva o HTML, não esse PDF.
+
+Usa `logo_report_dark`, como os outros dois documentos. Incorpora imagens locais em data URI, incluindo caminhos de instalações anteriores. Quando só existe um URL HTTP configurado, entrega esse URL ao browser. A imagem remota permanece dependente da disponibilidade desse endereço. Logótipos em falta não bloqueiam a emissão.
+
+A emissão exige sessão, CSRF, permissão `erp.reports_export` e a revisão atual da encomenda. Falhas de escrita/registo revertem a reserva do número. Usa as tabelas existentes de documentos e sequências. O único ajuste de esquema é o campo de requisição descrito abaixo. A pasta de uploads deve permitir escrita e ser preservada nos backups. Em produção, as alterações comerciais ficam disponíveis depois da ativação explícita do módulo pelo administrador. Antes da ativação, não são preparadas automaticamente pelo simples acesso à página.
+
+A encomenda inclui o campo separado **Nr. Requisição**, apresentado depois do nome do cliente quando preenchido. O NIF do cliente fica depois da morada e do país. A migração incremental acrescenta `requisition_number` a `erp_sales_orders`, automaticamente no acesso autorizado em desenvolvimento/teste, sem alterar registos ou contadores existentes.
+
+Na Configuração ERP, os blocos de Encomendas de clientes e Confirmações permitem definir o próximo número. Apenas administradores podem alterar os contadores, com CSRF e auditoria. O próximo número deve ser superior ao último utilizado na mesma série; não modifica encomendas ou documentos existentes.
+
+Ficheiros de aplicação para esta atualização:
+- `erp_sales_orders.php`
+- `erp_settings.php`
+- `company_profile.php`
+- `partials/sales-order-history.php`
+- `app/Services/SalesOrderSchema.php`
+- `app/Services/SalesOrderService.php`
+- `app/Services/SalesOrderConfirmation.php`
+- `app/Services/SalesOrderConfirmationPrint.php`
+- `app/Services/CommercialNumbering.php` (novo)
+
+## Ativação em produção
+
+Depois de instalar o conjunto completo do módulo, atualizar também:
+- `erp_sales_orders.php`
+- `app/Services/SalesOrderSchema.php`
+- `erp.php`
+- `erp_customer.php`
+- `erp_settings.php`
+- `scripts/migrate_sales_orders.php` (alternativa por terminal)
+
+Criar uma cópia de segurança da base produtiva e manter as pastas de uploads. Entrar como administrador e abrir `erp.php?page=sales_orders`. O botão **Ativar encomendas de clientes** prepara, numa transação, as tabelas/índices de encomendas e o campo `requisition_number`, preserva sequências e registos existentes e guarda `sales_orders_enabled=1` na própria base. A base tem de existir; não é criada nem substituída. Não altera o APP_ENV nem dados de clientes/artigos/OF/stocks. Uma falha reverte a migração e o estado de ativação. Repetir a ativação não reinicia números.
+
+Ativação exige administrador, sessão e CSRF. Depois de ativa, encomendas/confirmar/exportar/OF continuam sujeitos às permissões habituais. A ativação cobre também o botão Nova encomenda na ficha do cliente, a seleção de encomendas na criação da OF e os contadores na Configuração ERP.
+
+Alternativa CLI, executada na pasta da aplicação após o backup:
+```sh
+php scripts/migrate_sales_orders.php --activate-production
+```
+Sem a opção explícita, o script continua a recusar migrações em produção. Não copiar a base de desenvolvimento para produção.
+
+
+## Compatibilidade com PHP 7.0 e integração do Shopfloor
+
+A integração com `main` mantém a seleção de encomenda guardada ou **Sem Encomenda**, os valores comerciais e as confirmações existentes. Quando a unidade foi definida no artigo depois de guardar a encomenda, a criação da OF resolve essa unidade na mesma transação. Se ambas as unidades continuam por registar, mantém o comportamento de `gestisser-dev`, sem inventar unidades.
+
+Na atualização do Shopfloor, incluir também `app/Services/ProductLabelService.php`. Em PHP 7.0, o método `audit()` não pode declarar retorno `void`: essa assinatura provoca HTTP 500 depois de gravar a auditoria da impressão. A versão de `main` remove essa assinatura e é verificada através de pedidos reais de pré-visualização e impressão, para administrador e operador.

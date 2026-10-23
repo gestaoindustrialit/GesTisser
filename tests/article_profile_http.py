@@ -16,6 +16,7 @@ for uid in (90002,90003):c.execute('INSERT OR REPLACE INTO users(id,name,email,p
 c.execute('INSERT OR REPLACE INTO erp_user_permissions(user_id,permission_code,is_allowed) VALUES(90002,"erp.view",1)')
 c.execute('INSERT INTO erp_customers(code,name) VALUES(?,?)',('ARTICLE_CLIENT','Cliente Artigo'));customer=c.execute('SELECT last_insert_rowid()').fetchone()[0]
 c.execute('INSERT INTO erp_finished_products(code,description,customer_id,width,length,grammage,material,composition,front_colors,status) VALUES(?,?,?,?,?,?,?,?,?,?)',('ARTICLE_TEST','<script>alert(1)</script>',customer,40,60,'60+20','PP','Ráfia','INK_TEST','Ativo'));article=c.execute('SELECT last_insert_rowid()').fetchone()[0]
+c.execute('INSERT INTO erp_units(code,name) VALUES(?,?)',('ARTICLE_EDIT_UNIT','Unidade para edição'));edit_unit=c.execute('SELECT last_insert_rowid()').fetchone()[0]
 c.execute('INSERT INTO erp_finished_products(code,description,status) VALUES(?,?,?)',('ARTICLE_EMPTY','Sem relações','Inativo'));empty=c.execute('SELECT last_insert_rowid()').fetchone()[0]
 c.execute('INSERT INTO erp_article_technical_sheet_versions(finished_product_id,version_no,status,snapshot_json) VALUES(?,1,"approved",?)',(article,json.dumps({'width':37,'description':'Versão histórica'})));version=c.execute('SELECT last_insert_rowid()').fetchone()[0]
 c.execute('INSERT INTO erp_products(code,description) VALUES("ARTICLE_PRODUCT","Produto de teste")');product=c.execute('SELECT last_insert_rowid()').fetchone()[0]
@@ -60,6 +61,7 @@ try:
         except urllib.error.URLError:time.sleep(.1)
     check(status==200,'Article profile opens in selected PHP runtime')
     before=hashlib.sha256(db.read_bytes()).hexdigest()
+    status,body=req(profile+'&tab=technical&edit=1');check(status==200 and b'Guardar altera' in body and b'Boletim de An' in body and b'Erro interno (500)' not in body,'First direct GET renders complete editor including folder hint and save button')
     for tab in ('overview','technical','routing','history','costs','trace','documents'):
         status,body=req(profile+'&tab='+tab)
         check(status==200 and b'&lt;script&gt;' in body and b'<script>alert(1)</script>' not in body,'Escaped article and tab '+tab)
@@ -92,9 +94,10 @@ try:
     status,body=req('erp_routing.php?article_id='+str(article));check(status==200,'Existing routing module still opens')
     c=sqlite3.connect(db);check(all(c.execute('SELECT * FROM '+t+' ORDER BY id').fetchall()==preserved[t] for t in preserved_tables),'Existing OF, operations, routing versions and templates unchanged through editor/create/duplicate/routing regression');c.close()
     status,body=req(profile+'&tab=technical&edit=1');check(status==200 and b'data-article-form' in body,'Shared editor renders inside article profile')
-    payload.update(article_id=str(article),code='ARTICLE_TEST',description='Editado na ficha')
+    payload.update(article_id=str(article),code='ARTICLE_TEST',description='Editado na ficha',unit_id=str(edit_unit))
     status,body=req(profile+'&tab=technical&edit=1',data=urllib.parse.urlencode(payload).encode());c=sqlite3.connect(db)
     check(status==200 and c.execute('SELECT description FROM erp_finished_products WHERE id=?',(article,)).fetchone()[0]=='Editado na ficha','Direct article profile save persists through shared writer')
+    check(c.execute('SELECT unit_id FROM erp_finished_products WHERE id=?',(article,)).fetchone()[0]==edit_unit,'Article unit change saved from direct profile editor')
     before=hashlib.sha256(db.read_bytes()).hexdigest()
     bad=dict(payload,article_id=str(empty));check(req(profile,data=urllib.parse.urlencode(bad).encode())[0]==400,'Forged article ID rejected')
     bad=dict(payload,_token='invalid');check(req(profile,data=urllib.parse.urlencode(bad).encode())[0]==419,'Invalid CSRF rejected without writes')

@@ -50,6 +50,8 @@ const fixture=JSON.parse(fs.readFileSync(process.argv[2],'utf8'));
     assert(page.url().includes('page=article_profile'),'Customer article returns to article profile');
     await page.getByRole('link',{name:'Editar artigo',exact:true}).click();
     assert(page.url().includes('page=article_profile')&&page.url().includes('edit=1'),'Editing stays within profile');
+    await page.locator('#article-editor').getByRole('button',{name:/Guardar alterações/}).waitFor({state:'visible'});
+    assert(await page.getByText('Erro interno (500)',{exact:true}).count()===0,'No hidden fatal error inside editor');
     assert(await page.locator('#article-editor [name="article_id"]').inputValue()===String(fixture.article),'Shared article editor ID retained');
     await page.locator('#article-editor [name="width"]').fill('50');
     assert(await page.locator('[data-theoretical-weight]').inputValue()==='50','Existing theoretical weight updates after dimension edits');
