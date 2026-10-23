@@ -5,7 +5,7 @@ $shopfloor = (string) file_get_contents(__DIR__ . '/../shopfloor.php');
 $header = (string) file_get_contents(__DIR__ . '/../partials/header.php');
 $styles = (string) file_get_contents(__DIR__ . '/../assets/styles.css');
 
-function operation_flow_check(bool $condition, string $message): void
+function operation_flow_check(bool $condition, string $message)
 {
     if (!$condition) {
         throw new RuntimeException($message);
@@ -13,7 +13,8 @@ function operation_flow_check(bool $condition, string $message): void
 }
 
 operation_flow_check(strpos($shopfloor, 'allowed_work_center_ids_json') !== false, 'Os vários postos de arranque não são considerados no Shopfloor.');
-operation_flow_check(strpos($shopfloor, "require_once __DIR__ . '/app/Services/RoutingService.php';") !== false, 'O Shopfloor utiliza o RoutingService sem carregar a respetiva classe.');
+operation_flow_check(strpos($shopfloor, 'new RoutingService') === false && strpos($shopfloor, 'syncPendingOrderOperations') === false, 'O Shopfloor não deve sincronizar routings ao navegar e disputar a escrita SQLite.');
+operation_flow_check(strpos($shopfloor, 'ProductionOrderStatusService::syncAll') !== false, 'O estado das OF deve continuar a acompanhar os tempos registados.');
 operation_flow_check(strpos($shopfloor, 'Esta operação precisa de uma máquina') !== false, 'O requisito de máquina não é validado no arranque.');
 operation_flow_check(strpos($shopfloor, 'Indique a quantidade produzida antes de concluir a operação.') === false, 'A conclusão ainda exige quantidade superior a zero.');
 operation_flow_check(strpos($shopfloor, 'COALESCE(te.quantity_good, 0) + COALESCE(te.quantity_rejected, 0)') !== false, 'A quantidade anterior deixa de ser reconhecida quando uma das parcelas é nula.');

@@ -16,7 +16,7 @@ $ref=new ReflectionClass($service);$method=$ref->getMethod('row');
 $pdo->exec("INSERT INTO erp_production_order_close_reports(production_order_id,report_json,updated_by) VALUES(9,'".str_replace("'","''",json_encode($base))."',1)");
 $stored=$service->closeReport(9,[],[]);if((float)$stored['cost_impressora']!==12.0)throw new RuntimeException('O relatório guardado não foi recuperado.');
 $page=(string)file_get_contents(__DIR__.'/../production_dossier.php');$print=(string)file_get_contents(__DIR__.'/../production_dossier_print.php');
-foreach(['Relatório administrativo de custos','change_reason','update_close_report'] as $term)if(strpos($page.$print.$service::class,$term)===false&&strpos((string)file_get_contents(__DIR__.'/../app/Services/ProductionDossierService.php'),$term)===false)throw new RuntimeException('Elemento administrativo em falta: '.$term);
+foreach(['Relatório administrativo de custos','change_reason','update_close_report'] as $term)if(strpos($page.$print.get_class($service),$term)===false&&strpos((string)file_get_contents(__DIR__.'/../app/Services/ProductionDossierService.php'),$term)===false)throw new RuntimeException('Elemento administrativo em falta: '.$term);
 if(strpos($page,'Margem bruta')===false||strpos($page,'Composição das paletes')===false)throw new RuntimeException('O dossier não contém o relatório de fecho completo.');
 if(strpos($print,'Relatório administrativo de custos')!==false)throw new RuntimeException('O relatório administrativo não deve ocupar a folha operacional impressa.');
 foreach(['Acelerador','Retardador','cost_acelerador','cost_retardador'] as $removedField){

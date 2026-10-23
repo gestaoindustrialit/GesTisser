@@ -3,7 +3,7 @@ declare(strict_types=1);
 
 $source = (string) file_get_contents(__DIR__ . '/../hr_bank.php');
 
-function hour_bank_edit_check(bool $condition, string $message): void
+function hour_bank_edit_check(bool $condition, string $message)
 {
     if (!$condition) {
         throw new RuntimeException($message);

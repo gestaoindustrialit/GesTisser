@@ -8,23 +8,23 @@ function erp_table_exists(PDO $pdo, string $table): bool
     return false;
 }
 
-function erp_migrate_supplier_columns(PDO $pdo): void
+function erp_migrate_supplier_columns(PDO $pdo)
 {
 }
 
-function erp_migrate_material_type_columns(PDO $pdo): void
+function erp_migrate_material_type_columns(PDO $pdo)
 {
 }
 
-function erp_migrate_work_centers(PDO $pdo): void
+function erp_migrate_work_centers(PDO $pdo)
 {
 }
 
-function erp_migrate_document_catalog(PDO $pdo): void
+function erp_migrate_document_catalog(PDO $pdo)
 {
 }
 
-function erp_backup_database_once(PDO $pdo): void
+function erp_backup_database_once(PDO $pdo)
 {
 }
 

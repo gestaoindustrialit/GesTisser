@@ -1,7 +1,7 @@
 <?php
 require_once __DIR__ . '/../helpers.php';
 
-function monthly_document_assert($condition, string $message): void
+function monthly_document_assert($condition, string $message)
 {
     if (!$condition) {
         throw new RuntimeException($message);

@@ -29,6 +29,17 @@ gt_erp_run_phase1_migrations($reader);
 migration_fast_path_assert(gt_erp_schema_is_current($reader), 'A versão atual da migração ERP não foi reconhecida.');
 $writer->exec('ROLLBACK');
 
+// A newly committed schema is visible without turning a read into a migration.
+$writer->exec('CREATE TABLE later_schema (id INTEGER)');
+migration_fast_path_assert(gt_erp_migration_table_exists($reader, 'later_schema'), 'A leitura não recuperou da alteração de esquema.');
+migration_fast_path_assert(!gt_erp_migration_table_exists($reader, 'missing_schema'), 'Uma tabela inexistente foi considerada presente.');
+try {
+    gt_erp_schema_select($reader, 'SELECT * FROM missing_schema');
+    migration_fast_path_assert(false, 'Um erro SQL não relacionado com o esquema foi ocultado.');
+} catch (PDOException $expected) {
+    migration_fast_path_assert((int)$expected->errorInfo[1] === 1, 'O erro SQL original não foi preservado.');
+}
+
 $writer = null;
 $reader = null;
 @unlink($database);

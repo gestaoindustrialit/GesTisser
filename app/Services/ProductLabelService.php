@@ -48,7 +48,7 @@ final class ProductLabelService
         return ['quantity'=>$quantity,'copies'=>(int)$copies,'date'=>$date];
     }
 
-    public function audit(array $data,array $values,int $userId): void
+    public function audit(array $data,array $values,int $userId)
     {
         $details=['operation_id'=>(int)$data['operation_id'],'operation_type_id'=>(int)$data['operation_type_id'],'lot_number'=>(string)$data['lot'],'quantity'=>$values['quantity'],'copies'=>$values['copies']];
         $this->pdo->prepare('INSERT INTO erp_production_order_audit(production_order_id,user_id,action,new_value_json) VALUES (?,? ,"production_label_printed",?)')->execute([(int)$data['production_order_id'],$userId,json_encode($details,JSON_UNESCAPED_UNICODE)]);

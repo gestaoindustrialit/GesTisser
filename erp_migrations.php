@@ -11,27 +11,42 @@ define('GESTISSER_ERP_MIGRATIONS_LOADED', true);
 // CREATE/INSERT/UPDATE statements and competing with the backup process.
 define('GESTISSER_ERP_SCHEMA_VERSION', '2026100601');
 
+/** PHP 7.0's SQLite driver does not automatically reprepare after schema changes. */
+function gt_erp_schema_select(PDO $pdo, string $sql, array $params = []): PDOStatement
+{
+    for ($attempt = 0; $attempt < 2; $attempt++) {
+        try {
+            $stmt = $pdo->prepare($sql);
+            $stmt->execute($params);
+            return $stmt;
+        } catch (PDOException $exception) {
+            if ($attempt > 0 || (int)($exception->errorInfo[1] ?? 0) !== 17) {
+                throw $exception;
+            }
+        }
+    }
+    throw new RuntimeException('Não foi possível consultar o esquema SQLite.');
+}
+
 function gt_erp_schema_is_current(PDO $pdo): bool
 {
     if (!gt_erp_migration_table_exists($pdo, 'gestisser_erp_schema_migrations')) {
         return false;
     }
 
-    $stmt = $pdo->prepare('SELECT 1 FROM gestisser_erp_schema_migrations WHERE version=? LIMIT 1');
-    $stmt->execute([GESTISSER_ERP_SCHEMA_VERSION]);
+    $stmt = gt_erp_schema_select($pdo, 'SELECT 1 FROM gestisser_erp_schema_migrations WHERE version=? LIMIT 1', [GESTISSER_ERP_SCHEMA_VERSION]);
     return (bool) $stmt->fetchColumn();
 }
 
 function gt_erp_migration_table_exists(PDO $pdo, string $table): bool
 {
-    $stmt = $pdo->prepare("SELECT 1 FROM sqlite_master WHERE type='table' AND name=? LIMIT 1");
-    $stmt->execute([$table]);
+    $stmt = gt_erp_schema_select($pdo, "SELECT 1 FROM sqlite_master WHERE type='table' AND name=? LIMIT 1", [$table]);
     return (bool) $stmt->fetchColumn();
 }
 
 function gt_erp_migration_column_exists(PDO $pdo, string $table, string $column): bool
 {
-    foreach ($pdo->query('PRAGMA table_info(' . $table . ')')->fetchAll(PDO::FETCH_ASSOC) as $info) {
+    foreach (gt_erp_schema_select($pdo, 'PRAGMA table_info(' . $table . ')')->fetchAll(PDO::FETCH_ASSOC) as $info) {
         if ((string) $info['name'] === $column) { return true; }
     }
     return false;

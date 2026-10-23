@@ -4,6 +4,7 @@ require_once __DIR__.'/erp_migrations.php';
 require_once __DIR__ . '/article_document.php';
 require_once __DIR__ . '/production_dossier_service.php';
 require_once __DIR__ . '/app/Services/ProductionDossierPdf.php';
+require_once __DIR__ . '/app/Services/ReportLogo.php';
 require_login();gt_erp_run_phase1_migrations($pdo);
 $user=current_user($pdo)?:[];if(!gt_erp_user_can($pdo,$user,'erp.view')){http_response_code(403);exit('Sem acesso à Ordem de Fabrico.');}
 $id=filter_input(INPUT_GET,'id',FILTER_VALIDATE_INT)?:0;$service=new ProductionDossierService($pdo);
@@ -37,21 +38,7 @@ function pd_barcode128_html($value){
 }
 function pd_logo_src(string $configuredPath): string
 {
-    $configuredPath = trim($configuredPath);
-    if ($configuredPath === '') {
-        return '';
-    }
-    if (preg_match('#^https?://#i', $configuredPath)) {
-        return $configuredPath;
-    }
-    $absolutePath = __DIR__ . '/' . ltrim($configuredPath, '/');
-    if (!is_file($absolutePath)) {
-        return '';
-    }
-    $extension = strtolower((string) pathinfo($absolutePath, PATHINFO_EXTENSION));
-    $mimeTypes = ['png' => 'image/png', 'jpg' => 'image/jpeg', 'jpeg' => 'image/jpeg', 'webp' => 'image/webp', 'svg' => 'image/svg+xml'];
-    $contents = file_get_contents($absolutePath);
-    return $contents === false ? '' : 'data:' . ($mimeTypes[$extension] ?? 'application/octet-stream') . ';base64,' . base64_encode($contents);
+    return ReportLogo::source($configuredPath, __DIR__);
 }
 $documentNumberStmt=$pdo->prepare('SELECT document_number FROM erp_document_catalog WHERE code = ? AND is_active = 1 LIMIT 1');$documentNumberStmt->execute(['production_dossier']);$productionDossierDocumentNumber=trim((string)$documentNumberStmt->fetchColumn())?:'DOC-PRD-001';
 $productionCompanyName=trim((string)app_setting($pdo,'company_name','TISSER'))?:'TISSER';$productionCompanyAddress=trim((string)app_setting($pdo,'company_address',''));$productionCompanyLogo=pd_logo_src((string)app_setting($pdo,'logo_report_dark',''));$productionCompanyContacts=array_filter([trim((string)app_setting($pdo,'company_phone','')),trim((string)app_setting($pdo,'company_email',''))]);
