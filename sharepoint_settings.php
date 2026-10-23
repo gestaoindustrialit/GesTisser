@@ -48,6 +48,16 @@ require __DIR__.'/partials/header.php';
 <div class="row g-3"><?php foreach (['cpanel'=>'Servidor cPanel (sistema de ficheiros local)','graph'=>'Microsoft SharePoint'] as $key=>$label): $result=$integration->lastDiagnostic($key); ?>
 <div class="col-md-6"><h3 class="h6"><?=h($label)?></h3><p><?=h($result['state'] ?? 'Não testado')?><br><small>Último teste: <?=h($result['checked_at'] ?? '—')?></small></p>
 <?php if (isset($result['error'])): ?><div class="alert alert-danger"><?=h($result['error'])?></div><?php endif; ?>
+<?php if (!empty($result['token_checks'])): ?>
+<p><?=h($result['token_origin'] ?? '')?></p>
+<ul><?php foreach ($result['token_checks'] as $check=>$passed): ?><li><?=h($check)?>: <?= $passed ? 'Sim' : 'Não' ?></li><?php endforeach; ?></ul>
+<p class="small text-muted"><?=h($result['claims_note'] ?? '')?></p>
+<?php endif; ?>
+<?php if (!empty($result['requests'])): ?>
+<div class="table-responsive"><table class="table table-sm"><thead><tr><th>Endpoint lógico</th><th>HTTP</th><th>Código Graph / OAuth2</th><th>request-id</th><th>Diagnóstico</th></tr></thead><tbody>
+<?php foreach ($result['requests'] as $request): ?><tr><td><code><?=h($request['endpoint'])?></code></td><td><?=h($request['http_status'] ?? '—')?></td><td><?=h($request['graph_error_code'] ?? ($request['oauth_error_code'] ?? '—'))?></td><td><?=h($request['request_id'] ?? '—')?></td><td><?=h($request['message'])?></td></tr><?php endforeach; ?>
+</tbody></table></div>
+<?php endif; ?>
 <?php if (isset($result['free_bytes'])): ?><p>Espaço disponível: <?=h(number_format($result['free_bytes']/1048576,1,',','.'))?> MiB</p><?php endif; ?>
 <?php foreach (['site_id','list_id','drive_id'] as $field) if (isset($result[$field])): ?><p><?=h($field)?>: <code><?=h($result[$field])?></code></p><?php endif; ?>
 </div><?php endforeach; ?></div></div></div>
@@ -59,3 +69,4 @@ require __DIR__.'/partials/header.php';
 <table class="table"><thead><tr><th>Nome apresentado</th><th>Nome interno</th><th>Definição real</th></tr></thead><tbody><?php foreach ($remote['columns'] as $column): ?><tr><td><?=h($column['displayName'] ?? '')?></td><td><?=h($column['name'] ?? '')?></td><td><code><?=h(json_encode($column,JSON_UNESCAPED_UNICODE))?></code></td></tr><?php endforeach; ?></tbody></table>
 <?php endif; ?></div></div>
 <?php require __DIR__.'/partials/footer.php'; ?>
+
