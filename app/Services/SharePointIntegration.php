@@ -141,59 +141,151 @@ final class SharePointIntegration
 final class SharePointGraphClient
 {
     private $settings;
-    private $token;
     private $transport;
+    private $token = '';
     public function __construct(array $settings, callable $transport = null)
-    { $this->settings=$settings; $this->transport=$transport; }
+    { $this->settings = $settings; $this->transport = $transport; }
     private function request($url, $form = null)
     {
-        if ($this->transport) return call_user_func($this->transport, $url, $form);
-        if (!function_exists('curl_init')) throw new RuntimeException('Extensão cURL indisponível.');
-        $c=curl_init($url);
-        $options=[CURLOPT_RETURNTRANSFER=>true,CURLOPT_CONNECTTIMEOUT=>10,CURLOPT_TIMEOUT=>30,CURLOPT_FOLLOWLOCATION=>false,CURLOPT_SSL_VERIFYPEER=>true,CURLOPT_SSL_VERIFYHOST=>2,CURLOPT_PROTOCOLS=>CURLPROTO_HTTPS];
-        if ($form !== null) { $options[CURLOPT_POST]=true; $options[CURLOPT_POSTFIELDS]=http_build_query($form); }
-        else $options[CURLOPT_HTTPHEADER]=['Authorization: Bearer '.$this->token,'Accept: application/json'];
-        curl_setopt_array($c,$options); $body=curl_exec($c); $code=(int)curl_getinfo($c,CURLINFO_HTTP_CODE); $errno=curl_errno($c); curl_close($c);
-        if ($body === false) throw new RuntimeException('Falha de rede/TLS (cURL '.$errno.').');
-        if ($code < 200 || $code >= 300) {
-            $type=$code===401?'autenticação':($code===403?'permissões insuficientes':($code===429?'limite da API':($code===404?'recurso não encontrado':'comunicação')));
-            // Never include remote response bodies: they may contain credentials or tokens.
-            throw new RuntimeException('Microsoft: '.$type.' (HTTP '.$code.').');
-        }
-        $data=json_decode($body,true); if (!is_array($data)) throw new RuntimeException('Resposta Microsoft inválida.'); return $data;
+        if ($this->transport) return call_user_func($this->transport, $url, $form, $this->token);
+        if (!function_exists('curl_init')) return ['status'=>0, 'body'=>'', 'headers'=>[], 'connection_error'=>true];
+        $headers = [];
+        $c = curl_init($url);
+        curl_setopt_array($c, [
+            CURLOPT_RETURNTRANSFER=>true, CURLOPT_CONNECTTIMEOUT=>10, CURLOPT_TIMEOUT=>30,
+            CURLOPT_FOLLOWLOCATION=>false, CURLOPT_SSL_VERIFYPEER=>true,
+            CURLOPT_SSL_VERIFYHOST=>2, CURLOPT_PROTOCOLS=>CURLPROTO_HTTPS,
+            CURLOPT_HEADERFUNCTION=>function ($handle, $line) use (&$headers) {
+                $parts = explode(':', $line, 2);
+                if (count($parts) === 2 && strtolower(trim($parts[0])) === 'request-id') $headers['request-id'] = trim($parts[1]);
+                return strlen($line);
+            }
+        ]);
+        if ($form !== null) {
+            curl_setopt($c, CURLOPT_POST, true);
+            curl_setopt($c, CURLOPT_POSTFIELDS, http_build_query($form, '', '&'));
+            curl_setopt($c, CURLOPT_HTTPHEADER, ['Content-Type: application/x-www-form-urlencoded', 'Accept: application/json']);
+        } else curl_setopt($c, CURLOPT_HTTPHEADER, ['Authorization: Bearer '.$this->token, 'Accept: application/json']);
+        $body = curl_exec($c);
+        $status = (int) curl_getinfo($c, CURLINFO_HTTP_CODE);
+        curl_close($c);
+        return ['status'=>$status, 'body'=>$body === false ? '' : $body, 'headers'=>$headers, 'connection_error'=>$body === false];
     }
-    private function collection($path)
+    private function safeId($value)
     {
-        $url='https://graph.microsoft.com/v1.0'.$path; $all=[]; $seen=[];
-        while ($url) {
-            if (strpos($url,'https://graph.microsoft.com/v1.0/')!==0 || isset($seen[$url]) || count($seen)>=100) throw new RuntimeException('Paginação Graph inválida ou superior ao limite de diagnóstico.');
-            $seen[$url]=true; $data=$this->request($url); if (!isset($data['value']) || !is_array($data['value'])) throw new RuntimeException('Coleção Graph inválida.');
-            $all=array_merge($all,$data['value']); $url=$data['@odata.nextLink'] ?? null;
-        } return $all;
+        return is_string($value) && preg_match('/^[0-9a-f-]{36}$/iD', $value) ? $value : null;
+    }
+    private function result($endpoint, array $response)
+    {
+        $status = (int) ($response['status'] ?? 0);
+        $data = json_decode((string) ($response['body'] ?? ''), true);
+        $code = is_array($data['error'] ?? null) ? ($data['error']['code'] ?? null) : null;
+        $oauthCode = is_string($data['error'] ?? null) ? $data['error'] : null;
+        if (!is_string($oauthCode) || !preg_match('/^[a-z][a-z0-9_]{0,79}$/D', $oauthCode)) $oauthCode = null;
+        // Only structured machine codes and UUID correlation IDs may leave this class.
+        if (!is_string($code) || !preg_match('/^[a-zA-Z][a-zA-Z0-9_.-]{0,79}$/D', $code)) $code = null;
+        $messages = [401=>'Autenticação recusada: token inválido, expirado ou com destinatário incorreto.',
+            403=>'Acesso recusado: verificar concessão Sites.Selected para esta aplicação e este Site ID.',
+            404=>'Recurso não encontrado ou ocultado por falta de acesso; verificar os IDs e a associação ao site.'];
+        $ok = $status >= 200 && $status < 300 && empty($response['connection_error']);
+        return ['endpoint'=>$endpoint, 'http_status'=>$status ?: null, 'graph_error_code'=>$code, 'oauth_error_code'=>$oauthCode,
+            'request_id'=>$this->safeId($response['headers']['request-id'] ?? ($data['error']['innerError']['request-id'] ?? null)),
+            'ok'=>$ok, 'message'=>!empty($response['connection_error']) || !$status
+                ? 'Erro de ligação: verificar DNS, rede, TLS e disponibilidade do cURL.'
+                : ($ok ? 'Pedido concluído.' : ($messages[$status] ?? 'Erro HTTP na comunicação com a Microsoft.'))];
+    }
+    private function claims($token)
+    {
+        $parts = explode('.', $token);
+        if (count($parts) !== 3) return null;
+        $part = strtr($parts[1], '-_', '+/');
+        $decoded = base64_decode($part.str_repeat('=', (4 - strlen($part) % 4) % 4), true);
+        $claims = $decoded === false ? null : json_decode($decoded, true);
+        return is_array($claims) ? $claims : null;
     }
     public function diagnose($secret)
     {
-        $s=$this->settings;
-        if (empty($s['tenant_id']) || empty($s['client_id']) || $secret==='') throw new RuntimeException('Configure Tenant ID, Client ID e o segredo no servidor.');
-        if (!preg_match('/^[0-9a-f-]{36}$/iD',$s['tenant_id'])) throw new RuntimeException('Tenant ID inválido.');
-        $token=$this->request('https://login.microsoftonline.com/'.rawurlencode($s['tenant_id']).'/oauth2/v2.0/token',['client_id'=>$s['client_id'],'client_secret'=>$secret,'scope'=>'https://graph.microsoft.com/.default','grant_type'=>'client_credentials']);
-        if (empty($token['access_token'])) throw new RuntimeException('Microsoft não devolveu token.'); $this->token=$token['access_token'];
-        $url=parse_url($s['site_url']);
-        if (($url['scheme'] ?? '')!=='https' || !preg_match('/^[a-z0-9-]+\.sharepoint\.com$/iD',$url['host'] ?? '')) throw new RuntimeException('Site inválido.');
-        $site=$this->request('https://graph.microsoft.com/v1.0/sites/'.$url['host'].':'.($url['path'] ?? '/'));
-        if (empty($site['id']) || (!empty($s['site_id']) && $site['id']!==$s['site_id'])) throw new RuntimeException('Site ID não corresponde ao URL configurado.');
-        $base='/sites/'.rawurlencode($site['id']); $lists=$this->collection($base.'/lists'); $list=null;
-        foreach ($lists as $candidate) {
-            if (rtrim((string)($candidate['webUrl'] ?? ''),'/')===rtrim($s['site_url'],'/').'/Lists/Artigos') {
-                if ($list) throw new RuntimeException('Lista Artigos ambígua.'); $list=$candidate;
-            }
+        $this->token = '';
+        $s = $this->settings;
+        $report = ['state'=>'Erro', 'error'=>'Diagnóstico incompleto.', 'write_verified'=>false,
+            'requests'=>[], 'token_checks'=>[]];
+        foreach (['tenant_id', 'client_id'] as $key) {
+            if (!$this->safeId($s[$key] ?? null)) throw new RuntimeException('Configure Tenant ID e Client ID válidos.');
         }
-        if (!$list || (!empty($s['list_id']) && $s['list_id']!==$list['id'])) throw new RuntimeException('Lista Artigos existente não identificada ou List ID divergente. Nenhuma lista foi criada.');
-        $columns=$this->collection($base.'/lists/'.rawurlencode($list['id']).'/columns');
-        $drives=$this->collection($base.'/drives'); $drive=null;
-        foreach ($drives as $candidate) if (!empty($s['drive_id']) && $candidate['id']===$s['drive_id']) $drive=$candidate;
-        if (!$drive) throw new RuntimeException('Configure o Drive ID de uma biblioteca documental acessível.');
-        $this->request('https://graph.microsoft.com/v1.0/drives/'.rawurlencode($drive['id']).'/root');
-        return ['state'=>'Leitura validada; escrita não testada','site_id'=>$site['id'],'list_id'=>$list['id'],'drive_id'=>$drive['id'],'columns'=>$columns,'write_verified'=>false];
+        if (!is_string($secret) || trim($secret) === '') throw new RuntimeException('Client Secret indisponível no servidor.');
+        try {
+            try { $response = $this->request('https://login.microsoftonline.com/'.rawurlencode($s['tenant_id']).'/oauth2/v2.0/token',
+                ['client_id'=>$s['client_id'], 'client_secret'=>$secret,
+                'scope'=>'https://graph.microsoft.com/.default', 'grant_type'=>'client_credentials']); }
+            catch (Throwable $e) { $response = ['connection_error'=>true]; }
+            $oauth = $this->result('POST /{tenantId}/oauth2/v2.0/token', $response);
+            $data = json_decode((string) ($response['body'] ?? ''), true);
+            if (!$oauth['ok'] || !is_string($data['access_token'] ?? null) || $data['access_token'] === '') {
+                $oauth['ok'] = false;
+                if ($oauth['http_status'] && $oauth['http_status'] >= 200 && $oauth['http_status'] < 300) $oauth['message'] = 'Resposta OAuth2 sem access_token válido.';
+                $report['requests'][] = $oauth;
+                foreach (['GET /sites/{siteId}', 'GET /sites/{siteId}/lists/{listId}', 'GET /sites/{siteId}/drives/{driveId}'] as $endpoint) {
+                    $report['requests'][] = ['endpoint'=>$endpoint, 'http_status'=>null, 'graph_error_code'=>null, 'request_id'=>null, 'ok'=>false, 'message'=>'Não executado: obtenção do token falhou.'];
+                }
+                $report['error'] = 'Falha na obtenção do token OAuth2.';
+                return $report;
+            }
+            $report['requests'][] = $oauth;
+            $this->token = $data['access_token'];
+            unset($data, $response);
+            $c = $this->claims($this->token);
+            $aud = $c['aud'] ?? '';
+            $clientClaims = [];
+            foreach (['appid', 'azp'] as $key) if (isset($c[$key])) $clientClaims[] = $c[$key];
+            $clientOk = count($clientClaims) > 0;
+            foreach ($clientClaims as $id) if (!is_string($id) || strcasecmp($id, $s['client_id']) !== 0) $clientOk = false;
+            $checks = [
+                'jwt_legivel'=>is_array($c),
+                'destinatario_graph'=>in_array($aud, ['https://graph.microsoft.com', 'https://graph.microsoft.com/', '00000003-0000-0000-c000-000000000000'], true),
+                'tenant_configurado'=>is_string($c['tid'] ?? null) && strcasecmp($c['tid'], $s['tenant_id']) === 0,
+                'aplicacao_configurada'=>$clientOk,
+                'sites_selected'=>is_array($c['roles'] ?? null) && in_array('Sites.Selected', $c['roles'], true),
+                'sem_contexto_delegado'=>is_array($c) && !array_key_exists('scp', $c) && (!isset($c['idtyp']) || $c['idtyp'] === 'app'),
+                'validade_temporal'=>is_numeric($c['exp'] ?? null) && $c['exp'] > time() && (!isset($c['nbf']) || (is_numeric($c['nbf']) && $c['nbf'] <= time()))
+            ];
+            $report['token_checks'] = $checks;
+            $report['token_origin'] = 'Token novo obtido por client_credentials com o Client ID e segredo configurados; sem token de sessão ou do conector.';
+            $report['claims_note'] = 'Inspeção local das claims; não constitui validação criptográfica da assinatura. O Graph valida o token nos pedidos.';
+            if (in_array(false, $checks, true)) {
+                $report['error'] = 'Token sem as características esperadas. Pedidos Graph não executados.';
+            }
+            $base = '/sites/'.rawurlencode($s['site_id'] ?? '');
+            $targets = [
+                ['GET /sites/{siteId}', $base, ['site_id']],
+                ['GET /sites/{siteId}/lists/{listId}', $base.'/lists/'.rawurlencode($s['list_id'] ?? ''), ['site_id','list_id']],
+                ['GET /sites/{siteId}/drives/{driveId}', $base.'/drives/'.rawurlencode($s['drive_id'] ?? ''), ['site_id','drive_id']]
+            ];
+            $allOk = !in_array(false, $checks, true);
+            foreach ($targets as $target) {
+                $missing = false;
+                foreach ($target[2] as $key) if (empty($s[$key]) || !is_string($s[$key])) $missing = true;
+                if (in_array(false, $checks, true)) {
+                    $row = ['endpoint'=>$target[0], 'http_status'=>null, 'graph_error_code'=>null, 'request_id'=>null, 'ok'=>false, 'message'=>'Não executado: verificação do token falhou.'];
+                } elseif ($missing) {
+                    $row = ['endpoint'=>$target[0], 'http_status'=>null, 'graph_error_code'=>null, 'request_id'=>null, 'ok'=>false, 'message'=>'Não executado: ID não configurado.'];
+                } else {
+                    try { $row = $this->result($target[0], $this->request('https://graph.microsoft.com/v1.0'.$target[1])); }
+                    catch (Throwable $e) { $row = $this->result($target[0], ['connection_error'=>true]); }
+                }
+                $report['requests'][] = $row;
+                if (!$row['ok']) $allOk = false;
+            }
+            if ($allOk) {
+                $report['state'] = 'Leitura validada; escrita não testada';
+                unset($report['error']);
+                foreach (['site_id','list_id','drive_id'] as $key) $report[$key] = $s[$key];
+            } elseif (!in_array(false, $checks, true)) $report['error'] = 'Um ou mais pedidos Graph falharam. Consulte cada resultado.';
+            return $report;
+        } catch (Throwable $e) {
+            // Do not persist exception messages: transports can include sensitive values.
+            $report['error'] = 'Falha de ligação ou resposta inválida durante o diagnóstico.';
+            return $report;
+        } finally { $this->token = ''; }
     }
 }
+
