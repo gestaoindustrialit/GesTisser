@@ -3,7 +3,7 @@ declare(strict_types=1);
 
 require_once dirname(__DIR__).'/includes/integrations/IntegrationTester.php';
 
-function safe_probe_assert($condition, string $message): void
+function safe_probe_assert($condition, string $message)
 {
     if (!$condition) {
         throw new RuntimeException($message);

@@ -86,6 +86,16 @@ if (($_GET['action'] ?? '') === 'lookup_stock_unit') {
     exit;
 }
 
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'adjust_stock_label') {
+    validate_csrf_or_abort(true);
+    try {
+        if (!gt_erp_user_can($pdo, $user ?: [], 'erp.shopfloor.execute')) throw new RuntimeException('Sem permissão para acertar quantidades no Shopfloor.');
+        $unit = $operationConsumptionService->adjustUnit((string)($_POST['unit_type']??''), (string)($_POST['label_number']??''), (float)($_POST['weight_kg']??-1), (float)($_POST['metres']??-1), (float)($_POST['expected_weight']??-1), (float)($_POST['expected_metres']??-1), (string)($_POST['reason']??''), $userId, (string)($_POST['idempotency_key']??''));
+        redirect(($unit['unit_type']==='ROLL'?'raw_material_roll_label.php?printed_label_id=':'raw_material_ink_label.php?label_id=').(int)$unit['id'].'&raw_material_id='.(int)$unit['raw_material_id'].'&print=1');
+    } catch (Throwable $exception) { $flashError=$exception->getMessage(); }
+    $_POST['action']='';
+}
+
 if (!function_exists('shopfloor_format_quantity')) {
     function shopfloor_format_quantity(float $quantity): string
     {
@@ -1110,10 +1120,7 @@ $ofSql .= ' ORDER BY o.due_date IS NULL, o.due_date, o.id DESC LIMIT 25';
 $ofStmt = $pdo->prepare($ofSql);
 $ofStmt->execute($ofParams);
 $productionOrders = $ofStmt ? $ofStmt->fetchAll(PDO::FETCH_ASSOC) : [];
-$labelMaterialsStmt=$pdo->query('SELECT id,code,description,roll_controlled,ink_type_id FROM erp_raw_materials WHERE status="Ativo" AND (roll_controlled=1 OR ink_type_id IS NOT NULL) ORDER BY code');
-$labelRawMaterials=$labelMaterialsStmt?$labelMaterialsStmt->fetchAll(PDO::FETCH_ASSOC):[];
-$labelRollMaterials=array_values(array_filter($labelRawMaterials,function($row){return !empty($row['roll_controlled']);}));
-$labelInkMaterials=array_values(array_filter($labelRawMaterials,function($row){return !empty($row['ink_type_id']);}));
+
 $selectedOfId = (int) ($_GET['of_id'] ?? ($productionOrders[0]['id'] ?? 0));
 $selectedOf = null;
 foreach ($productionOrders as $ofRow) { if ((int)$ofRow['id'] === $selectedOfId) { $selectedOf = $ofRow; break; } }
@@ -1206,49 +1213,21 @@ require __DIR__ . '/partials/header.php';
     <?php endif; ?>
 
     <div class="modal fade" id="productionLabelModal" tabindex="-1" aria-labelledby="productionLabelModalTitle" aria-hidden="true">
-        <div class="modal-dialog modal-dialog-centered">
-            <div class="modal-content">
-                <div class="modal-header">
-                    <div>
-                        <h2 class="modal-title fs-5" id="productionLabelModalTitle"><i class="bi bi-tags-fill me-1" aria-hidden="true"></i>Etiquetas</h2>
-                        <p class="small text-secondary mb-0">Escolha o tipo de etiqueta e a matéria-prima que pretende preparar.</p>
-                    </div>
-                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Fechar"></button>
-                </div>
-                <div class="modal-body">
-                    <div class="d-flex gap-2 mb-4" role="group" aria-label="Tipo de etiqueta">
-                        <button type="button" class="btn btn-primary flex-fill" data-label-type="roll" aria-pressed="true"><i class="bi bi-upc-scan me-1" aria-hidden="true"></i>Rolo / Bobine</button>
-                        <button type="button" class="btn btn-outline-primary flex-fill" data-label-type="ink" aria-pressed="false"><i class="bi bi-droplet-fill me-1" aria-hidden="true"></i>Tinta</button>
-                    </div>
-                    <?php foreach (['roll'=>['title'=>'Rolo / Bobine','action'=>'raw_material_roll_label.php','materials'=>$labelRollMaterials], 'ink'=>['title'=>'Tinta','action'=>'raw_material_ink_label.php','materials'=>$labelInkMaterials]] as $labelType => $labelDefinition): ?>
-                        <?php $labelMaterials=$labelDefinition['materials']; ?>
-                        <section data-label-panel="<?= h($labelType) ?>" <?= $labelType === 'ink' ? 'hidden' : '' ?>>
-                            <form method="get" action="<?= h($labelDefinition['action']) ?>">
-                                <h3 class="h6 mb-3">Etiqueta de <?= h($labelDefinition['title']) ?></h3>
-                                <?php if ($labelMaterials): ?>
-                                    <label class="form-label" for="productionLabelOrder-<?= h($labelType) ?>">Matéria-prima</label>
-                                    <select class="form-select" id="productionLabelOrder-<?= h($labelType) ?>" name="raw_material_id" required>
-                                        <?php foreach ($labelMaterials as $labelMaterial): ?>
-                                            <option value="<?= (int)$labelMaterial['id'] ?>"><?= h($labelMaterial['code'].' · '.$labelMaterial['description']) ?></option>
-                                        <?php endforeach; ?>
-                                    </select>
-                                <?php else: ?>
-                                    <div class="alert alert-warning mb-0">Ainda não existem matérias-primas elegíveis registadas.</div>
-                                <?php endif; ?>
-                                <div class="d-flex justify-content-end gap-2 mt-4">
-                                    <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancelar</button>
-                                    <button type="submit" class="btn btn-primary" <?= $labelMaterials ? '' : 'disabled' ?>>
-                                        <i class="bi bi-printer me-1" aria-hidden="true"></i>Preparar impressão
-                                    </button>
-                                </div>
-                            </form>
-                        </section>
-                    <?php endforeach; ?>
-                </div>
+      <div class="modal-dialog modal-lg modal-dialog-centered modal-dialog-scrollable"><div class="modal-content">
+        <div class="modal-header"><div><h2 class="modal-title fs-5" id="productionLabelModalTitle">Imprimir etiqueta</h2><p class="small text-secondary mb-0">Selecione uma unidade para imprimir ou acertar as quantidades.</p></div><button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Fechar"></button></div>
+        <div class="modal-body">
+          <div class="d-flex gap-2 mb-3" role="group" aria-label="Tipo de etiqueta"><button type="button" class="btn btn-primary flex-fill" data-label-type="ROLL" aria-pressed="true">📦 Rolo / Bobine</button><button type="button" class="btn btn-outline-primary flex-fill" data-label-type="INK" aria-pressed="false">🎨 Lata de tinta</button></div>
+          <form method="post" id="stockLabelForm" class="border rounded p-3">
+            <?=csrf_input()?><input type="hidden" name="action" value="adjust_stock_label"><input type="hidden" name="unit_type" value="ROLL"><input type="hidden" name="expected_weight"><input type="hidden" name="expected_metres"><input type="hidden" name="idempotency_key" value="<?=h(bin2hex(random_bytes(16)))?>">
+            <label class="form-label fw-semibold" for="stockLabelNumber" data-label-prompt>Nº da etiqueta do rolo</label><div class="input-group input-group-lg"><input id="stockLabelNumber" class="form-control" name="label_number" autocomplete="off" enterkeyhint="search" required><button type="button" class="btn btn-outline-primary" data-label-search>Pesquisar</button></div>
+            <div class="mt-3" data-label-result aria-live="polite"></div>
+            <div data-label-actions hidden><a class="btn btn-primary mt-3" data-label-print target="_blank" rel="noopener">Imprimir etiqueta</a><div class="form-check mt-3"><input type="checkbox" class="form-check-input" id="labelAdjust"><label class="form-check-label" for="labelAdjust">Acertar quantidades</label></div>
+              <fieldset data-label-adjust hidden disabled class="mt-3"><div class="row g-2"><div class="col"><label class="form-label" for="labelWeight">Peso atual (kg)</label><input class="form-control" id="labelWeight" name="weight_kg" type="number" min="0" step="0.001" required></div><div class="col" data-label-metres><label class="form-label" for="labelMetres">Metros atuais</label><input class="form-control" id="labelMetres" name="metres" type="number" min="0" step="0.001"></div></div><label class="form-label mt-2" for="labelReason">Motivo do acerto</label><input class="form-control" id="labelReason" name="reason" required maxlength="500"><button class="btn btn-primary w-100 mt-3">Guardar acerto e imprimir</button></fieldset>
             </div>
-        </div>
+          </form>
+        </div><div class="modal-footer"><button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Fechar</button></div>
+      </div></div>
     </div>
-
 
     <?php if ($selectedOf): ?>
     <div class="modal fade" id="productGoodsLabelModal" tabindex="-1" aria-labelledby="productGoodsLabelTitle" aria-hidden="true">
@@ -2253,21 +2232,33 @@ document.querySelectorAll('[id^="materialConsumptionModal-"]').forEach((modal) =
     unitForm?.elements.label_number?.addEventListener('keydown',event=>{if(event.key==='Enter'){event.preventDefault();lookup();}});
 });
 
-document.querySelectorAll('#productionLabelModal [data-label-type]').forEach((button) => {
-    button.addEventListener('click', () => {
-        const modal = button.closest('#productionLabelModal');
-        modal.querySelectorAll('[data-label-type]').forEach((option) => {
-            const selected = option === button;
-            option.classList.toggle('btn-primary', selected);
-            option.classList.toggle('btn-outline-primary', !selected);
-            option.setAttribute('aria-pressed', selected ? 'true' : 'false');
-        });
-        modal.querySelectorAll('[data-label-panel]').forEach((panel) => {
-            panel.hidden = panel.dataset.labelPanel !== button.dataset.labelType;
-        });
-        modal.querySelector(`[data-label-panel="${button.dataset.labelType}"] select`)?.focus();
-    });
-});
+(() => {
+    const modal=document.getElementById('productionLabelModal'), form=document.getElementById('stockLabelForm');
+    if(!modal||!form)return;
+    const result=form.querySelector('[data-label-result]'), actions=form.querySelector('[data-label-actions]'), fields=form.querySelector('[data-label-adjust]'), toggle=document.getElementById('labelAdjust');
+    let request=0;
+    const reset=()=>{request++;actions.hidden=true;fields.hidden=true;fields.disabled=true;toggle.checked=false;result.textContent='';};
+    form.elements.label_number.addEventListener('input',reset);
+    modal.querySelectorAll('[data-label-type]').forEach(button=>button.addEventListener('click',()=>{
+        reset();form.elements.unit_type.value=button.dataset.labelType;
+        modal.querySelectorAll('[data-label-type]').forEach(option=>{const active=option===button;option.classList.toggle('btn-primary',active);option.classList.toggle('btn-outline-primary',!active);option.setAttribute('aria-pressed',String(active));});
+        form.querySelector('[data-label-prompt]').textContent=button.dataset.labelType==='ROLL'?'Nº da etiqueta do rolo':'Nº da lata';form.elements.label_number.value='';form.elements.label_number.focus();
+    }));
+    toggle.addEventListener('change',()=>{fields.hidden=!toggle.checked;fields.disabled=!toggle.checked;});
+    const lookup=async()=>{
+        reset();const token=request,type=form.elements.unit_type.value,label=form.elements.label_number.value.trim();if(!label)return;
+        result.textContent='A pesquisar…';
+        try{const response=await fetch(`shopfloor.php?action=lookup_stock_unit&unit_type=${encodeURIComponent(type)}&label_number=${encodeURIComponent(label)}`);const data=await response.json();if(token!==request)return;if(!response.ok||!data.ok)throw new Error(data.message||'Etiqueta não encontrada.');
+            const u=data.unit;result.textContent=`${u.article_code} · ${u.description} — ${u.weight_kg} kg${type==='ROLL'?' · '+u.metres+' m':''} · ${u.status}`;
+            form.elements.expected_weight.value=u.weight_kg;form.elements.expected_metres.value=u.metres||0;form.elements.weight_kg.value=u.weight_kg;form.elements.metres.value=u.metres||0;form.elements.metres.required=type==='ROLL';form.querySelector('[data-label-metres]').hidden=type!=='ROLL';
+            form.querySelector('[data-label-print]').href=(type==='ROLL'?'raw_material_roll_label.php?printed_label_id=':'raw_material_ink_label.php?label_id=')+encodeURIComponent(u.id)+'&raw_material_id='+encodeURIComponent(u.raw_material_id)+'&print=1';actions.hidden=false;
+            toggle.disabled=['IN_USE','BLOCKED','CONSUMED'].includes(u.status);
+        }catch(error){if(token===request)result.textContent=error.message;}
+    };
+    form.querySelector('[data-label-search]').addEventListener('click',lookup);
+    form.elements.label_number.addEventListener('keydown',event=>{if(event.key==='Enter'){event.preventDefault();lookup();}});
+    form.addEventListener('submit',event=>{if(actions.hidden||!toggle.checked){event.preventDefault();lookup();}});
+})();
 
 (() => {
     const typeSelect = document.getElementById('absenceRequestType');

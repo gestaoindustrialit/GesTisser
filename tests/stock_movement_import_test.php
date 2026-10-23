@@ -3,7 +3,7 @@ declare(strict_types=1);
 require_once dirname(__DIR__).'/app/Services/StockMovementSpreadsheet.php';
 require_once dirname(__DIR__).'/app/Services/SimpleXlsx.php';
 
-function stock_assert($condition,string $message):void{if(!$condition)throw new RuntimeException($message);}
+function stock_assert($condition,string $message){if(!$condition)throw new RuntimeException($message);}
 stock_assert(class_exists('StockMovementImportService', false), 'O importador deve ser carregado com o contrato da folha de cálculo.');
 
 $pdo=new PDO('sqlite::memory:');$pdo->setAttribute(PDO::ATTR_ERRMODE,PDO::ERRMODE_EXCEPTION);

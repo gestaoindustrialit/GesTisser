@@ -21,6 +21,41 @@ final class OperationConsumptionService
         return $row;
     }
 
+    /** Correct a physical unit without declaring production consumption. */
+    public function adjustUnit(string $type, string $label, float $weight, float $metres, float $expectedWeight, float $expectedMetres, string $reason, int $userId, string $key): array
+    {
+        $key=$this->key($key);
+        if (!is_finite($weight) || $weight<0 || !is_finite($metres) || (strtoupper($type)==='ROLL' && $metres<0) || trim($reason)==='') throw new InvalidArgumentException('Indique quantidades válidas e o motivo do acerto.');
+        $this->pdo->beginTransaction();
+        try {
+            $unit=$this->findUnit($type,$label);
+            if (!$unit) throw new InvalidArgumentException('Etiqueta não encontrada.');
+            $definition=$this->unitDefinition($type);$table=$definition[0];$kind=$definition[1];
+            $number='ACERTO-'.$key;
+            $previous=$this->pdo->prepare('SELECT source_id,source_type,created_by FROM erp_stock_movements WHERE movement_number=?');$previous->execute([$number]);$previous=$previous->fetch(PDO::FETCH_ASSOC);
+            if($previous){if((int)$previous['source_id']!==(int)$unit['id'] || $previous['source_type']!=='label_adjustment_'.$kind || (int)$previous['created_by']!==$userId)throw new InvalidArgumentException('Pedido de acerto inválido.');$this->pdo->commit();return $unit;}
+            $active=$this->pdo->prepare('SELECT 1 FROM erp_production_consumptions WHERE stock_unit_type=? AND stock_unit_id=? AND completed_at IS NULL');$active->execute([$kind,(int)$unit['id']]);
+            if($active->fetchColumn() || in_array($unit['status'],['IN_USE','BLOCKED','CONSUMED'],true))throw new InvalidArgumentException('Não é possível acertar uma unidade em utilização, bloqueada ou terminada.');
+            if(abs((float)$unit['weight_kg']-$expectedWeight)>0.00001 || ($kind==='ROLL' && abs((float)$unit['metres']-$expectedMetres)>0.00001))throw new RuntimeException('As quantidades mudaram. Pesquise novamente a etiqueta.');
+            $delta=$weight-(float)$unit['weight_kg'];
+            if(abs($delta)<0.000001 && ($kind!=='ROLL' || abs($metres-(float)$unit['metres'])<0.000001))throw new InvalidArgumentException('Não existem quantidades para acertar.');
+            if(abs($delta)>0.000001){
+                $balance=$this->pdo->prepare('SELECT rowid,* FROM erp_stock_balances WHERE item_type="raw_material" AND item_id=? AND warehouse_id IS ? AND location_id IS ? AND COALESCE(lot,"")=?');
+                $balance->execute([(int)$unit['raw_material_id'],$unit['warehouse_id'],$unit['location_id'],(string)$unit['supplier_lot']]);$balances=$balance->fetchAll(PDO::FETCH_ASSOC);
+                if(count($balances)!==1)throw new RuntimeException('Não foi possível identificar um saldo único para o armazém, localização e lote da etiqueta.');
+                $balance=$balances[0];
+                if((float)$balance['physical_qty']+$delta < (float)$balance['reserved_qty']+(float)$balance['blocked_qty']-0.000001)throw new InvalidArgumentException('O acerto reduziria o stock abaixo da quantidade reservada ou bloqueada.');
+                $this->pdo->prepare('UPDATE erp_stock_balances SET physical_qty=physical_qty+CAST(? AS REAL),updated_at=CURRENT_TIMESTAMP WHERE rowid=?')->execute([$delta,(int)$balance['rowid']]);
+            }
+            $notes='[Acerto] '.$kind.' '.$unit['barcode'].' · Peso: '.$unit['weight_kg'].' → '.$weight.' kg'.($kind==='ROLL'?' · Metros: '.$unit['metres'].' → '.$metres:'').' · '.trim($reason);
+            $stmt=$this->pdo->prepare('INSERT INTO erp_stock_movements(movement_number,movement_type,item_type,item_id,lot,roll_id,quantity,weight,warehouse_from_id,location_from_id,warehouse_to_id,location_to_id,unit_cost,total_cost,source_type,source_id,reason,notes,created_by) VALUES (?, ?,"raw_material",?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)');
+            $stmt->execute([$number,$delta>=0?'Entrada':'Saída',(int)$unit['raw_material_id'],(string)$unit['supplier_lot'],$kind==='ROLL'?(int)$unit['id']:null,abs($delta),abs($delta),$delta<0?$unit['warehouse_id']:null,$delta<0?$unit['location_id']:null,$delta>0?$unit['warehouse_id']:null,$delta>0?$unit['location_id']:null,(float)$unit['average_price'],abs($delta)*(float)$unit['average_price'],'label_adjustment_'.$kind,(int)$unit['id'],'LABEL_ADJUSTMENT',$notes,$userId]);
+            $params=[$weight];$metresSql='';if($kind==='ROLL'){$metresSql=',metres=?';$params[]=$metres;}$params[]=$weight==0?'CONSUMED':'PARTIAL';$params[]=(int)$unit['id'];
+            $this->pdo->prepare('UPDATE '.$table.' SET weight_kg=?'.$metresSql.',status=?,updated_at=CURRENT_TIMESTAMP WHERE id=?')->execute($params);
+            $this->pdo->commit();return $this->findUnit($type,$label);
+        }catch(Throwable $e){if($this->pdo->inTransaction())$this->pdo->rollBack();throw $e;}
+    }
+
     public function startUnit(int $operationId, string $type, string $label, int $userId, int $workstationId, string $key): int
     {
         $key = $this->key($key); $this->pdo->beginTransaction();

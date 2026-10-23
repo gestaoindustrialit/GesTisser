@@ -3,7 +3,7 @@ declare(strict_types=1);
 
 require_once __DIR__ . '/../app/Services/RoutingService.php';
 
-function pending_sync_check(bool $condition, string $message): void
+function pending_sync_check(bool $condition, string $message)
 {
     if (!$condition) {
         throw new RuntimeException($message);

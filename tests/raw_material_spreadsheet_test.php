@@ -2,7 +2,7 @@
 declare(strict_types=1);
 require_once dirname(__DIR__).'/app/Services/RawMaterialSpreadsheet.php';
 
-function assert_same($expected,$actual,string$message):void{if($expected!==$actual)throw new RuntimeException($message.' Esperado '.var_export($expected,true).', recebido '.var_export($actual,true));}
+function assert_same($expected,$actual,string$message){if($expected!==$actual)throw new RuntimeException($message.' Esperado '.var_export($expected,true).', recebido '.var_export($actual,true));}
 
 $erpSource=file_get_contents(dirname(__DIR__).'/erp.php');
 if($erpSource===false||strpos($erpSource,"require_once __DIR__ . '/app/Services/RawMaterialSpreadsheet.php';")===false)throw new RuntimeException('O ERP deve carregar explicitamente o serviço de matérias-primas, tal como os restantes importadores.');
@@ -48,7 +48,7 @@ $tmp=tempnam(sys_get_temp_dir(),'raw_material_xlsx_');$zip=new ZipArchive();$zip
 $zip->addFromString('[Content_Types].xml','<?xml version="1.0"?><Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"/>');
 $zip->addFromString('xl/workbook.xml','<?xml version="1.0"?><workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><sheets><sheet name="Notas" sheetId="1" r:id="rId1"/><sheet name="Dados" sheetId="2" r:id="rId2"/></sheets></workbook>');
 $zip->addFromString('xl/_rels/workbook.xml.rels','<?xml version="1.0"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Target="worksheets/sheet1.xml"/><Relationship Id="rId2" Target="worksheets/sheet2.xml"/></Relationships>');
-$cell=static fn(string$value):string=>'<c t="inlineStr"><is><t>'.htmlspecialchars($value,ENT_XML1|ENT_QUOTES,'UTF-8').'</t></is></c>';
+$cell=static function(string $value): string { return '<c t="inlineStr"><is><t>'.htmlspecialchars($value,ENT_XML1|ENT_QUOTES,'UTF-8').'</t></is></c>'; };
 $zip->addFromString('xl/worksheets/sheet1.xml','<?xml version="1.0"?><worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><sheetData><row>'.$cell('Instruções').'</row></sheetData></worksheet>');
 $headers=['codigo','descricao','grupo_produto','largura','observacoes'];$data=[['0007','Ráfia','Materia Prima','1,25',''],['0008','Tinta azul','SUBSIDIÁRIO','2.50','00009']];$xml='<row>'.implode('',array_map($cell,$headers)).'</row>';foreach($data as$row)$xml.='<row>'.implode('',array_map($cell,$row)).'</row>';
 $zip->addFromString('xl/worksheets/sheet2.xml','<?xml version="1.0"?><worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><sheetData>'.$xml.'</sheetData></worksheet>');$zip->close();

@@ -3,7 +3,13 @@
   "description": "GesTisser internal HR and operations app",
   "type": "project",
   "require": {
+    "php": ">=7.0",
     "setasign/fpdf": "^1.8",
     "mpdf/mpdf": "^8.2"
+  },
+  "config": {
+    "platform": {
+      "php": "7.0.33"
+    }
   }
 }

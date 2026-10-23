@@ -33,7 +33,7 @@ assert_reference($createdFeature['id'] > 0 && $createdFeature['create'], 'A cara
 assert_reference($reusedFeature['id'] === $createdFeature['id'] && !$reusedFeature['create'], 'A característica criada deve ser reutilizada sem duplicação.');
 $typeRow = $pdo->query("SELECT code,name,is_active FROM erp_material_types WHERE code='PE'")->fetch(PDO::FETCH_ASSOC);
 $featureRow = $pdo->query("SELECT code,description,is_active FROM erp_material_features WHERE code='Nova'")->fetch(PDO::FETCH_ASSOC);
-assert_reference($typeRow === ['code' => 'PE', 'name' => 'PE', 'is_active' => 1], 'O tipo deve usar o valor no código e nome e ficar ativo.');
-assert_reference($featureRow === ['code' => 'Nova', 'description' => 'Nova', 'is_active' => 1], 'A característica deve usar o valor no código e descrição e ficar ativa.');
+assert_reference($typeRow['code'] === 'PE' && $typeRow['name'] === 'PE' && (int)$typeRow['is_active'] === 1, 'O tipo deve usar o valor no código e nome e ficar ativo.');
+assert_reference($featureRow['code'] === 'Nova' && $featureRow['description'] === 'Nova' && (int)$featureRow['is_active'] === 1, 'A característica deve usar o valor no código e descrição e ficar ativa.');
 
 echo "Resolução de tipos e características da importação validada.\n";

@@ -22,7 +22,7 @@ Aplicação de gestão de trabalho inspirada no ClickUp, desenvolvida em **PHP +
 
 ## Requisitos
 
-- PHP 7.0+ (todo o código da aplicação deve manter compatibilidade com esta versão)
+- PHP 7.0 (validar aplicação, dependências e testes em PHP 7.0.33)
 - Extensão `pdo_sqlite` ativa
 - Extensão `zip` ativa (necessária para criar e descarregar backups completos)
 
@@ -41,6 +41,26 @@ php -S 0.0.0.0:8000
 3. Depois entrar em `http://localhost:8000/login.php`.
 
 > A base de dados `database.sqlite` é criada automaticamente no primeiro arranque.
+
+## Validação em PHP 7.0
+
+O runtime de referência é PHP **7.0.33**, também definido em `.php-version` e em `config.platform.php` do Composer. A plataforma do Composer limita a resolução das dependências; não muda o PHP que executa a aplicação.
+
+```bash
+python3 scripts/test_php70.py --php /caminho/para/php70
+```
+
+O comando confirma a versão real e recusa PHP de outras versões. Verifica a sintaxe dos ficheiros PHP e executa os testes em cópias temporárias, sem usar a base da aplicação. Os resultados ficam em `work/php70/results.json`; falhas mantêm o resultado global reprovado.
+
+Para executar apenas testes específicos, acrescente os respetivos nomes:
+
+```bash
+python3 scripts/test_php70.py --php /caminho/para/php70 operation_consumption_service_test.php stock_label_adjustment_test.php production_label_ui_test.php
+```
+
+As auditorias `historical_import_current_database_test.php` e `material_profile_test.php` usam uma base sintética preparada a partir do esquema atual, numa cópia temporária da aplicação. O relatório assinala `data_source: synthetic`; estes resultados não são uma auditoria aos dados de produção. A criação da base e qualquer falha dos testes continuam a reprovar a execução.
+
+Para auditar uma cópia real já preparada, execute separadamente `HISTORICAL_TEST_DB=/copia/base.sqlite php tests/historical_import_current_database_test.php` ou `php tests/material_profile_test.php /copia/base.sqlite`, usando sempre PHP 7.0. Uma aprovação em PHP 8 não substitui estes resultados.
 
 ## Pedidos às equipas (global)
 
@@ -107,7 +127,7 @@ Todas as tentativas de entrega (sucesso/falha) ficam registadas em `reports_sent
 ## Migração para outro servidor (checklist rápida)
 
 1. Copiar os ficheiros do projeto e garantir permissões de escrita na pasta da aplicação (incluindo `database.sqlite` quando já existir).
-2. Confirmar PHP 8.1+ com `pdo_sqlite` ativo.
+2. Confirmar PHP 7.0 com `pdo_sqlite` ativo.
 3. Configurar as variáveis SMTP (`GESTISSER_SMTP_*`) no novo ambiente, se necessário.
 4. Recriar os cron jobs:
    - `* * * * * php /caminho/GesTisser/cron_hr_alerts.php >/dev/null 2>&1`

@@ -2,7 +2,7 @@
 declare(strict_types=1);
 require_once dirname(__DIR__).'/app/Services/StockTransferService.php';
 
-function transfer_assert($condition, string $message): void { if (!$condition) throw new RuntimeException($message); }
+function transfer_assert($condition, string $message) { if (!$condition) throw new RuntimeException($message); }
 
 $pdo = new PDO('sqlite::memory:');
 $pdo->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);

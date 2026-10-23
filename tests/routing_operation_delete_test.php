@@ -3,7 +3,7 @@ declare(strict_types=1);
 
 require_once __DIR__.'/../app/Services/RoutingService.php';
 
-function check(bool $condition, string $message): void
+function check(bool $condition, string $message)
 {
     if (!$condition) {
         fwrite(STDERR, "FAIL: {$message}\n");

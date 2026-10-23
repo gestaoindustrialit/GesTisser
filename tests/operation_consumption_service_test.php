@@ -1,7 +1,7 @@
 <?php
 declare(strict_types=1);
 require_once dirname(__DIR__).'/app/Services/OperationConsumptionService.php';
-function consumption_assert($condition,string $message):void{if(!$condition)throw new RuntimeException($message);}
+function consumption_assert($condition,string $message){if(!$condition)throw new RuntimeException($message);}
 $serviceSource=(string)file_get_contents(dirname(__DIR__).'/app/Services/OperationConsumptionService.php');
 consumption_assert(preg_match('/^\s*\[[^]]+\]\s*=/m', $serviceSource)!==1,'O serviço usa destructuring incompatível com PHP 7.0.');
 consumption_assert(strpos($serviceSource,'private PDO $pdo')===false&&strpos($serviceSource,'): ?array')===false,'O serviço usa tipos incompatíveis com PHP 7.0.');
