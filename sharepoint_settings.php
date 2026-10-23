@@ -55,7 +55,15 @@ require __DIR__.'/partials/header.php';
 <div class="card mb-4"><div class="card-body"><h2 class="h5">4. Sincronização dos documentos</h2><p>Ainda indisponível. O fluxo atual de anexos mantém-se operacional; ainda não há replicação remota.</p></div></div>
 <div class="card mb-4"><div class="card-body"><h2 id="diagnostics" class="h5">5. Histórico e diagnóstico</h2><p>Esta primeira etapa conserva o último diagnóstico de cada serviço. Histórico de sincronizações e fila serão acrescentados com o worker.</p>
 <p>Client Secret disponível: <?=SharePointClientSecret::available() ? 'Sim' : 'Não'?></p>
-<?php $remote=$integration->lastDiagnostic('graph'); if (!empty($remote['columns'])): ?>
-<table class="table"><thead><tr><th>Nome apresentado</th><th>Nome interno</th><th>Definição real</th></tr></thead><tbody><?php foreach ($remote['columns'] as $column): ?><tr><td><?=h($column['displayName'] ?? '')?></td><td><?=h($column['name'] ?? '')?></td><td><code><?=h(json_encode($column,JSON_UNESCAPED_UNICODE))?></code></td></tr><?php endforeach; ?></tbody></table>
-<?php endif; ?></div></div>
+<?php $remote=$integration->lastDiagnostic('graph'); if (array_key_exists('roles_checked',$remote)): ?>
+<p>Claim roles legível: <?= $remote['roles_checked'] ? 'Sim' : 'Não' ?>. Sites.Selected presente: <?= !empty($remote['sites_selected_present']) ? 'Sim' : 'Não' ?>.</p>
+<?php endif; ?>
+<?php if (!empty($remote['requests'])): ?>
+<div class="table-responsive"><table class="table"><thead><tr><th>Pedido</th><th>HTTP</th><th>Resultado</th><th>Código Graph</th><th>request-id</th></tr></thead><tbody>
+<?php foreach ($remote['requests'] as $request): ?><tr><td><code><?=h($request['method'].' '.$request['endpoint'])?></code></td><td><?=h((string)($request['http_status'] ?? '—'))?></td><td><?=h($request['outcome'])?></td><td><?=h($request['graph_error_code'] ?? '—')?></td><td><code><?=h($request['request_id'] ?? '—')?></code></td></tr><?php endforeach; ?>
+</tbody></table></div>
+<?php endif; ?>
+<?php if (!empty($remote['first_403_endpoint'])): ?><p class="text-danger">Primeiro endpoint com HTTP 403: <code><?=h($remote['first_403_endpoint'])?></code></p><?php endif; ?>
+<?php if (isset($remote['column_count'])): ?><p>Colunas verificadas: <?=h((string)$remote['column_count'])?><?= !empty($remote['columns_has_more']) ? ' (primeira página; existem mais colunas)' : '' ?>. As definições das colunas não são guardadas.</p><?php endif; ?>
+</div></div>
 <?php require __DIR__.'/partials/footer.php'; ?>

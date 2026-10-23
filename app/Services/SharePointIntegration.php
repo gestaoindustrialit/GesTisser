@@ -143,57 +143,143 @@ final class SharePointGraphClient
     private $settings;
     private $token;
     private $transport;
+    private $requests = [];
     public function __construct(array $settings, callable $transport = null)
     { $this->settings=$settings; $this->transport=$transport; }
+
+    // Persist only allowlisted protocol metadata, never remote messages or bodies.
+    private function safeCode($value)
+    {
+        return is_string($value) && preg_match('/^[A-Za-z][A-Za-z0-9_.-]{0,99}$/D', $value) ? $value : null;
+    }
+    private function requestId($value)
+    {
+        return is_string($value) && preg_match('/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/iD', $value) ? $value : null;
+    }
     private function request($url, $form = null)
     {
-        if ($this->transport) return call_user_func($this->transport, $url, $form);
-        if (!function_exists('curl_init')) throw new RuntimeException('Extensão cURL indisponível.');
-        $c=curl_init($url);
-        $options=[CURLOPT_RETURNTRANSFER=>true,CURLOPT_CONNECTTIMEOUT=>10,CURLOPT_TIMEOUT=>30,CURLOPT_FOLLOWLOCATION=>false,CURLOPT_SSL_VERIFYPEER=>true,CURLOPT_SSL_VERIFYHOST=>2,CURLOPT_PROTOCOLS=>CURLPROTO_HTTPS];
-        if ($form !== null) { $options[CURLOPT_POST]=true; $options[CURLOPT_POSTFIELDS]=http_build_query($form); }
-        else $options[CURLOPT_HTTPHEADER]=['Authorization: Bearer '.$this->token,'Accept: application/json'];
-        curl_setopt_array($c,$options); $body=curl_exec($c); $code=(int)curl_getinfo($c,CURLINFO_HTTP_CODE); $errno=curl_errno($c); curl_close($c);
-        if ($body === false) throw new RuntimeException('Falha de rede/TLS (cURL '.$errno.').');
-        if ($code < 200 || $code >= 300) {
-            $type=$code===401?'autenticação':($code===403?'permissões insuficientes':($code===429?'limite da API':($code===404?'recurso não encontrado':'comunicação')));
-            // Never include remote response bodies: they may contain credentials or tokens.
-            throw new RuntimeException('Microsoft: '.$type.' (HTTP '.$code.').');
+        $entry=['method'=>$form === null ? 'GET' : 'POST', 'endpoint'=>$url,
+            'http_status'=>null, 'graph_error_code'=>null, 'request_id'=>null];
+        $headers=[];
+        try {
+            if ($this->transport) {
+                // The injectable transport returns the same HTTP envelope as cURL.
+                $response=call_user_func($this->transport, $url, $form);
+                $code=(int)$response['status'];
+                $body=$response['body'];
+                foreach (($response['headers'] ?? []) as $key=>$value) $headers[strtolower($key)]=$value;
+            } else {
+                if (!function_exists('curl_init')) throw new RuntimeException('cURL unavailable');
+                $c=curl_init($url);
+                $options=[CURLOPT_RETURNTRANSFER=>true, CURLOPT_CONNECTTIMEOUT=>10, CURLOPT_TIMEOUT=>30,
+                    CURLOPT_FOLLOWLOCATION=>false, CURLOPT_SSL_VERIFYPEER=>true, CURLOPT_SSL_VERIFYHOST=>2,
+                    CURLOPT_PROTOCOLS=>CURLPROTO_HTTPS, CURLOPT_HEADERFUNCTION=>function ($handle, $line) use (&$headers) {
+                        $parts=explode(':', $line, 2);
+                        if (count($parts)===2 && strtolower(trim($parts[0]))==='request-id') $headers['request-id']=trim($parts[1]);
+                        return strlen($line);
+                    }];
+                if ($form !== null) { $options[CURLOPT_POST]=true; $options[CURLOPT_POSTFIELDS]=http_build_query($form); }
+                else $options[CURLOPT_HTTPHEADER]=['Authorization: Bearer '.$this->token, 'Accept: application/json'];
+                curl_setopt_array($c,$options);
+                $body=curl_exec($c); $code=(int)curl_getinfo($c,CURLINFO_HTTP_CODE);
+                curl_close($c);
+            }
+            $entry['http_status']=$code;
+            $data=is_string($body) ? json_decode($body,true) : null;
+            $entry['request_id']=$this->requestId($headers['request-id'] ?? null);
+            if ($code < 200 || $code >= 300) {
+                $entry['graph_error_code']=$this->safeCode($data['error']['code'] ?? null);
+                if (!$entry['request_id']) $entry['request_id']=$this->requestId($data['error']['innerError']['request-id'] ?? $data['error']['innererror']['request-id'] ?? null);
+                $entry['outcome']='http_error';
+                $this->requests[]=$entry;
+                return null;
+            }
+            if (!is_array($data)) throw new RuntimeException('Invalid response');
+            $entry['outcome']='ok'; $this->requests[]=$entry;
+            return $data;
+        } catch (Throwable $e) {
+            // Injected transport exceptions may also contain sensitive content.
+            $entry['outcome']='transport_or_response_error'; $this->requests[]=$entry;
+            return null;
         }
-        $data=json_decode($body,true); if (!is_array($data)) throw new RuntimeException('Resposta Microsoft inválida.'); return $data;
     }
-    private function collection($path)
+    private function sameUrl($actual, $expected)
     {
-        $url='https://graph.microsoft.com/v1.0'.$path; $all=[]; $seen=[];
-        while ($url) {
-            if (strpos($url,'https://graph.microsoft.com/v1.0/')!==0 || isset($seen[$url]) || count($seen)>=100) throw new RuntimeException('Paginação Graph inválida ou superior ao limite de diagnóstico.');
-            $seen[$url]=true; $data=$this->request($url); if (!isset($data['value']) || !is_array($data['value'])) throw new RuntimeException('Coleção Graph inválida.');
-            $all=array_merge($all,$data['value']); $url=$data['@odata.nextLink'] ?? null;
-        } return $all;
+        $a=parse_url((string)$actual); $b=parse_url((string)$expected);
+        return $a && $b && ($a['scheme'] ?? '')==='https' && ($b['scheme'] ?? '')==='https'
+            && !isset($a['user']) && !isset($a['pass']) && !isset($a['port']) && !isset($a['query']) && !isset($a['fragment'])
+            && strcasecmp($a['host'] ?? '', $b['host'] ?? '')===0
+            && rtrim(rawurldecode($a['path'] ?? ''),'/')===rtrim(rawurldecode($b['path'] ?? ''),'/');
+    }
+    private function driveBelongsToSite(array $resource, array $site)
+    {
+        $ids=$resource['sharepointIds'] ?? [];
+        $parts=explode(',', $site['id']);
+        if (count($parts)!==3 || empty($ids['siteId']) || empty($ids['webId'])) return false;
+        return strcasecmp(trim($ids['siteId'],'{}'),$parts[1])===0
+            && strcasecmp(trim($ids['webId'],'{}'),$parts[2])===0
+            && $this->sameUrl($ids['siteUrl'] ?? '', $site['webUrl']);
     }
     public function diagnose($secret)
     {
-        $s=$this->settings;
-        if (empty($s['tenant_id']) || empty($s['client_id']) || $secret==='') throw new RuntimeException('Configure Tenant ID, Client ID e o segredo no servidor.');
-        if (!preg_match('/^[0-9a-f-]{36}$/iD',$s['tenant_id'])) throw new RuntimeException('Tenant ID inválido.');
-        $token=$this->request('https://login.microsoftonline.com/'.rawurlencode($s['tenant_id']).'/oauth2/v2.0/token',['client_id'=>$s['client_id'],'client_secret'=>$secret,'scope'=>'https://graph.microsoft.com/.default','grant_type'=>'client_credentials']);
-        if (empty($token['access_token'])) throw new RuntimeException('Microsoft não devolveu token.'); $this->token=$token['access_token'];
-        $url=parse_url($s['site_url']);
-        if (($url['scheme'] ?? '')!=='https' || !preg_match('/^[a-z0-9-]+\.sharepoint\.com$/iD',$url['host'] ?? '')) throw new RuntimeException('Site inválido.');
-        $site=$this->request('https://graph.microsoft.com/v1.0/sites/'.$url['host'].':'.($url['path'] ?? '/'));
-        if (empty($site['id']) || (!empty($s['site_id']) && $site['id']!==$s['site_id'])) throw new RuntimeException('Site ID não corresponde ao URL configurado.');
-        $base='/sites/'.rawurlencode($site['id']); $lists=$this->collection($base.'/lists'); $list=null;
-        foreach ($lists as $candidate) {
-            if (rtrim((string)($candidate['webUrl'] ?? ''),'/')===rtrim($s['site_url'],'/').'/Lists/Artigos') {
-                if ($list) throw new RuntimeException('Lista Artigos ambígua.'); $list=$candidate;
+        $this->requests=[]; $this->token=null;
+        $result=['state'=>'Erro','write_verified'=>false,'roles_checked'=>false,'sites_selected_present'=>false,
+            'first_403_endpoint'=>null];
+        try {
+            $s=$this->settings;
+            if (empty($s['tenant_id']) || empty($s['client_id']) || $secret==='') throw new RuntimeException('Configure Tenant ID, Client ID e o segredo no servidor.');
+            if (!preg_match('/^[0-9a-f-]{36}$/iD',$s['tenant_id'])) throw new RuntimeException('Tenant ID inválido.');
+            foreach (['site_id','list_id','drive_id'] as $key) {
+                if (!isset($s[$key]) || !is_string($s[$key]) || trim($s[$key])==='') throw new RuntimeException('Configure Site ID, List ID e Drive ID antes de testar.');
             }
+            $token=$this->request('https://login.microsoftonline.com/'.rawurlencode($s['tenant_id']).'/oauth2/v2.0/token',
+                ['client_id'=>$s['client_id'],'client_secret'=>$secret,'scope'=>'https://graph.microsoft.com/.default','grant_type'=>'client_credentials']);
+            if (empty($token['access_token']) || !is_string($token['access_token'])) throw new RuntimeException('Não foi possível obter o access token Microsoft.');
+            $this->token=$token['access_token']; unset($token);
+            // Inspect only roles from the token obtained over TLS. This is not JWT signature validation.
+            $parts=explode('.',$this->token);
+            $claims=count($parts)===3 ? json_decode(base64_decode(strtr($parts[1],'-_','+/'),true),true) : null;
+            $roles=$claims['roles'] ?? null;
+            $result['roles_checked']=is_array($roles);
+            $result['sites_selected_present']=is_array($roles) && in_array('Sites.Selected',$roles,true);
+            unset($parts,$claims,$roles);
+            $base='https://graph.microsoft.com/v1.0';
+            $sitePath=$base.'/sites/'.rawurlencode($s['site_id']);
+            $listPath=$sitePath.'/lists/'.rawurlencode($s['list_id']);
+            $drivePath=$base.'/drives/'.rawurlencode($s['drive_id']);
+            // Continue independent read-only checks even when an earlier endpoint is forbidden.
+            $site=$this->request($sitePath);
+            $list=$this->request($listPath);
+            $columns=$this->request($listPath.'/columns');
+            $drive=$this->request($drivePath.'?$select=id,driveType,sharepointIds');
+            $root=$this->request($drivePath.'/root?$select=id,folder,parentReference,sharepointIds');
+            foreach ($this->requests as $request) {
+                if ($request['outcome']!=='ok') throw new RuntimeException('Falha num pedido Microsoft; consulte os resultados individuais.');
+            }
+            if (!$result['sites_selected_present']) throw new RuntimeException('Não foi possível confirmar Sites.Selected na claim roles do access token.');
+            if (($site['id'] ?? '')!==$s['site_id'] || !$this->sameUrl($site['webUrl'] ?? '',$s['site_url'])) throw new RuntimeException('Site ID não corresponde ao URL configurado.');
+            if (($list['id'] ?? '')!==$s['list_id'] || !$this->sameUrl($list['webUrl'] ?? '',rtrim($site['webUrl'],'/').'/Lists/Artigos')) throw new RuntimeException('O List ID configurado não corresponde à lista Artigos deste site.');
+            if (!isset($columns['value']) || !is_array($columns['value'])) throw new RuntimeException('Resposta de colunas inválida.');
+            if (($drive['id'] ?? '')!==$s['drive_id'] || ($drive['driveType'] ?? '')!=='documentLibrary'
+                || empty($root['id']) || !isset($root['folder'])
+                || ($root['parentReference']['driveId'] ?? '')!==$s['drive_id']
+                || (!empty($drive['sharepointIds']) && !$this->driveBelongsToSite($drive,$site))
+                || (!empty($root['sharepointIds']) && !$this->driveBelongsToSite($root,$site))
+                || (!$this->driveBelongsToSite($drive,$site) && !$this->driveBelongsToSite($root,$site))) {
+                throw new RuntimeException('Não foi possível confirmar que a biblioteca documental pertence ao site configurado.');
+            }
+            $result['state']='Leitura validada; escrita não testada';
+            $result['site_id']=$s['site_id']; $result['list_id']=$s['list_id']; $result['drive_id']=$s['drive_id'];
+            // Column definitions can contain defaults and other sensitive values: never persist them.
+            $result['column_count']=count($columns['value']);
+            $result['columns_has_more']=!empty($columns['@odata.nextLink']);
+        } catch (RuntimeException $e) { $result['error']=$e->getMessage(); }
+        finally { $this->token=null; }
+        foreach ($this->requests as $request) {
+            if ($request['http_status']===403) { $result['first_403_endpoint']=$request['endpoint']; break; }
         }
-        if (!$list || (!empty($s['list_id']) && $s['list_id']!==$list['id'])) throw new RuntimeException('Lista Artigos existente não identificada ou List ID divergente. Nenhuma lista foi criada.');
-        $columns=$this->collection($base.'/lists/'.rawurlencode($list['id']).'/columns');
-        $drives=$this->collection($base.'/drives'); $drive=null;
-        foreach ($drives as $candidate) if (!empty($s['drive_id']) && $candidate['id']===$s['drive_id']) $drive=$candidate;
-        if (!$drive) throw new RuntimeException('Configure o Drive ID de uma biblioteca documental acessível.');
-        $this->request('https://graph.microsoft.com/v1.0/drives/'.rawurlencode($drive['id']).'/root');
-        return ['state'=>'Leitura validada; escrita não testada','site_id'=>$site['id'],'list_id'=>$list['id'],'drive_id'=>$drive['id'],'columns'=>$columns,'write_verified'=>false];
+        if ($result['first_403_endpoint']) $result['error']='Primeiro HTTP 403: '.$result['first_403_endpoint'].'. Consulte o código Graph e request-id abaixo.';
+        $result['requests']=$this->requests;
+        return $result;
     }
 }
