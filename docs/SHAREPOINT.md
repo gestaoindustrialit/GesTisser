@@ -41,7 +41,7 @@ O teste verifica token, URL e ID do site, enumeração paginada de listas e colu
 ## Segurança e comportamento
 
 - Apenas administradores; todos os formulários POST validam CSRF e toda a saída dinâmica é escapada.
-- Segredo apenas por variável de ambiente nesta etapa, sem armazenamento ou devolução pela interface. A opção de o editar no ERP ainda está pendente.
+- Segredo por variável de ambiente ou ficheiro privado lido explicitamente como dados pelo PHP, sem armazenamento ou devolução pela interface. A opção de o editar no ERP ainda está pendente.
 - OAuth client credentials, Graph v1.0, HTTPS e TLS verificado; redirecionamentos HTTP desativados.
 - URL do site restrito a domínio Microsoft SharePoint. Links de paginação restritos ao Graph v1.0. Limite de 100 páginas por diagnóstico, com deteção de ciclos.
 - Diagnóstico cPanel usa acesso local, ficheiro aleatório criado em modo exclusivo, escrita, leitura, comparação e remoção em finally. Não usa FTP.
@@ -91,3 +91,36 @@ Base de validação: `main` no commit `0d9bbb96dcaf8eff2233bb8cf6a9025fae6da22f`
 - Runner oficial `python3 scripts/test_php70.py sharepoint_integration_test.php integration_safe_probe_test.php`, em PHP 7.0.33: **302 ficheiros PHP sem erros de sintaxe; 2 testes aprovados**.
 - Teste HTTP numa instalação temporária com SQLite sintético: **20 verificações aprovadas**, incluindo autenticação, listagem com conector existente, editor genérico, configuração centralizada, segredo mascarado, rejeição CSRF, gravação, atualização de estado, diagnóstico local real, bloqueio dos serviços externos, redirecionamento do URL antigo, integridade SQLite e rejeição de não administradores nas três rotas.
 - O teste Graph continua simulado; nenhuma credencial Microsoft nem dados de produção foram utilizados. Não houve publicação em LIVE ou merge automático.
+
+
+## Correção do Client Secret — cPanel e publicação
+
+O leitor `SharePointClientSecret` dá prioridade a `getenv('GESTISSER_SHAREPOINT_CLIENT_SECRET')` quando não vazio. Se ausente ou em branco, lê explicitamente `/home/tisser/gestisser-config/sharepoint-client-secret` através de `fopen`/`stream_get_contents`; nunca inclui nem executa o ficheiro. O conteúdo é apenas o Valor do segredo, admitindo uma quebra de linha final. Não é um ficheiro PHP, `.env` ou `NOME=valor`. Conteúdo vazio, multilinha, com NUL ou superior a 8192 bytes é recusado. Não se guarda o segredo em SQLite, HTML, respostas ou logs.
+
+### Configuração concreta no cPanel
+
+1. No Gestor de ficheiros, abrir `/home/tisser`, fora de `public_html`. A pasta `gestisser-config` já criada deve ter permissões **0700**, e `sharepoint-client-secret` **0600** (ou **0400** para leitura apenas).
+2. A pasta e o ficheiro devem pertencer à conta que executa o PHP do domínio, normalmente `tisser`. O leitor recusa permissões para grupo/outros e ligações simbólicas. Se PHP correr noutra conta, pedir ao alojamento para ajustar o proprietário e o pool; não abrir as permissões para 0644/0755.
+3. No Terminal do cPanel, sem mostrar o conteúdo:
+
+```sh
+chmod 700 /home/tisser/gestisser-config
+chmod 600 /home/tisser/gestisser-config/sharepoint-client-secret
+stat -c '%U %a %n' /home/tisser/gestisser-config /home/tisser/gestisser-config/sharepoint-client-secret
+```
+
+4. Se `open_basedir` estiver ativo para o domínio, pedir ao alojamento para acrescentar `/home/tisser/gestisser-config` à lista existente, preservando os restantes caminhos. Confirmar que a pasta privada não é Document Root de nenhum domínio/subdomínio e que não existem aliases ou symlinks públicos para ela.
+5. A alternativa por variável exige que o alojamento a disponibilize ao processo PHP web do domínio, por exemplo na configuração privada do pool PHP-FPM. Um `export` no Terminal só afeta essa sessão e não configura o processo web. Não colocar o segredo em `.htaccess`, `.user.ini`, ficheiros públicos ou comandos no histórico. Uma variável antiga não vazia tem prioridade sobre o ficheiro: removê-la do pool se se pretender usar o ficheiro. Recarregar o pool após alterar o ambiente.
+6. Entrar como administrador em `integrations.php?action=sharepoint#diagnostics` e confirmar **Client Secret disponível: Sim**. Esta indicação comprova apenas a leitura local, não a validade no Entra. Se aparecer Não, verificar permissões, proprietário, `open_basedir` e formato do ficheiro com o alojamento, sem usar `phpinfo()` nem mostrar o segredo.
+7. Executar **TESTAR SHAREPOINT** para renovar o diagnóstico antigo. Este teste obtém um token e consulta recursos; não ativa sincronização nem escreve artigos/documentos no SharePoint.
+
+### Publicar a correção
+
+- Base: `main`, após PR #431 (`fab025740c6377491a9cc84e9e5fc6e3361ed30d`). Publicar em conjunto os dois ficheiros de execução `app/Services/SharePointIntegration.php` e `sharepoint_settings.php`, mantendo os caminhos relativos. Fazer primeiro uma cópia destes dois ficheiros em local privado para reversão. Os testes e esta documentação não precisam de ficar no diretório público.
+- Não substituir a base SQLite, uploads, configuração do domínio ou a pasta privada. Não é necessária migração, instalação, criação de cron ou ativação de serviços/sincronizações.
+- No cPanel, usar o processo Git Deploy existente apenas se estiver configurado para preservar esses dados; em alternativa, enviar os dois ficheiros pelo Gestor de ficheiros. Confirmar PHP 7.0 para o domínio no MultiPHP Manager e, se necessário, pedir recarga do OPcache/PHP-FPM.
+- Confirmar disponibilidade e repetir apenas o teste de leitura. Para reverter, repor os dois ficheiros anteriores em conjunto; não restaurar a base por cima de operações posteriores.
+
+### Validação desta correção
+
+Executado `python3 scripts/test_php70.py sharepoint_secret_test.php sharepoint_integration_test.php integration_safe_probe_test.php` com PHP **7.0.33**: **315 ficheiros PHP sem erros de sintaxe e 3 testes aprovados**. O novo teste cobre prioridade do ambiente, alternativa quando vazio, permissões da pasta/ficheiro, ficheiro ausente, symlink, conteúdo inválido e leitura sem executar código ou produzir saída. O teste Graph usa transporte simulado. Não foram usados o segredo real, o servidor cPanel ou o tenant Microsoft; não houve sincronização.

@@ -1,4 +1,40 @@
 <?php
+/** Server-only secret reader. Never include/execute the private file. */
+final class SharePointClientSecret
+{
+    public static function read($path = '/home/tisser/gestisser-config/sharepoint-client-secret')
+    {
+        $value = getenv('GESTISSER_SHAREPOINT_CLIENT_SECRET');
+        if ($value !== false && trim($value) !== '') return $value;
+        // Fail closed for symlinks, non-regular files and shared permissions.
+        clearstatcache(true, $path);
+        $directory = dirname($path);
+        $dir = @lstat($directory);
+        $file = @lstat($path);
+        if (!$dir || !$file || ($dir['mode'] & 0170000) !== 0040000
+            || ($file['mode'] & 0170000) !== 0100000
+            || ($dir['mode'] & 0077) !== 0 || ($file['mode'] & 0077) !== 0
+            || $dir['uid'] !== $file['uid']
+            || (function_exists('posix_geteuid') && $file['uid'] !== posix_geteuid())) return '';
+        $handle = @fopen($path, 'rb');
+        if (!$handle) return '';
+        try {
+            $opened = @fstat($handle);
+            if (!$opened || $opened['ino'] !== $file['ino'] || $opened['dev'] !== $file['dev']
+                || $opened['uid'] !== $file['uid'] || ($opened['mode'] & 0077) !== 0) return '';
+            $value = @stream_get_contents($handle, 8193);
+        } finally { fclose($handle); }
+        if ($value === false || strlen($value) > 8192) return '';
+        $value = rtrim($value, "\r\n");
+        if (trim($value) === '' || strpbrk($value, "\r\n\0") !== false) return '';
+        return $value;
+    }
+    public static function available()
+    {
+        return self::read() !== '';
+    }
+}
+
 /** Phase 1: configuration and read-only diagnostics. PHP 7.0, no SDK. */
 final class SharePointIntegration
 {
