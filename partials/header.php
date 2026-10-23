@@ -118,7 +118,7 @@ $hrFiles = [
     'resultados.php', 'shopfloor_absence_reasons.php', 'shopfloor_break_reasons.php',
     'shopfloor_break_dashboard.php', 'hr_raffle.php', 'hr_organogram.php', 'hr_job_descriptions.php', 'hr_skills.php', 'payroll.php'
 ];
-$adminFiles = ['company_profile.php', 'erp_settings.php', 'requests.php', 'checklists.php', 'app_logs.php', 'backups.php', 'integrations.php', 'integration_edit.php', 'integration_flow_edit.php', 'integration_logs.php'];
+$adminFiles = ['sharepoint_settings.php', 'company_profile.php', 'erp_settings.php', 'requests.php', 'checklists.php', 'app_logs.php', 'backups.php', 'integrations.php', 'integration_edit.php', 'integration_flow_edit.php', 'integration_logs.php'];
 $isCurrentFile = static function ($file) use ($currentFile) {
     return $currentFile === $file;
 };
@@ -258,7 +258,7 @@ header('Content-Type: text/html; charset=UTF-8');
                         <div class="gt-nav-submenu">
                             <a class="<?= $isCurrentFile('company_profile.php') ? 'is-active' : '' ?>" href="company_profile.php"><i class="bi bi-buildings" aria-hidden="true"></i><span>Empresa e branding</span></a>
                             <a class="<?= $isCurrentFile('erp_settings.php') ? 'is-active' : '' ?>" href="erp_settings.php"><i class="bi bi-gear" aria-hidden="true"></i><span>Configuração ERP</span></a>
-                            <a class="<?= in_array($currentFile, ['integrations.php','integration_edit.php','integration_flow_edit.php','integration_logs.php'], true) ? 'is-active' : '' ?>" href="integrations.php"><i class="bi bi-plug" aria-hidden="true"></i><span>Integrações</span></a>
+                            <a class="<?= in_array($currentFile, ['integrations.php','sharepoint_settings.php','integration_edit.php','integration_flow_edit.php','integration_logs.php'], true) ? 'is-active' : '' ?>" href="integrations.php"><i class="bi bi-plug" aria-hidden="true"></i><span>Integrações</span></a>
                             <a class="<?= $isCurrentFile('requests.php') ? 'is-active' : '' ?>" href="requests.php"><i class="bi bi-ui-checks" aria-hidden="true"></i><span>Gerar formulários</span></a>
                             <a class="<?= $isCurrentFile('checklists.php') ? 'is-active' : '' ?>" href="checklists.php"><i class="bi bi-list-check" aria-hidden="true"></i><span>Checklists</span></a>
                             <a class="<?= $isCurrentFile('app_logs.php') ? 'is-active' : '' ?>" href="app_logs.php"><i class="bi bi-terminal" aria-hidden="true"></i><span>Logs da aplicação</span></a>
