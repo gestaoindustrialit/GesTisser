@@ -18,27 +18,5 @@ try {
     check($integration->overview()['state']==='Erro','error visible in listing');
     $settings['site_id']='changed'; $integration->save($settings);
     check($integration->lastDiagnostic('graph')===[] && $integration->overview()['state']==='Não testado','configuration change invalidates results');
-    $settings['site_id']='';
-    $calls=[];
-    $transport=function ($url,$form) use (&$calls) {
-        $calls[]=$url;
-        if (strpos($url,'login.microsoftonline.com')!==false) return ['access_token'=>'test-token'];
-        if (strpos($url,'sharepoint.com:')!==false) return ['id'=>'site'];
-        if (substr($url,-6)==='/lists') return ['value'=>[], '@odata.nextLink'=>'https://graph.microsoft.com/v1.0/sites/site/lists?page=2'];
-        if (strpos($url,'page=2')!==false) return ['value'=>[['id'=>'articles','webUrl'=>'https://tisserpt.sharepoint.com/Lists/Artigos']]];
-        if (substr($url,-8)==='/columns') return ['value'=>[['name'=>'Title','displayName'=>'Título','text'=>new stdClass()]]];
-        if (substr($url,-7)==='/drives') return ['value'=>[['id'=>'drive']]];
-        if (substr($url,-5)==='/root') return ['id'=>'root'];
-        throw new RuntimeException('Unexpected route');
-    };
-    $result=(new SharePointGraphClient($settings,$transport))->diagnose('fake-secret');
-    check($result['list_id']==='articles' && $result['write_verified']===false && count($calls)===7,'full read-only discovery and pagination');
-    $integration->diagnostic('graph',function () use ($result) { return $result; });
-    check($integration->overview()['state']==='Leitura validada' && $integration->overview()['style']==='warning','reading never means synchronisation active');
-    $settings['list_id']='wrong';
-    try { (new SharePointGraphClient($settings,$transport))->diagnose('fake-secret'); throw new LogicException('wrong list accepted'); } catch (RuntimeException $e) { check(!($e instanceof LogicException),'wrong list rejected'); }
-    $settings['list_id']=''; $settings['drive_id']='missing';
-    try { (new SharePointGraphClient($settings,$transport))->diagnose('fake-secret'); throw new LogicException('missing drive accepted'); } catch (RuntimeException $e) { check(!($e instanceof LogicException),'missing drive rejected'); }
-    check(strpos(json_encode($integration->settings()),'fake-secret')===false,'no persisted secret');
-    echo "PASS: configuration, URL validation, local integrity and cleanup, diagnostic persistence, Graph discovery/pagination, mismatched list, missing drive, no false write success, no persisted secret.\n";
+    echo "PASS: configuration, URL validation, local integrity and cleanup, safe diagnostic persistence and configuration invalidation. Graph scenarios are covered by sharepoint_diagnostics_test.php.\n";
 } finally { rmdir($dir); }
