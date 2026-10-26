@@ -1,4 +1,5 @@
 <?php
+require_once __DIR__.'/SharePointImportFailure.php';
 /** Server-only secret reader. Never include/execute the private file. */
 final class SharePointClientSecret
 {
@@ -158,7 +159,7 @@ final class SharePointGraphClient
             CURLOPT_SSL_VERIFYHOST=>2, CURLOPT_PROTOCOLS=>CURLPROTO_HTTPS,
             CURLOPT_HEADERFUNCTION=>function ($handle, $line) use (&$headers) {
                 $parts = explode(':', $line, 2);
-                if (count($parts) === 2 && strtolower(trim($parts[0])) === 'request-id') $headers['request-id'] = trim($parts[1]);
+                if (count($parts) === 2 && in_array(strtolower(trim($parts[0])),['request-id','retry-after'],true)) $headers[strtolower(trim($parts[0]))] = trim($parts[1]);
                 return strlen($line);
             }
         ]);
@@ -182,7 +183,7 @@ final class SharePointGraphClient
             $response=$this->request('https://login.microsoftonline.com/'.rawurlencode($s['tenant_id']).'/oauth2/v2.0/token',
                 ['client_id'=>$s['client_id'],'client_secret'=>$secret,'scope'=>'https://graph.microsoft.com/.default','grant_type'=>'client_credentials']);
             $auth=json_decode($response['body'] ?? '',true);
-            if (($response['status'] ?? 0)!==200 || empty($auth['access_token'])) throw new RuntimeException('Falha OAuth2 na preparação.');
+            if (($response['status'] ?? 0)!==200 || empty($auth['access_token'])) throw new SharePointImportFailure('POST /{tenantId}/oauth2/v2.0/token',$response);
             $this->token=$auth['access_token']; unset($auth,$response);
             $base='https://graph.microsoft.com/v1.0/sites/'.rawurlencode($s['site_id']).'/lists/'.rawurlencode($s['list_id']);
             return call_user_func($operation,function ($method,$path,$payload=null) use ($base) {
@@ -193,6 +194,7 @@ final class SharePointGraphClient
                     if ($this->transport) $response=call_user_func($this->transport,$base.$path,$payload,$this->token,$method.'_JSON');
                     else {
                         $c=curl_init($base.$path);
+                        $responseHeaders=[];
                         $headers=['Authorization: Bearer '.$this->token,'Content-Type: application/json','Accept: application/json'];
                         if ($method==='PATCH') {
                             if (strpbrk($payload['etag'],"\r\n")!==false) throw new RuntimeException('ETag inválido.');
@@ -200,16 +202,24 @@ final class SharePointGraphClient
                         }
                         curl_setopt_array($c,[CURLOPT_CUSTOMREQUEST=>$method,CURLOPT_POSTFIELDS=>json_encode($method==='PATCH'?$payload['fields']:$payload),CURLOPT_RETURNTRANSFER=>true,
                             CURLOPT_HTTPHEADER=>$headers,
+                            CURLOPT_HEADERFUNCTION=>function ($handle,$line) use (&$responseHeaders) {
+                                $parts=explode(':',$line,2);
+                                if(count($parts)===2 && in_array(strtolower(trim($parts[0])),['request-id','retry-after'],true))$responseHeaders[strtolower(trim($parts[0]))]=trim($parts[1]);
+                                return strlen($line);
+                            },
                             CURLOPT_CONNECTTIMEOUT=>10,CURLOPT_TIMEOUT=>30,CURLOPT_FOLLOWLOCATION=>false,
                             CURLOPT_SSL_VERIFYPEER=>true,CURLOPT_SSL_VERIFYHOST=>2,CURLOPT_PROTOCOLS=>CURLPROTO_HTTPS]);
                         $body=curl_exec($c); $status=(int)curl_getinfo($c,CURLINFO_HTTP_CODE); curl_close($c);
-                        $response=['status'=>$status,'body'=>$body];
+                        $response=['status'=>$status,'body'=>$body,'headers'=>$responseHeaders,'connection_error'=>$body===false];
                     }
                 } else throw new RuntimeException('Pedido fora do âmbito da importação.');
                 $data=json_decode((string)($response['body'] ?? ''),true);
                 $status=(int)($response['status'] ?? 0);
                 if ($method==='PATCH' && $status===204) return [];
-                if ($status<200 || $status>=300 || !is_array($data)) throw new RuntimeException('Pedido de importação falhou (HTTP '.$status.').');
+                if ($status<200 || $status>=300 || !is_array($data)) {
+                    $logical=preg_replace('~^/items/[0-9]+/fields$~','/items/{itemId}/fields',explode('?',$path,2)[0]);
+                    throw new SharePointImportFailure($method.' /sites/{siteId}/lists/{listId}'.$logical,$response);
+                }
                 return $data;
             });
         } finally { $this->token=''; }

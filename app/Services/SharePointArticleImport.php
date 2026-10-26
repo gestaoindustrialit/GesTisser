@@ -1,4 +1,5 @@
 <?php
+require_once __DIR__.'/SharePointImportFailure.php';
 /** Bounded manual preview and resumable create/update batches. No deletes. PHP 7.0. */
 final class SharePointArticleImport
 {
@@ -158,6 +159,7 @@ final class SharePointArticleImport
                 } catch (Throwable $e) {
                     // Never retry an uncertain POST. A new preview reconciles against the unique key.
                     $result['result']='Não confirmado — preparar novamente para reconciliar';
+                    $result['diagnostic']=SharePointImportFailure::safe($e);
                     $results[]=$result; break;
                 }
             }

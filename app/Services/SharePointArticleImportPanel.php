@@ -79,6 +79,9 @@ function gt_sp_article_panel(PDO $pdo)
 <p>O envio completo avança automaticamente enquanto esta página estiver aberta. Se fechar a página, volte e clique em Retomar. Pode voltar a executar depois para enviar novas alterações. O GesTISSER é a origem dos campos mapeados; outros campos SharePoint são preservados.</p>
 <div id="sp-job-status" role="status" aria-live="polite"><?php if ($job): ?><?=h('Estado: '.$job['state'].' · Processados: '.$job['processed'].' / '.$job['total'].' · Criados: '.$job['created'].' · Atualizados: '.$job['updated'].' · Iguais: '.$job['unchanged'].' · Bloqueados: '.$job['blocked'])?><?php endif; ?></div>
 <?php if (!empty($job['message'])): ?><p><?=h($job['message'])?></p><?php endif; ?>
+<?php if (!empty($job['last_error'])): ?><div class="alert alert-warning"><strong>Diagnóstico da última interrupção</strong><dl>
+<?php foreach ($job['last_error'] as $field=>$value): ?><dt><?=h($field)?></dt><dd><?=h(is_bool($value)?($value?'Sim':'Não'):(string)($value ?? '—'))?></dd><?php endforeach; ?></dl>
+<p>HTTP 429/503/504 ou falha de rede: retoma com espera e reconciliação. HTTP 401/403: verificar autenticação e concessão ao site. HTTP 412: o registo mudou no SharePoint; retomar relê o ETag. Erro de coluna: confirmar que DataUltimaProducao existe com esse nome interno e tipo Data.</p></div><?php endif; ?>
 <?php if (!empty($job['errors'])): ?><details><summary>Artigos bloqueados (primeiros 100)</summary><ul><?php foreach ($job['errors'] as $item): ?><li><?=h($item['code'].' ('.$item['id'].'): '.$item['error'])?></li><?php endforeach; ?></ul></details><?php endif; ?>
 <?php if ($autorun && ($job['state'] ?? '')==='running'): ?>
 <script>
@@ -92,8 +95,13 @@ function gt_sp_article_panel(PDO $pdo)
             if(!response.ok || job.error) throw new Error(job.error || 'Pedido interrompido');
             status.textContent='Estado: '+job.state+' · Processados: '+job.processed+' / '+job.total+' · Criados: '+job.created+' · Atualizados: '+job.updated+' · Iguais: '+job.unchanged+' · Bloqueados: '+job.blocked;
             if(job.state==='running')setTimeout(step,1000);
-            else {status.textContent+=' · '+(job.message || 'Execução terminada. Atualize a página para consultar os detalhes.');}
-        } catch(e) {status.textContent+=' · Ligação interrompida. Atualize a página e clique em Retomar.';}
+            else if(job.state==='paused' && job.retry_at) {
+                var wait=Math.max(1,job.retry_at-Math.floor(Date.now()/1000));
+                status.textContent+=' · Espera automática: '+wait+' segundos.';
+                setTimeout(step,wait*1000);
+            }
+            else {status.textContent+=' · '+(job.message || 'Execução terminada.'); if(job.last_error)status.textContent+=' · Diagnóstico: '+JSON.stringify(job.last_error); status.textContent+=' · Atualize a página para consultar os detalhes.';}
+        } catch(e) {status.textContent+=' · '+e.message+' · Atualize a página e clique em Retomar.';}
     }
     step();
 })();

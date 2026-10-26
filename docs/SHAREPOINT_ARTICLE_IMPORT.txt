@@ -1,6 +1,6 @@
 GesTISSER — teste inicial e envio/atualização de todos os artigos
 
-Publicar em conjunto os CINCO ficheiros PHP do pacote, preservando os caminhos.
+Publicar em conjunto os SEIS ficheiros PHP do pacote, preservando os caminhos.
 Fazer primeiro cópia privada dos ficheiros anteriores. Preservar SQLite, uploads,
 configuração e segredo. Não existem migrações de esquema nem novas permissões.
 Requer PHP 7.0.33, cURL, ligação validada e GesTISSER_ID único e indexado.
@@ -45,9 +45,9 @@ execução pendente: encerrar e iniciar outra para o destino correto.
 O teste de cinco continua apenas de criação; as atualizações pertencem ao envio
 completo. Pré-visualizações do teste expiram em 15 minutos.
 
-Validação: PHP 7.0.33; sete testes aprovados, incluindo 1600 artigos sintéticos,
+Validação: PHP 7.0.33; oito testes aprovados, incluindo 1600 artigos sintéticos,
 retoma, criação sem confirmação, updates por ID, conflito de ETag, pausa e erros.
-322 ficheiros PHP sem erros de sintaxe no checkout de validação.
+324 ficheiros PHP sem erros de sintaxe no checkout de validação.
 Graph simulado e SQLite sintético; nenhuma escrita real em produção.
 
 ÚLTIMA PRODUÇÃO
@@ -59,3 +59,19 @@ com produção positiva. Sem produção registada: vazio. Não é a data previst
 Depois de publicar, executar novamente Enviar/atualizar todos para preencher
 os registos existentes, sem os apagar. Encerrar uma execução antiga pendente
 antes de iniciar a nova, para também rever os IDs já processados.
+
+DIAGNÓSTICO E RETOMA
+Publicar também app/Services/SharePointImportFailure.php (novo ficheiro).
+O progresso existente é preservado. Usar Retomar, sem encerrar a execução.
+A página mostra HTTP status, código Graph, request-id, endpoint lógico e artigo
+ou cursor da interrupção. Não guarda corpos remotos, tokens ou segredos.
+Erros de coluna indicam a coluna em falta/incompatível, incluindo DataUltimaProducao.
+Erros 429/503/504 ou de transporte têm até três tentativas automáticas com espera;
+Retry-After é respeitado. Sem resposta confirmada, retomar consulta a chave/ETag
+para reconciliar pedidos já concluídos antes de voltar a escrever.
+Após três tentativas falhadas, verificar o diagnóstico e retomar manualmente.
+
+PASTAS
+Foi criada a estrutura Documentos/Artigos/Maquetes no site raiz.
+A transferência dos ficheiros e criação automática das pastas por ID ainda não
+estão implementadas neste pacote. NumeroDocumentos continua a ser a contagem ERP.

@@ -1,4 +1,5 @@
 <?php
+require_once __DIR__.'/SharePointImportFailure.php';
 /** Durable cursor, counts and bounded errors. Call mutations under the per-list lock. */
 final class SharePointArticleJob
 {
@@ -42,7 +43,9 @@ final class SharePointArticleJob
     }
     public function resume($run,$configuration)
     {
-        $job=$this->checked($run,$configuration);if($job['state']==='paused') {$job['state']='running';unset($job['message']);}return $this->save($job);
+        $job=$this->checked($run,$configuration);
+        if (!empty($job['retry_at']) && time()<$job['retry_at']) throw new RuntimeException('Aguarde '.($job['retry_at']-time()).' segundos antes de retomar (limite Microsoft Graph).');
+        if($job['state']==='paused') {$job['state']='running';unset($job['message']);}return $this->save($job);
     }
     private function checked($run,$configuration)
     {
@@ -53,12 +56,14 @@ final class SharePointArticleJob
     public function step($run,$configuration,callable $batch)
     {
         $job=$this->checked($run,$configuration);
+        if ($job['state']==='paused' && !empty($job['retry_at']) && time()>=$job['retry_at']) $job['state']='running';
         if ($job['state']!=='running') return $job;
         try {
             $results=call_user_func($batch,$job['cursor'],$job['max_id']);
             if (!$results) {$job['state']='complete'; return $this->save($job);}
             foreach ($results as $row) {
                 if (strpos($row['result'],'Não confirmado')===0) {
+                    $job['last_error']=array_merge($row['diagnostic'] ?? [],['article_id'=>$row['id'],'article_code'=>$row['code'],'at'=>gmdate('c')]);
                     $job['state']='paused';$job['message']='Pedido não confirmado. Retomar consulta a chave e o estado remoto antes de tentar de novo.'; break;
                 }
                 $job['cursor']=(int)$row['id'];++$job['processed'];
@@ -69,8 +74,15 @@ final class SharePointArticleJob
                     if(count($job['errors'])<100)$job['errors'][]=['id'=>$row['id'],'code'=>$row['code'],'error'=>$row['error']];
                 } else ++$job['unchanged'];
             }
+            if($job['state']==='running') {unset($job['last_error']);$job['retry_count']=0;}
             if ($job['cursor']>=$job['max_id'])$job['state']='complete';
-        } catch(Throwable $e) { $job['state']='paused';$job['message']='Execução interrompida. Verifique a ligação e as colunas e retome. Os pedidos já concluídos serão reconciliados.'; }
+        } catch(Throwable $e) { $job['last_error']=array_merge(SharePointImportFailure::safe($e),['after_id'=>$job['cursor'],'at'=>gmdate('c')]);$job['state']='paused';$job['message']='Execução interrompida. Verifique a ligação e as colunas e retome. Os pedidos já concluídos serão reconciliados.'; }
+        $status=$job['last_error']['http_status'] ?? null;
+        if($job['state']==='paused' && (in_array($status,[429,503,504],true) || !empty($job['last_error']['transport_error'])) && ($job['retry_count'] ?? 0)<3) {
+            $job['retry_count']=($job['retry_count'] ?? 0)+1;
+            $job['retry_at']=time()+max(10*(int)pow(2,$job['retry_count']-1),(int)($job['last_error']['retry_after'] ?? 0));
+            $job['message'].=' Nova tentativa automática após a espera indicada, até três tentativas.';
+        } else unset($job['retry_at']);
         return $this->save($job);
     }
 }
