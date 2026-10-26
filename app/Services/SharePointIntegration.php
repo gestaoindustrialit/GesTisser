@@ -67,7 +67,7 @@ final class SharePointIntegration
             $result['message'] = ($remote['state'] ?? '') === 'Erro' ? $remote['error'] : $local['error'];
         } elseif (!empty($remote['list_id']) && !empty($remote['drive_id'])) {
             $result['state'] = 'Leitura validada'; $result['style'] = 'warning';
-            $result['message'] = 'Escrita não testada. Sincronização indisponível.';
+            $result['message'] = 'Leitura Graph validada. Consulte os envios e o agendamento no painel.';
         } elseif ($settings['tenant_id'] !== '' && $settings['client_id'] !== '') {
             $result['state'] = 'Não testado';
             $result['message'] = 'Configuração guardada; acesso Microsoft por validar.';

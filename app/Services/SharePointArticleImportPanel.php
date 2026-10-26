@@ -3,6 +3,7 @@
 require_once __DIR__.'/SharePointArticleImport.php';
 require_once __DIR__.'/SharePointArticleJob.php';
 require_once __DIR__.'/SharePointDocumentSync.php';
+require_once __DIR__.'/SharePointSchedule.php';
 function gt_sp_article_action(PDO $pdo, SharePointIntegration $integration, $action)
 {
     if (!app_config('external_services_enabled',false)) throw new RuntimeException('Serviços externos desativados neste ambiente.');
@@ -72,7 +73,7 @@ function gt_sp_article_panel(PDO $pdo)
     $results=$_SESSION['sp_article_results'] ?? [];
     ?>
 <h2 class="h5">3. Artigos — teste e envio completo</h2>
-<p>Teste os primeiros cinco artigos antes de enviar todos. O envio completo cria os artigos em falta e atualiza os campos mapeados dos existentes por GesTISSER_ID, incluindo os códigos alterados. Registos iguais são ignorados. Não apaga registos, não copia documentos e não agenda tarefas. LinkGesTISSER fica por preencher.</p>
+<p>Teste os primeiros cinco artigos antes de enviar todos. O envio completo cria os artigos em falta e atualiza os campos mapeados dos existentes por GesTISSER_ID, incluindo os códigos alterados. Registos iguais são ignorados. Não apaga registos; documentos e agendamento têm controlos separados abaixo. LinkGesTISSER fica por preencher.</p>
 <p>Mapeamento: código → Title; descrição → Descrição; código e nome do cliente → CodigoCliente/Cliente; Ativo/Inativo → Estado; data → DataAtualizacao; última produção efetiva → DataUltimaProducao; documentos ativos → NumeroDocumentos; ID local → GesTISSER_ID.</p>
 <form id="sp-job-form" method="post" action="integrations.php?action=sharepoint#article-import" class="mb-3">
 <?=csrf_input()?><input type="hidden" name="run" value="<?=h($job['run'] ?? '')?>">
@@ -183,5 +184,29 @@ function gt_sp_document_panel(PDO $pdo)
 })();
 </script>
 <?php endif; ?>
+<?php
+}
+
+function gt_sp_schedule_panel(PDO $pdo)
+{
+    $scheduler=new SharePointSchedule($pdo);$schedule=$scheduler->settings();$status=$scheduler->status();
+    $displayDate=function($value){if($value===null)return '—';try{$d=new DateTime(is_numeric($value)?'@'.$value:$value);$d->setTimezone(new DateTimeZone('Europe/Lisbon'));return $d->format('d/m/Y H:i:s T');}catch(Exception $e){return '—';}};
+    $cronCommand='/opt/cpanel/ea-php70/root/usr/bin/php '.escapeshellarg(rtrim((string)app_config('paths.root'),'/').'/cron/sharepoint_runner.php');
+    ?>
+<h2 class="h5">Sincronização automática por cron</h2>
+<p>Artigos: uma vez por hora. Documentos: uma vez por dia (24 horas). Os intervalos contam a partir da conclusão de cada execução. A primeira execução fica disponível ao ativar. Execuções longas são retomadas nas chamadas seguintes do cron.</p>
+<form method="post" action="integrations.php?action=sharepoint#schedule">
+<?=csrf_input()?><input type="hidden" name="action" value="schedule_save">
+<label><input type="checkbox" name="enabled" value="1" <?=!empty($schedule['enabled'])?'checked':''?>> Ativar sincronização automática</label>
+<div class="row g-3 my-2"><div class="col-md-4"><label>Artigos — intervalo em minutos</label><input class="form-control" type="number" name="articles_minutes" min="1" max="1440" value="<?=h((string)$schedule['articles_minutes'])?>"></div>
+<div class="col-md-4"><label>Documentos — intervalo em minutos</label><input class="form-control" type="number" name="documents_minutes" min="1" max="1440" value="<?=h((string)$schedule['documents_minutes'])?>"></div></div>
+<button class="btn btn-primary">Guardar agendamento</button></form>
+<p>Requer o comando CLI cron/sharepoint_runner.php no cron do alojamento, a cada minuto, com PHP 7.0.33. A página não precisa de ficar aberta. Pausar uma execução continua a bloquear essa execução até clicar em Retomar. Encerrar uma execução não desativa o agendamento; para o parar, desmarque a opção acima.</p>
+<p>Comando para cPanel (confirmar o binário PHP 7.0.33 no Terminal):</p><pre><?=h($cronCommand)?></pre><p>Frequência do cron: <code>* * * * *</code> (a cada minuto; o programa aplica os intervalos guardados).</p>
+<p>Última atividade do cron: <?=h($displayDate($status['last_tick'] ?? null))?></p>
+<?php foreach(['articles'=>'Artigos','documents'=>'Documentos']as$kind=>$label): ?>
+<p><?=h($label)?> — última conclusão automática: <?=h($displayDate($status['last_'.$kind.'_completed'] ?? null))?>; próxima execução a partir de: <?=h(isset($status['next_'.$kind])?$displayDate($status['next_'.$kind]):'Primeira execução após ativação')?> <?=h($status[$kind.'_notice'] ?? '')?></p>
+<?php endforeach; ?>
+<p class="small text-muted">Datas apresentadas na hora de Lisboa. Limites Microsoft Graph, falhas permanentes ou dados inválidos podem exigir revisão do diagnóstico nas secções de artigos/documentos.</p>
 <?php
 }

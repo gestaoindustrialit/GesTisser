@@ -1,7 +1,7 @@
 GesTISSER — artigos e transferência documental para SharePoint
 
 PUBLICAÇÃO
-Publicar em conjunto os OITO ficheiros PHP deste pacote, preservando os caminhos.
+Publicar em conjunto os ONZE ficheiros PHP deste pacote, preservando os caminhos.
 Inclui ArticleDocument.php, dependência já existente e igual à versão main.
 Fazer cópia privada dos ficheiros anteriores. Preservar SQLite, uploads,
 configuração e segredo. Não há migrações nem novas permissões Microsoft 365.
@@ -66,12 +66,54 @@ Não encerra nem reinicia o progresso dos artigos quando inicia documentos.
 Depois de uma execução concluída, iniciar outra envia novos/alterados e revê iguais.
 Documentos criados depois do início entram na execução seguinte.
 
-Não existe cron. Não são criadas permissões globais ou links públicos.
+O cron é opcional e tem ativação própria (ver abaixo). Não são criadas permissões globais ou links públicos.
 A pasta usa as permissões existentes da biblioteca, sem concessões adicionais.
 
 VALIDAÇÃO
-PHP 7.0.33: dez testes aprovados, 327 ficheiros PHP sem erros de sintaxe.
+PHP 7.0.33: onze testes aprovados, 330 ficheiros PHP sem erros de sintaxe.
 SQLite sintético e Graph simulado. Inclui ficheiros locais reais temporários,
 pastas por artigo, upload de bytes, tamanho/checksums, repetições, conteúdo
 alterado, resposta perdida, caminhos/symlinks externos e isolamento de execuções.
 Não foram usados os ficheiros ou segredos de produção pelo agente.
+
+AGENDAMENTO AUTOMÁTICO — NOVO
+Frequências escolhidas: artigos a cada 60 minutos; documentos a cada 1440 minutos
+(24 horas), contados após a conclusão da execução anterior de cada tipo.
+A primeira execução ocorre assim que ativar e o cron correr. Os dois tipos têm
+agendamentos e progresso independentes. Execuções longas continuam nos ticks
+seguintes, sem abrir o browser nem começar novamente do zero.
+
+1. Publicar todos os ficheiros, incluindo cron/sharepoint_runner.php e
+   app/Services/SharePointSchedule.php. Preservar base, uploads e segredo.
+2. Abrir Integrações > SharePoint > Sincronização automática por cron.
+3. Confirmar 60 minutos para artigos e 1440 para documentos, marcar Ativar e guardar.
+4. A página apresenta o comando com o caminho absoluto correto da instalação.
+5. No Terminal do cPanel, confirmar o binário PHP CLI 7.0.33 (por exemplo,
+   /opt/cpanel/ea-php70/root/usr/bin/php -v). O runner recusa outro runtime.
+6. Executar manualmente o comando apresentado na página uma vez para validar
+   acesso à base, segredo e Microsoft Graph. Esse comando pode iniciar escritas
+   quando o agendamento está ativo; não exige utilizador web ou sessão aberta.
+7. Em cPanel > Tarefas Cron, adicionar UM comando a cada minuto (* * * * *),
+   usando o binário validado e o caminho apresentado pelo GesTISSER.
+8. Confirmar a última atividade/conclusões e próximas execuções no painel.
+
+O cron corre a cada minuto para retomar trabalho; só inicia uma nova passagem
+quando chega o intervalo de cada tipo. Sem trabalho vencido não chama o Graph.
+Um lock partilhado com a interface evita sobreposição de envios no mesmo servidor.
+Cada tick tem orçamento de 45 segundos, com operações de rede em curso podendo
+terminar depois desse orçamento; o tick seguinte não sobrepõe uma execução ativa.
+
+Pausar uma execução na interface é respeitado pelo cron; Retomar remove a pausa
+manual. Erros permanentes ou retries esgotados exigem revisão antes de retomar.
+Para desativar todo o agendamento, desmarcar Ativar; encerrar uma execução
+individual não desativa as futuras passagens. Não é necessário apagar artigos.
+O runner respeita cron_enabled e external_services_enabled do ambiente, só lê
+uma base existente e não executa migrações. O segredo tem de estar disponível
+para o utilizador CLI do cPanel (o mesmo ficheiro privado já suportado).
+Não colocar segredo na linha de comando ou no cron.
+
+Estado do agendamento: sharepoint.schedule.v1; estado do scheduler e próximas
+datas: sharepoint.schedule.status.v1, em app_settings. Datas do painel em Lisboa.
+Testes adicionais cobrem 60/1440 minutos, ativação, ausência de chamadas fora
+de prazo, pausa manual, falhas permanentes e retoma do mesmo cursor após orçamento.
+A instalação e ativação do cron real do alojamento não foram executadas pelo agente.

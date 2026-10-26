@@ -21,6 +21,8 @@ if (($_GET['action'] ?? '') === 'sharepoint') {
     return;
 }
 require_once __DIR__.'/app/Services/SharePointIntegration.php';
+require_once __DIR__.'/app/Services/SharePointSchedule.php';
+$spSchedule=(new SharePointSchedule($pdo))->settings();
 $sharepoint = new SharePointIntegration($pdo, app_config('paths.uploads'));
 $sharepointOverview = $sharepoint->overview();
 
@@ -36,8 +38,8 @@ $rows=$pdo->query('SELECT i.*,(SELECT COUNT(*) FROM integration_flows f WHERE f.
     <td>Microsoft SharePoint<br><small>OAuth 2.0 · client credentials</small></td>
     <td><span class="badge text-bg-<?=h($sharepointOverview['style'])?>"><?=h($sharepointOverview['state'])?></span></td>
     <td><?=h((string)app_config('env'))?></td>
-    <td><small><?=h($sharepointOverview['checked_at'] ?: '—')?><br>Sem execução automática</small></td>
-    <td><small>Artigos e documentos<br>Sincronização indisponível</small></td>
+    <td><small><?=h($sharepointOverview['checked_at'] ?: '—')?><br><?php if (!empty($spSchedule['enabled'])): ?>Agendamento ativo · Artigos: <?=h((string)$spSchedule['articles_minutes'])?> min · Documentos: <?=h((string)$spSchedule['documents_minutes'])?> min<?php else: ?>Agendamento desativado<?php endif; ?></small></td>
+    <td><small>Artigos e documentos<br>Envios e agendamento no painel</small></td>
     <td><?=h($sharepointOverview['message'])?></td>
     <td class="text-nowrap">
         <a class="btn btn-sm btn-outline-primary" href="integrations.php?action=sharepoint">Configurar</a>

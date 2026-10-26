@@ -14,7 +14,8 @@ $message=$error='';
 if ($_SERVER['REQUEST_METHOD']==='POST' && validate_csrf_or_abort(false)) {
     try {
         $action=(string)($_POST['action'] ?? '');
-        if (in_array($action,['articles_preview','articles_import','articles_job_start','articles_job_resume','articles_job_pause','articles_job_cancel','articles_job_step','documents_job_start','documents_job_resume','documents_job_pause','documents_job_cancel','documents_job_step'],true)) { $articleResult=gt_sp_article_action($pdo,$integration,$action); $message='Operação concluída. Consulte a secção de artigos ou documentos.'; }
+        if ($action==='schedule_save') { (new SharePointSchedule($pdo))->save($_POST);$message='Agendamento guardado. O cron do alojamento tem de estar configurado.'; }
+        elseif (in_array($action,['articles_preview','articles_import','articles_job_start','articles_job_resume','articles_job_pause','articles_job_cancel','articles_job_step','documents_job_start','documents_job_resume','documents_job_pause','documents_job_cancel','documents_job_step'],true)) { $articleResult=gt_sp_article_action($pdo,$integration,$action); $message='Operação concluída. Consulte a secção de artigos ou documentos.'; }
         elseif ($action==='save') { $integration->save($_POST); unset($_SESSION['sp_article_preview']); $message='Configuração guardada. Os anexos existentes mantêm o seu armazenamento atual.'; }
         elseif (in_array($action,['local','remote','all'],true)) {
             if ($action==='local' || $action==='all') $integration->diagnostic('cpanel',[$integration,'testStorage']);
@@ -48,7 +49,7 @@ require __DIR__.'/partials/header.php';
 <div class="col-md-6"><label for="<?=h($key)?>" class="form-label"><?=h($label)?></label><input class="form-control" id="<?=h($key)?>" name="<?=h($key)?>" value="<?=h((string)$settings[$key])?>" <?= $key==='max_bytes'?'type="number" min="1"':'type="text"' ?>></div>
 <?php endforeach; ?>
 <div class="col-md-6"><p>Client Secret disponível: <?=SharePointClientSecret::available() ? 'Sim' : 'Não'?></p><small>Configurado no servidor por variável de ambiente ou ficheiro privado.</small></div>
-<div class="col-md-6"><label class="form-label">Sincronização automática</label><select class="form-select" disabled><option>Indisponível nesta versão</option></select></div>
+<div class="col-md-6"><p>A sincronização automática é configurada na secção de agendamento abaixo.</p></div>
 <div class="col-12"><button class="btn btn-primary">Guardar configuração</button></div></form></div></div>
 <div class="card mb-4"><div class="card-body"><h2 id="connections" class="h5">2. Estado das ligações</h2>
 <form method="post" action="integrations.php?action=sharepoint#connections" class="d-flex flex-wrap gap-2 mb-3"><?=csrf_input()?><button name="action" value="local" class="btn btn-outline-primary">TESTAR CPANEL</button><button name="action" value="remote" class="btn btn-outline-primary">TESTAR SHAREPOINT</button><button name="action" value="all" class="btn btn-primary">VERIFICAR TODAS AS LIGAÇÕES</button></form>
@@ -71,6 +72,7 @@ require __DIR__.'/partials/header.php';
 </div><?php endforeach; ?></div></div></div>
 <div id="article-import" class="card mb-4"><div class="card-body"><?php gt_sp_article_panel($pdo); ?></div></div>
 <div id="document-import" class="card mb-4"><div class="card-body"><?php gt_sp_document_panel($pdo); ?></div></div>
+<div id="schedule" class="card mb-4"><div class="card-body"><?php gt_sp_schedule_panel($pdo); ?></div></div>
 <div class="card mb-4"><div class="card-body"><h2 id="diagnostics" class="h5">5. Histórico e diagnóstico</h2><p>Esta primeira etapa conserva o último diagnóstico de cada serviço. Histórico de sincronizações e fila serão acrescentados com o worker.</p>
 <p>Client Secret disponível: <?=SharePointClientSecret::available() ? 'Sim' : 'Não'?></p>
 <?php $remote=$integration->lastDiagnostic('graph'); ?>

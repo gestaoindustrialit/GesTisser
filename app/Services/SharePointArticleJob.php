@@ -44,13 +44,13 @@ final class SharePointArticleJob
     }
     public function pause($run,$configuration)
     {
-        $job=$this->checked($run,$configuration);$job['state']='paused';return $this->save($job);
+        $job=$this->checked($run,$configuration);$job['state']='paused';$job['manual_pause']=true;return $this->save($job);
     }
     public function resume($run,$configuration)
     {
         $job=$this->checked($run,$configuration);
         if (!empty($job['retry_at']) && time()<$job['retry_at']) throw new RuntimeException('Aguarde '.($job['retry_at']-time()).' segundos antes de retomar (limite Microsoft Graph).');
-        if($job['state']==='paused') {$job['state']='running';unset($job['message']);}return $this->save($job);
+        if($job['state']==='paused') {$job['state']='running';unset($job['message'],$job['manual_pause']);}return $this->save($job);
     }
     private function checked($run,$configuration)
     {
@@ -61,7 +61,7 @@ final class SharePointArticleJob
     public function step($run,$configuration,callable $batch)
     {
         $job=$this->checked($run,$configuration);
-        if ($job['state']==='paused' && !empty($job['retry_at']) && time()>=$job['retry_at']) $job['state']='running';
+        if ($job['state']==='paused' && empty($job['manual_pause']) && !empty($job['retry_at']) && time()>=$job['retry_at']) $job['state']='running';
         if ($job['state']!=='running') return $job;
         try {
             $results=call_user_func($batch,$job['cursor'],$job['max_id']);
