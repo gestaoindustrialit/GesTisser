@@ -173,9 +173,9 @@ final class SharePointGraphClient
         return ['status'=>$status, 'body'=>$body === false ? '' : $body, 'headers'=>$headers, 'connection_error'=>$body === false];
     }
     /** Scoped list connection for the admin-only, CSRF-protected manual pilot. */
-    public function withArticles($secret, callable $operation)
+    public function withArticles($secret, callable $operation, $verify=true)
     {
-        $check=$this->diagnose($secret);
+        $check=$verify?$this->diagnose($secret):[];
         if (isset($check['error'])) throw new RuntimeException('Execute TESTAR SHAREPOINT e resolva os erros antes de importar.');
         try {
             $s=$this->settings;
@@ -189,12 +189,17 @@ final class SharePointGraphClient
                 if (strpos($path,$base)===0) $path=substr($path,strlen($base));
                 if ($method==='GET' && preg_match('~^/(columns|items)([?][^\r\n#]*)?$~D',$path)) {
                     $response=$this->request($base.$path);
-                } elseif ($method==='POST' && $path==='/items' && is_array($payload)) {
-                    if ($this->transport) $response=call_user_func($this->transport,$base.$path,$payload,$this->token,'POST_JSON');
+                } elseif (is_array($payload) && (($method==='POST' && $path==='/items') || ($method==='PATCH' && preg_match('~^/items/[0-9]+/fields$~D',$path) && !empty($payload['etag'])))) {
+                    if ($this->transport) $response=call_user_func($this->transport,$base.$path,$payload,$this->token,$method.'_JSON');
                     else {
-                        $c=curl_init($base.$path); $headers=[];
-                        curl_setopt_array($c,[CURLOPT_POST=>true,CURLOPT_POSTFIELDS=>json_encode($payload),CURLOPT_RETURNTRANSFER=>true,
-                            CURLOPT_HTTPHEADER=>['Authorization: Bearer '.$this->token,'Content-Type: application/json','Accept: application/json'],
+                        $c=curl_init($base.$path);
+                        $headers=['Authorization: Bearer '.$this->token,'Content-Type: application/json','Accept: application/json'];
+                        if ($method==='PATCH') {
+                            if (strpbrk($payload['etag'],"\r\n")!==false) throw new RuntimeException('ETag inválido.');
+                            $headers[]='If-Match: '.$payload['etag'];
+                        }
+                        curl_setopt_array($c,[CURLOPT_CUSTOMREQUEST=>$method,CURLOPT_POSTFIELDS=>json_encode($method==='PATCH'?$payload['fields']:$payload),CURLOPT_RETURNTRANSFER=>true,
+                            CURLOPT_HTTPHEADER=>$headers,
                             CURLOPT_CONNECTTIMEOUT=>10,CURLOPT_TIMEOUT=>30,CURLOPT_FOLLOWLOCATION=>false,
                             CURLOPT_SSL_VERIFYPEER=>true,CURLOPT_SSL_VERIFYHOST=>2,CURLOPT_PROTOCOLS=>CURLPROTO_HTTPS]);
                         $body=curl_exec($c); $status=(int)curl_getinfo($c,CURLINFO_HTTP_CODE); curl_close($c);
@@ -203,6 +208,7 @@ final class SharePointGraphClient
                 } else throw new RuntimeException('Pedido fora do âmbito da importação.');
                 $data=json_decode((string)($response['body'] ?? ''),true);
                 $status=(int)($response['status'] ?? 0);
+                if ($method==='PATCH' && $status===204) return [];
                 if ($status<200 || $status>=300 || !is_array($data)) throw new RuntimeException('Pedido de importação falhou (HTTP '.$status.').');
                 return $data;
             });

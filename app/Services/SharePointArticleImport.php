@@ -1,5 +1,5 @@
 <?php
-/** Manual create-only pilot. No background work and no updates/deletes. PHP 7.0. */
+/** Bounded manual preview and resumable create/update batches. No deletes. PHP 7.0. */
 final class SharePointArticleImport
 {
     private $pdo;
@@ -35,7 +35,7 @@ final class SharePointArticleImport
     }
     private function remote()
     {
-        return $this->collection('/items?$expand=fields($select=Title,GesTISSER_ID)&$top=200');
+        return $this->collection('/items?$expand=fields($select=Title,GesTISSER_ID,Descri_x00e7__x00e3_o,CodigoCliente,Cliente,Estado,DataAtualizacao,NumeroDocumentos,EstadoSincronizacao)&$top=200');
     }
     private function fields(array $row, array $columns)
     {
@@ -58,41 +58,74 @@ final class SharePointArticleImport
         }
         return $fields;
     }
-    private function source($after)
+    private function source($after,$limit=5)
     {
         $q=$this->pdo->prepare('SELECT a.id,a.code,a.description,a.status,a.updated_at,c.code customer_code,c.name customer_name,
             (SELECT COUNT(*) FROM erp_product_documents d WHERE d.entity_type="finished_product" AND d.entity_id=a.id AND d.status="Ativo") document_count
-            FROM erp_finished_products a LEFT JOIN erp_customers c ON c.id=a.customer_id WHERE a.id>? ORDER BY a.id LIMIT 5');
+            FROM erp_finished_products a LEFT JOIN erp_customers c ON c.id=a.customer_id WHERE a.id>? ORDER BY a.id LIMIT '.(int)$limit);
         $q->execute([(int)$after]); return $q->fetchAll(PDO::FETCH_ASSOC);
     }
-    public function preview($after=0)
+    public function preview($after=0, $updates=false, $maxId=PHP_INT_MAX)
     {
         if (!is_int($after) || $after<0) throw new RuntimeException('ID inicial inválido.');
         $columns=$this->schema(); $remote=$this->remote(); $rows=[];
-        foreach ($this->source($after) as $row) {
+        foreach ($this->source($after,$updates?20:5) as $row) {
+            if ((int)$row['id']>$maxId) break;
             $entry=['id'=>(int)$row['id'],'code'=>$row['code'],'fields'=>[], 'action'=>'Criar','error'=>null];
             try {
                 $entry['fields']=$this->fields($row,$columns);
                 foreach ($remote as $item) {
                     $f=$item['fields'] ?? [];
-                    if ((string)($f['GesTISSER_ID'] ?? '')===(string)$row['id']) { $entry['action']='Já existe — ignorar'; break; }
+                    if ((string)($f['GesTISSER_ID'] ?? '')===(string)$row['id']) {
+                        $entry['action']='Já existe — ignorar';
+                        if ($updates) {
+                            $changed=false;
+                            foreach ($entry['fields'] as $name=>$value) {
+                                $existing=$f[$name] ?? null;
+                                if ($name==='Estado') $equal=$existing!==null && filter_var($existing,FILTER_VALIDATE_BOOLEAN)===$value;
+                                elseif ($name==='DataAtualizacao') $equal=substr((string)$existing,0,10)===substr($value,0,10);
+                                else $equal=(string)$existing===(string)$value;
+                                if (!$equal) $changed=true;
+                            }
+                            $entry['action']=$changed ? 'Atualizar' : 'Sem alterações';
+                            $entry['remote_id']=(string)($item['id'] ?? '');
+                            $entry['etag']=$item['eTag'] ?? $f['@odata.etag'] ?? null;
+                            if ($changed && (!$entry['etag'] || !preg_match('/^[0-9]+$/D',$entry['remote_id']))) throw new RuntimeException('Identidade ou ETag remoto em falta; atualização bloqueada.');
+                        }
+                        break;
+                    }
                     if (strcasecmp(trim((string)($f['Title'] ?? '')),trim($row['code']))===0) throw new RuntimeException('Código já existente com outra chave; rever manualmente.');
                 }
             } catch (RuntimeException $e) { $entry['action']='Bloqueado'; $entry['error']=$e->getMessage(); }
             $rows[]=$entry;
         }
-        return ['after'=>$after,'rows'=>$rows,'prepared_at'=>time()];
+        return ['after'=>$after,'rows'=>$rows,'prepared_at'=>time(),'updates'=>$updates,'max_id'=>$maxId];
     }
     public function execute(array $preview)
     {
         if (empty($preview['prepared_at']) || time()-$preview['prepared_at']>900 || $preview['prepared_at']>time()) throw new RuntimeException('Pré-visualização expirada. Prepare novamente.');
-        $current=$this->preview($preview['after']);
+        $current=$this->preview($preview['after'],!empty($preview['updates']),$preview['max_id'] ?? PHP_INT_MAX);
         if (json_encode($current['rows'])!==json_encode($preview['rows'])) throw new RuntimeException('Os dados locais, colunas ou registos remotos mudaram. Prepare novamente.');
+        return $this->apply($current);
+    }
+    public function syncBatch($after,$maxId)
+    {
+        return $this->apply($this->preview((int)$after,true,(int)$maxId));
+    }
+    private function apply(array $current)
+    {
+        $deadline=microtime(true)+8;
         $results=[];
         foreach ($current['rows'] as $row) {
-            $result=['id'=>$row['id'],'code'=>$row['code'],'result'=>$row['action']];
-            if ($row['action']==='Criar') {
+            if ($results && microtime(true)>$deadline) break;
+            $result=['id'=>$row['id'],'code'=>$row['code'],'result'=>$row['action'],'error'=>$row['error']];
+            if (in_array($row['action'],['Criar','Atualizar'],true)) {
                 try {
+                    if ($row['action']==='Atualizar') {
+                        call_user_func($this->api,'PATCH','/items/'.$row['remote_id'].'/fields',['fields'=>$row['fields'],'etag'=>$row['etag']]);
+                        $result['result']='Atualizado'; $result['sharepoint_id']=$row['remote_id'];
+                        $results[]=$result; continue;
+                    }
                     $item=call_user_func($this->api,'POST','/items',['fields'=>$row['fields']]);
                     if (empty($item['id']) || (string)($item['fields']['GesTISSER_ID'] ?? '')!==(string)$row['id']) throw new RuntimeException('Confirmação de criação incompleta.');
                     $result['result']='Criado'; $result['sharepoint_id']=(string)$item['id'];

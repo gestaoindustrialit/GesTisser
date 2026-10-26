@@ -1,33 +1,51 @@
-GesTISSER — importação manual de artigos para SharePoint
+GesTISSER — teste inicial e envio/atualização de todos os artigos
 
-Publicar em conjunto os quatro ficheiros PHP deste pacote, preservando os caminhos.
-Fazer uma cópia privada dos ficheiros anteriores para reversão.
-Não substituir SQLite, uploads, configuração ou segredo. Não existem migrações.
-Requer PHP 7.0.33, cURL, configuração SharePoint já validada e a coluna de texto
-GesTISSER_ID única e indexada. Não altera permissões Microsoft 365.
+Publicar em conjunto os CINCO ficheiros PHP do pacote, preservando os caminhos.
+Fazer primeiro cópia privada dos ficheiros anteriores. Preservar SQLite, uploads,
+configuração e segredo. Não existem migrações de esquema nem novas permissões.
+Requer PHP 7.0.33, cURL, ligação validada e GesTISSER_ID único e indexado.
 
-Em Administração > Integrações > SharePoint, secção 3:
-1. Preparar pré-visualização (ID superior a 0 para começar).
-2. Rever os campos e mensagens. Até cinco artigos ordenados por ID.
-3. Importar os artigos assinalados para criar.
-4. Conferir os resultados e os registos na lista SharePoint.
-Para o próximo lote, usar o último ID apresentado na pré-visualização.
+Em Administração > Integrações > SharePoint > secção 3:
+1. Usar a pré-visualização e teste de cinco artigos para conferir o mapeamento.
+2. Clicar Enviar/atualizar todos os artigos.
+3. Manter a página aberta. Os pequenos lotes avançam automaticamente, sem cliques
+   por lote. O progresso fica guardado na chave sharepoint.article_job.v1 de
+   app_settings (cursor, contagens e primeiros 100 erros, sem tokens ou payloads).
+4. Se fechar a página ou perder ligação, abrir novamente e clicar Retomar envio
+   completo. Pode Pausar ou Encerrar execução; os registos já enviados permanecem.
+5. Quando concluir, atualizar a página para consultar os detalhes dos bloqueios.
+6. Depois de alterar artigos no ERP, clicar novamente Enviar/atualizar todos para
+   comparar e enviar apenas os dados diferentes. Não existe cron/agendamento.
 
-Registos existentes pelo GesTISSER_ID são ignorados, nunca atualizados.
-Códigos existentes com outra chave, estados não mapeados, textos longos ou
-colunas incompatíveis bloqueiam o registo/operação sem truncar dados.
-A pré-visualização expira em 15 minutos e é consumida antes dos pedidos de escrita.
-Se houver resultado não confirmado, preparar novamente o mesmo intervalo;
-a chave única e a nova consulta evitam repetir criações já concluídas.
-O lote para no primeiro pedido de criação não confirmado.
+O conjunto de IDs é limitado ao maior ID existente no início da execução.
+Artigos criados posteriormente entram na próxima execução. Os valores são lidos
+novamente em cada lote; mudanças durante uma execução podem exigir nova execução.
 
-Campos enviados: GesTISSER_ID, Title, Descri_x00e7__x00e3_o, CodigoCliente,
-Cliente, Estado (Ativo=true, Inativo=false), DataAtualizacao (data UTC),
-NumeroDocumentos (contagem de documentos ativos como texto), EstadoSincronizacao.
-LinkGesTISSER não é preenchido neste piloto. Não copia documentos, não atualiza
-registos existentes e não ativa tarefas automáticas.
-Resultados e pré-visualização pertencem à sessão administrativa; não há histórico
-permanente de importações nesta entrega.
+GesTISSER_ID é a chave. Registos em falta são criados; existentes são comparados
+campo a campo e atualizados apenas quando necessário, com If-Match/ETag.
+Se um registo for alterado no SharePoint entre leitura e escrita, o lote pausa.
+Se um POST ficar sem confirmação, não é repetido cegamente: Retomar consulta
+novamente os registos para reconciliar pela chave única.
 
-Validação: PHP 7.0.33, seis testes aprovados; Graph simulado e SQLite sintético.
-Não foram usados os dados ou credenciais de produção nem executadas escritas reais.
+O GesTISSER é a origem dos campos mapeados, incluindo alterações de código.
+Campos fora do mapeamento são preservados. Não há apagamentos, cópia de ficheiros
+nem alterações de permissões. LinkGesTISSER não é preenchido nesta entrega.
+
+Campos: GesTISSER_ID, Title, Descri_x00e7__x00e3_o, CodigoCliente, Cliente,
+Estado (Ativo=true, Inativo=false), DataAtualizacao, NumeroDocumentos,
+EstadoSincronizacao. Textos acima do limite não são truncados; artigos com dados
+inválidos são assinalados e os restantes continuam. Após os corrigir, iniciar
+nova execução. A contagem de criados/atualizados pode classificar como iguais
+pedidos já concluídos cujo resultado se perdeu antes de guardar o progresso.
+
+Falhas de rede, conflitos ou limites HTTP da API pausam a execução. Aguardar e
+retomar após verificar a causa. Não alterar configurações de destino numa
+execução pendente: encerrar e iniciar outra para o destino correto.
+
+O teste de cinco continua apenas de criação; as atualizações pertencem ao envio
+completo. Pré-visualizações do teste expiram em 15 minutos.
+
+Validação: PHP 7.0.33; sete testes aprovados, incluindo 1600 artigos sintéticos,
+retoma, criação sem confirmação, updates por ID, conflito de ETag, pausa e erros.
+322 ficheiros PHP sem erros de sintaxe no checkout de validação.
+Graph simulado e SQLite sintético; nenhuma escrita real em produção.
