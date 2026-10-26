@@ -1,86 +1,77 @@
-GesTISSER — teste inicial e envio/atualização de todos os artigos
+GesTISSER — artigos e transferência documental para SharePoint
 
-Publicar em conjunto os SEIS ficheiros PHP do pacote, preservando os caminhos.
-Fazer primeiro cópia privada dos ficheiros anteriores. Preservar SQLite, uploads,
-configuração e segredo. Não existem migrações de esquema nem novas permissões.
-Requer PHP 7.0.33, cURL, ligação validada e GesTISSER_ID único e indexado.
+PUBLICAÇÃO
+Publicar em conjunto os OITO ficheiros PHP deste pacote, preservando os caminhos.
+Inclui ArticleDocument.php, dependência já existente e igual à versão main.
+Fazer cópia privada dos ficheiros anteriores. Preservar SQLite, uploads,
+configuração e segredo. Não há migrações nem novas permissões Microsoft 365.
+Requer PHP 7.0.33, cURL, ligação validada, GesTISSER_ID único/indexado e coluna
+DataUltimaProducao opcional do tipo Data (JSON de criação incluído no pacote).
 
-Em Administração > Integrações > SharePoint > secção 3:
-1. Usar a pré-visualização e teste de cinco artigos para conferir o mapeamento.
-2. Clicar Enviar/atualizar todos os artigos.
-3. Manter a página aberta. Os pequenos lotes avançam automaticamente, sem cliques
-   por lote. O progresso fica guardado na chave sharepoint.article_job.v1 de
-   app_settings (cursor, contagens e primeiros 100 erros, sem tokens ou payloads).
-4. Se fechar a página ou perder ligação, abrir novamente e clicar Retomar envio
-   completo. Pode Pausar ou Encerrar execução; os registos já enviados permanecem.
-5. Quando concluir, atualizar a página para consultar os detalhes dos bloqueios.
-6. Depois de alterar artigos no ERP, clicar novamente Enviar/atualizar todos para
-   comparar e enviar apenas os dados diferentes. Não existe cron/agendamento.
-
-O conjunto de IDs é limitado ao maior ID existente no início da execução.
-Artigos criados posteriormente entram na próxima execução. Os valores são lidos
-novamente em cada lote; mudanças durante uma execução podem exigir nova execução.
-
-GesTISSER_ID é a chave. Registos em falta são criados; existentes são comparados
-campo a campo e atualizados apenas quando necessário, com If-Match/ETag.
-Se um registo for alterado no SharePoint entre leitura e escrita, o lote pausa.
-Se um POST ficar sem confirmação, não é repetido cegamente: Retomar consulta
-novamente os registos para reconciliar pela chave única.
-
-O GesTISSER é a origem dos campos mapeados, incluindo alterações de código.
-Campos fora do mapeamento são preservados. Não há apagamentos, cópia de ficheiros
-nem alterações de permissões. LinkGesTISSER não é preenchido nesta entrega.
-
+ARTIGOS — secção 3
+O teste inicial de cinco continua disponível. Enviar/atualizar todos cria os
+artigos em falta e atualiza os campos diferentes por GesTISSER_ID. Preserva os
+restantes campos SharePoint e não apaga registos. Progresso persistido na chave
+sharepoint.article_job.v1 de app_settings. Retomar conserva o cursor.
 Campos: GesTISSER_ID, Title, Descri_x00e7__x00e3_o, CodigoCliente, Cliente,
-Estado (Ativo=true, Inativo=false), DataAtualizacao, NumeroDocumentos,
-EstadoSincronizacao, DataUltimaProducao. Textos acima do limite não são truncados; artigos com dados
-inválidos são assinalados e os restantes continuam. Após os corrigir, iniciar
-nova execução. A contagem de criados/atualizados pode classificar como iguais
-pedidos já concluídos cujo resultado se perdeu antes de guardar o progresso.
+Estado, DataAtualizacao, NumeroDocumentos, EstadoSincronizacao, DataUltimaProducao.
+A última produção usa operações terminadas com quantidade boa positiva e fechos
+de OF com produção positiva. Sem produção, fica vazia. Não é a data prevista.
+LinkGesTISSER continua a ser apresentado pela formatação da coluna já configurada.
 
-Falhas de rede, conflitos ou limites HTTP da API pausam a execução. Aguardar e
-retomar após verificar a causa. Não alterar configurações de destino numa
-execução pendente: encerrar e iniciar outra para o destino correto.
+DOCUMENTOS — secção 4 (novo)
+1. Depois de publicar, abrir Administração > Integrações > SharePoint.
+2. Na secção 4, clicar Enviar/verificar todos os documentos.
+3. Manter a página aberta; os lotes avançam automaticamente. Pausar/Retomar
+   permitem continuar após interrupções. Não é necessário repetir os artigos.
+4. Consultar os contadores e os detalhes dos documentos bloqueados.
+5. Abrir Documentos/Artigos/Maquetes/{ID_DO_ARTIGO} no SharePoint e conferir
+   os ficheiros enviados. Não aparecem no campo nativo Anexos da lista.
 
-O teste de cinco continua apenas de criação; as atualizações pertencem ao envio
-completo. Pré-visualizações do teste expiram em 15 minutos.
+Origem: documentos ativos de erp_product_documents, entity_type=finished_product,
+associados a artigos existentes, com ficheiro local dentro dos uploads permitidos.
+Formatos suportados: PDF, JPG/JPEG, PNG e WebP, até 20 MiB por ficheiro.
+Ficheiros ausentes, fora do armazenamento permitido, vazios, acima do limite ou
+em formatos não suportados são bloqueados e apresentados para revisão.
 
-Validação: PHP 7.0.33; nove testes aprovados, incluindo 1600 artigos sintéticos,
-retoma, criação sem confirmação, updates por ID, conflito de ETag, pausa e erros.
-325 ficheiros PHP sem erros de sintaxe no checkout de validação.
-Graph simulado e SQLite sintético; nenhuma escrita real em produção.
+Destino: biblioteca do Drive ID configurado, verificada contra o Site ID.
+As pastas Artigos/Maquetes/{ID_DO_ARTIGO} são criadas/reutilizadas automaticamente.
+Os nomes incluem ID_DOCUMENTO-SHA256-nome.pdf para evitar colisões.
+Conteúdo alterado cria um novo ficheiro com assinatura diferente; as cópias
+anteriores permanecem. Não substitui nem apaga ficheiros remotos.
+A cópia é feita a partir de snapshot temporário do ficheiro, sem modificar o ERP.
+Após upload, confirma ID, tamanho e ETag antes de registar a cópia como enviada.
 
-ÚLTIMA PRODUÇÃO
-Antes de publicar, criar na lista a coluna DataUltimaProducao do tipo Data
-e hora, formato só data (usar criar-coluna-ultima-producao.json no Graph Explorer
-com POST no endpoint /sites/{site_id}/lists/{list_id}/columns).
-A regra usa registos terminados com quantidade boa positiva e fechos de OF
-com produção positiva. Sem produção registada: vazio. Não é a data prevista.
-Depois de publicar, executar novamente Enviar/atualizar todos para preencher
-os registos existentes, sem os apagar. Encerrar uma execução antiga pendente
-antes de iniciar a nova, para também rever os IDs já processados.
+Em nova execução, cópias com checksum/ID/ETag já confirmados são ignoradas.
+Uma resposta de upload perdida é reconciliada pelo SHA-1 remoto, quando presente.
+Se existir cópia sem integridade confirmada, é bloqueada para revisão, sem ser
+sobrescrita. Alterações externas aos ficheiros não são apagadas ou substituídas.
+Progresso em sharepoint.document_job.v1; manifestos em sharepoint.document.v1.*,
+com IDs, checksums, tamanho e ETag. Sem tokens, segredos ou conteúdo dos ficheiros.
+Artigos e documentos têm execuções e contadores separados.
 
-DIAGNÓSTICO E RETOMA
-Publicar também app/Services/SharePointImportFailure.php (novo ficheiro).
-O progresso existente é preservado. Usar Retomar, sem encerrar a execução.
-A página mostra HTTP status, código Graph, request-id, endpoint lógico e artigo
-ou cursor da interrupção. Não guarda corpos remotos, tokens ou segredos.
-Erros de coluna indicam a coluna em falta/incompatível, incluindo DataUltimaProducao.
-Erros 429/503/504 ou de transporte têm até três tentativas automáticas com espera;
-Retry-After é respeitado. Sem resposta confirmada, retomar consulta a chave/ETag
-para reconciliar pedidos já concluídos antes de voltar a escrever.
-Após três tentativas falhadas, verificar o diagnóstico e retomar manualmente.
+NumeroDocumentos continua a ser a contagem no ERP. EstadoSincronizacao da linha
+refere-se aos campos do artigo; não é prova de cópia documental. Os contadores
+na secção 4 mostram enviados, confirmados e bloqueados.
+O JSON formatar-numero-documentos.json pode ser aplicado à coluna NumeroDocumentos
+no SharePoint para apresentar um link para a pasta. É apenas apresentação; não
+comprova que todos os documentos foram transferidos. GesTISSER_ID deve estar na vista.
+O JSON aponta para a biblioteca Documentos atual do site Tisser; rever se mudar de destino.
 
-PASTAS
-Foi criada a estrutura Documentos/Artigos/Maquetes no site raiz.
-A transferência dos ficheiros e criação automática das pastas por ID ainda não
-estão implementadas neste pacote. NumeroDocumentos continua a ser a contagem ERP.
+RETOMA E DIAGNÓSTICO
+Manter a página aberta; em caso de perda de ligação, recarregar e Retomar.
+Até três tentativas automáticas com espera em HTTP 429/503/504 e falhas transitórias.
+Erros mostram endpoint lógico, HTTP, código Graph, request-id e artigo/documento.
+Não encerra nem reinicia o progresso dos artigos quando inicia documentos.
+Depois de uma execução concluída, iniciar outra envia novos/alterados e revê iguais.
+Documentos criados depois do início entram na execução seguinte.
 
-CORREÇÃO DE PAGINAÇÃO
-Os nextLink Graph são agora validados por domínio e identidade de site/lista,
-aceitando IDs com vírgulas literais ou percent-encoded. O skiptoken é preservado
-sem reconstrução. O teste cobre a passagem de 200 para 201 registos e rejeita
-destinos externos, outra lista, caminhos de itens individuais e fragmentos.
-Publicar o pacote e usar Retomar; não apagar dados ou encerrar a execução.
-Erros locais restantes apresentam tipo de exceção, ficheiro e linha, sem mensagem
-remota arbitrária ou corpo da resposta.
+Não existe cron. Não são criadas permissões globais ou links públicos.
+A pasta usa as permissões existentes da biblioteca, sem concessões adicionais.
+
+VALIDAÇÃO
+PHP 7.0.33: dez testes aprovados, 327 ficheiros PHP sem erros de sintaxe.
+SQLite sintético e Graph simulado. Inclui ficheiros locais reais temporários,
+pastas por artigo, upload de bytes, tamanho/checksums, repetições, conteúdo
+alterado, resposta perdida, caminhos/symlinks externos e isolamento de execuções.
+Não foram usados os ficheiros ou segredos de produção pelo agente.

@@ -239,6 +239,48 @@ final class SharePointGraphClient
             });
         } finally { $this->token=''; }
     }
+    /** Drive operations restricted to Artigos/Maquetes in the configured library. */
+    public function withDocuments($secret,callable $operation)
+    {
+        return $this->withArticles($secret,function ($unused) use ($operation) {
+            $s=$this->settings;$base='https://graph.microsoft.com/v1.0/drives/'.rawurlencode($s['drive_id']);
+            $root=$this->request($base.'/root?$select=id,sharepointIds');
+            $data=json_decode((string)($root['body'] ?? ''),true);$ids=$data['sharepointIds'] ?? [];
+            $parts=explode(',',$s['site_id']);
+            if(($root['status'] ?? 0)!==200)throw new SharePointImportFailure('GET /drives/{driveId}/root',$root);
+            if(count($parts)!==3 || strcasecmp(trim($ids['siteId'] ?? '','{}'),$parts[1])!==0
+                || strcasecmp(trim($ids['webId'] ?? '','{}'),$parts[2])!==0)throw new RuntimeException('Documento: biblioteca não corresponde ao site configurado.');
+            return call_user_func($operation,function ($method,$path,$payload=null) use ($base) {
+                $valid=preg_match('~^/root:/Artigos(?:/Maquetes(?:/[1-9][0-9]*(?:/[A-Za-z0-9._-]+)?)?)?(?::/(?:children|content))?$~D',$path);
+                if(!$valid && !($method==='POST' && $path==='/root/children'))throw new RuntimeException('Documento: pedido fora da pasta autorizada.');
+                $folderPost=$method==='POST' && substr($path,-9)==='/children' && is_array($payload)
+                    && in_array($payload['name'] ?? '',['Artigos','Maquetes'],true);
+                if($method==='POST' && is_array($payload) && preg_match('~^/root:/Artigos/Maquetes:/children$~D',$path)
+                    && preg_match('/^[1-9][0-9]*$/D',(string)($payload['name'] ?? '')))$folderPost=true;
+                if($method==='GET' && strpos($path,':/content')===false && strpos($path,':/children')===false)$response=$this->request($base.$path);
+                elseif($folderPost || ($method==='PUT' && preg_match('~^/root:/Artigos/Maquetes/[1-9][0-9]*/[A-Za-z0-9._-]+:/content$~D',$path) && is_resource($payload))) {
+                    if($this->transport)$response=call_user_func($this->transport,$base.$path,$payload,$this->token,$method.'_DOCUMENT');
+                    else {
+                        $c=curl_init($base.$path);$headers=['Authorization: Bearer '.$this->token,'Accept: application/json'];$responseHeaders=[];
+                        $opts=[CURLOPT_RETURNTRANSFER=>true,CURLOPT_CONNECTTIMEOUT=>10,CURLOPT_TIMEOUT=>45,CURLOPT_FOLLOWLOCATION=>false,
+                            CURLOPT_SSL_VERIFYPEER=>true,CURLOPT_SSL_VERIFYHOST=>2,CURLOPT_PROTOCOLS=>CURLPROTO_HTTPS,
+                            CURLOPT_HEADERFUNCTION=>function($handle,$line)use(&$responseHeaders){$p=explode(':',$line,2);if(count($p)===2 && in_array(strtolower(trim($p[0])),['request-id','retry-after'],true))$responseHeaders[strtolower(trim($p[0]))]=trim($p[1]);return strlen($line);}];
+                        if($method==='PUT') {
+                            rewind($payload);$stat=fstat($payload);
+                            if($stat['size']<1 || $stat['size']>20971520)throw new RuntimeException('Documento: tamanho fora do limite de 20 MiB.');
+                            $headers[]='Content-Type: application/octet-stream';$headers[]='If-None-Match: *';
+                            $opts[CURLOPT_UPLOAD]=true;$opts[CURLOPT_INFILE]=$payload;$opts[CURLOPT_INFILESIZE]=$stat['size'];
+                        } else {$headers[]='Content-Type: application/json';$opts[CURLOPT_POST]=true;$opts[CURLOPT_POSTFIELDS]=json_encode($payload);}
+                        $opts[CURLOPT_HTTPHEADER]=$headers;curl_setopt_array($c,$opts);$body=curl_exec($c);$status=(int)curl_getinfo($c,CURLINFO_HTTP_CODE);curl_close($c);
+                        $response=['status'=>$status,'body'=>$body,'headers'=>$responseHeaders,'connection_error'=>$body===false];
+                    }
+                } else throw new RuntimeException('Documento: operação não autorizada.');
+                $data=json_decode((string)($response['body'] ?? ''),true);$status=(int)($response['status'] ?? 0);
+                if($status<200 || $status>=300 || !is_array($data))throw new SharePointImportFailure($method.' /drives/{driveId}/Artigos/Maquetes/{articleId}/{resource}',$response);
+                return $data;
+            });
+        },false);
+    }
     private function safeId($value)
     {
         return is_string($value) && preg_match('/^[0-9a-f-]{36}$/iD', $value) ? $value : null;

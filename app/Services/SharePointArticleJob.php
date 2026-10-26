@@ -5,7 +5,11 @@ final class SharePointArticleJob
 {
     private $pdo;
     private $key='sharepoint.article_job.v1';
-    public function __construct(PDO $pdo) { $this->pdo=$pdo; }
+    private $kind;
+    public function __construct(PDO $pdo,$kind='articles') {
+        if(!in_array($kind,['articles','documents'],true))throw new InvalidArgumentException('Tipo de execução inválido.');
+        $this->pdo=$pdo;$this->kind=$kind;if($kind==='documents')$this->key='sharepoint.document_job.v1';
+    }
     public function load()
     {
         $q=$this->pdo->prepare('SELECT setting_value FROM app_settings WHERE setting_key=?');$q->execute([$this->key]);
@@ -26,7 +30,8 @@ final class SharePointArticleJob
     {
         $old=$this->load();
         if (in_array($old['state'] ?? '',['running','paused'],true)) throw new RuntimeException('Existe uma execução pendente. Retome-a ou termine-a antes de iniciar outra.');
-        $stats=$this->pdo->query('SELECT COUNT(*) total,COALESCE(MAX(id),0) max_id FROM erp_finished_products')->fetch(PDO::FETCH_ASSOC);
+        $sql=$this->kind==='documents'?'SELECT COUNT(*) total,COALESCE(MAX(d.id),0) max_id FROM erp_product_documents d JOIN erp_finished_products a ON a.id=d.entity_id WHERE d.entity_type="finished_product" AND d.status="Ativo"':'SELECT COUNT(*) total,COALESCE(MAX(id),0) max_id FROM erp_finished_products';
+        $stats=$this->pdo->query($sql)->fetch(PDO::FETCH_ASSOC);
         return $this->save(['run'=>bin2hex(random_bytes(16)),'configuration'=>$configuration,'state'=>'running','cursor'=>0,
             'max_id'=>(int)$stats['max_id'],'total'=>(int)$stats['total'],'processed'=>0,'created'=>0,'updated'=>0,'unchanged'=>0,'blocked'=>0,'errors'=>[]]);
     }
@@ -63,7 +68,7 @@ final class SharePointArticleJob
             if (!$results) {$job['state']='complete'; return $this->save($job);}
             foreach ($results as $row) {
                 if (strpos($row['result'],'Não confirmado')===0) {
-                    $job['last_error']=array_merge($row['diagnostic'] ?? [],['article_id'=>$row['id'],'article_code'=>$row['code'],'at'=>gmdate('c')]);
+                    $job['last_error']=array_merge($row['diagnostic'] ?? [],[($this->kind==='documents'?'document_id':'article_id')=>$row['id'],($this->kind==='documents'?'document_label':'article_code')=>$row['code'],'at'=>gmdate('c')]);
                     $job['state']='paused';$job['message']='Pedido não confirmado. Retomar consulta a chave e o estado remoto antes de tentar de novo.'; break;
                 }
                 $job['cursor']=(int)$row['id'];++$job['processed'];

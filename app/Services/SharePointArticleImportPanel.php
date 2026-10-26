@@ -2,9 +2,12 @@
 /** Included after require_admin(); POST handling is called only after CSRF validation. */
 require_once __DIR__.'/SharePointArticleImport.php';
 require_once __DIR__.'/SharePointArticleJob.php';
+require_once __DIR__.'/SharePointDocumentSync.php';
 function gt_sp_article_action(PDO $pdo, SharePointIntegration $integration, $action)
 {
     if (!app_config('external_services_enabled',false)) throw new RuntimeException('Serviços externos desativados neste ambiente.');
+    $documents=strpos($action,'documents_job_')===0;
+    if($documents)$action=str_replace('documents_job_','articles_job_',$action);
     $settings=$integration->settings();
     $fingerprint=hash('sha256',json_encode($settings));
     if (strpos($action,'articles_job_')===0) {
@@ -12,23 +15,26 @@ function gt_sp_article_action(PDO $pdo, SharePointIntegration $integration, $act
         if (!$lock) throw new RuntimeException('Não foi possível bloquear a execução.');
         try {
             if (!flock($lock,LOCK_EX|LOCK_NB)) throw new RuntimeException('Outra operação está em curso. Aguarde e retome.');
-            $jobs=new SharePointArticleJob($pdo);$run=(string)($_POST['run'] ?? '');
+            $jobs=new SharePointArticleJob($pdo,$documents?'documents':'articles');$run=(string)($_POST['run'] ?? '');
             if ($action==='articles_job_start') {
                 $check=(new SharePointGraphClient($settings))->diagnose(SharePointClientSecret::read());
                 if (isset($check['error'])) throw new RuntimeException('Resolva os erros de TESTAR SHAREPOINT antes de iniciar.');
-                $job=$jobs->start($fingerprint);$_SESSION['sp_article_autorun']=true;
+                $job=$jobs->start($fingerprint);$_SESSION[$documents?'sp_document_autorun':'sp_article_autorun']=true;
             } elseif ($action==='articles_job_resume') {
-                $job=$jobs->resume($run,$fingerprint);$_SESSION['sp_article_autorun']=true;
+                $job=$jobs->resume($run,$fingerprint);$_SESSION[$documents?'sp_document_autorun':'sp_article_autorun']=true;
             } elseif ($action==='articles_job_cancel') $job=$jobs->cancel($run);
             elseif ($action==='articles_job_pause') $job=$jobs->pause($run,$fingerprint);
             elseif ($action==='articles_job_step') {
-                $job=$jobs->step($run,$fingerprint,function ($cursor,$maxId) use ($pdo,$settings) {
+                $job=$jobs->step($run,$fingerprint,function ($cursor,$maxId) use ($pdo,$settings,$documents) {
+                    if($documents) return (new SharePointGraphClient($settings))->withDocuments(SharePointClientSecret::read(),function($api)use($pdo,$settings,$cursor,$maxId){
+                        return (new SharePointDocumentSync($pdo,$api,app_config('paths.root'),$settings['drive_id']))->batch($cursor,$maxId);
+                    });
                     return (new SharePointGraphClient($settings))->withArticles(SharePointClientSecret::read(),function ($api) use ($pdo,$cursor,$maxId) {
                         return (new SharePointArticleImport($pdo,$api))->syncBatch($cursor,$maxId);
                     },false);
                 });
             } else throw new RuntimeException('Ação inválida.');
-            $_SESSION['sp_article_job']=$job;return $job;
+            $_SESSION[$documents?'sp_document_job':'sp_article_job']=$job;return $job;
         } finally { flock($lock,LOCK_UN);fclose($lock); }
     }
     if ($action==='articles_preview') {
@@ -127,5 +133,55 @@ function gt_sp_article_panel(PDO $pdo)
 <?php endif; ?>
 <?php if ($results): ?><h3 class="h6">Resultado do último lote nesta sessão</h3><ul>
 <?php foreach ($results as $row): ?><li><?=h($row['code'])?> (ID <?=h((string)$row['id'])?>): <?=h($row['result'])?></li><?php endforeach; ?></ul><?php endif; ?>
+<?php
+}
+
+function gt_sp_document_panel(PDO $pdo)
+{
+    $job=(new SharePointArticleJob($pdo,'documents'))->load();
+    $autorun=!empty($_SESSION['sp_document_autorun']);unset($_SESSION['sp_document_autorun']);
+    ?>
+<h2 class="h5">4. Envio dos documentos para Artigos/Maquetes</h2>
+<p>Envia documentos ativos PDF/JPG/PNG/WebP até 20 MiB para a biblioteca configurada, em Artigos/Maquetes/ID_DO_ARTIGO. Os nomes incluem o ID do documento e o SHA-256 para evitar colisões. Conteúdo alterado gera um novo ficheiro; versões anteriores são preservadas, sem apagar ou substituir ficheiros remotos.</p>
+<p>Este envio é independente dos artigos e não cria anexos nativos na lista. NumeroDocumentos é a contagem no ERP; a contagem de enviados/confirmados aparece abaixo. Se já existir uma cópia sem integridade confirmada, o documento fica bloqueado para revisão.</p>
+<form id="sp-document-job-form" method="post" action="integrations.php?action=sharepoint#document-import" class="mb-3">
+<?=csrf_input()?><input type="hidden" name="run" value="<?=h($job['run'] ?? '')?>">
+<?php if (in_array($job['state'] ?? '',['running','paused'],true)): ?>
+<button class="btn btn-primary" name="action" value="documents_job_resume">Retomar documentos</button>
+<button class="btn btn-outline-secondary" name="action" value="documents_job_pause">Pausar</button>
+<button class="btn btn-outline-secondary" name="action" value="documents_job_cancel">Encerrar execução</button>
+<?php else: ?><button class="btn btn-primary" name="action" value="documents_job_start">Enviar/verificar todos os documentos</button><?php endif; ?>
+</form>
+<p>O envio completo avança automaticamente enquanto esta página estiver aberta. Se fechar a página, volte e clique em Retomar. Pode voltar a executar depois para verificar os ficheiros e enviar os documentos novos ou alterados.</p>
+<div id="sp-document-job-status" role="status" aria-live="polite"><?php if ($job): ?><?=h('Estado: '.$job['state'].' · Processados: '.$job['processed'].' / '.$job['total'].' · Enviados: '.$job['created'].' · Atualizados: '.$job['updated'].' · Confirmados: '.$job['unchanged'].' · Bloqueados: '.$job['blocked'])?><?php endif; ?></div>
+<?php if (!empty($job['message'])): ?><p><?=h($job['message'])?></p><?php endif; ?>
+<?php if (!empty($job['last_error'])): ?><div class="alert alert-warning"><strong>Diagnóstico da última interrupção</strong><dl>
+<?php foreach ($job['last_error'] as $field=>$value): ?><dt><?=h($field)?></dt><dd><?=h(is_bool($value)?($value?'Sim':'Não'):(string)($value ?? '—'))?></dd><?php endforeach; ?></dl>
+<p>HTTP 429/503/504 ou falha de rede: retoma com espera e reconciliação. HTTP 401/403: verificar autenticação e concessão ao site. HTTP 412: o registo mudou no SharePoint; retomar relê o ETag. Verifique o armazenamento local, o formato/tamanho do documento e a biblioteca configurada.</p></div><?php endif; ?>
+<?php if (!empty($job['errors'])): ?><details><summary>Documentos bloqueados (primeiros 100)</summary><ul><?php foreach ($job['errors'] as $item): ?><li><?=h($item['code'].' ('.$item['id'].'): '.$item['error'])?></li><?php endforeach; ?></ul></details><?php endif; ?>
+<?php if ($autorun && ($job['state'] ?? '')==='running'): ?>
+<script>
+(function () {
+    var form=document.getElementById('sp-document-job-form'), status=document.getElementById('sp-document-job-status');
+    async function step() {
+        try {
+            var data=new FormData(form);data.set('action','documents_job_step');
+            var response=await fetch('integrations.php?action=sharepoint',{method:'POST',body:data,credentials:'same-origin'});
+            var job=await response.json();
+            if(!response.ok || job.error) throw new Error(job.error || 'Pedido interrompido');
+            status.textContent='Estado: '+job.state+' · Processados: '+job.processed+' / '+job.total+' · Enviados: '+job.created+' · Atualizados: '+job.updated+' · Confirmados: '+job.unchanged+' · Bloqueados: '+job.blocked;
+            if(job.state==='running')setTimeout(step,1000);
+            else if(job.state==='paused' && job.retry_at) {
+                var wait=Math.max(1,job.retry_at-Math.floor(Date.now()/1000));
+                status.textContent+=' · Espera automática: '+wait+' segundos.';
+                setTimeout(step,wait*1000);
+            }
+            else {status.textContent+=' · '+(job.message || 'Execução terminada.'); if(job.last_error)status.textContent+=' · Diagnóstico: '+JSON.stringify(job.last_error); status.textContent+=' · Atualize a página para consultar os detalhes.';}
+        } catch(e) {status.textContent+=' · '+e.message+' · Atualize a página e clique em Retomar.';}
+    }
+    step();
+})();
+</script>
+<?php endif; ?>
 <?php
 }

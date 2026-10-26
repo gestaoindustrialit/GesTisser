@@ -1,0 +1,14 @@
+{
+  "$schema": "https://developer.microsoft.com/json-schemas/sp/v2/column-formatting.schema.json",
+  "elmType": "a",
+  "txtContent": "='📁 ' + @currentField",
+  "attributes": {
+    "href": "='https://tisserpt.sharepoint.com/Documentos%20Partilhados/Artigos/Maquetes/' + [$GesTISSER_ID]",
+    "target": "_blank",
+    "title": "Abrir pasta documental do artigo; a contagem refere-se ao ERP"
+  },
+  "style": {
+    "display": "=if([$GesTISSER_ID] == '', 'none', 'inline-block')",
+    "text-decoration": "none"
+  }
+}
