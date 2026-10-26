@@ -172,6 +172,42 @@ final class SharePointGraphClient
         curl_close($c);
         return ['status'=>$status, 'body'=>$body === false ? '' : $body, 'headers'=>$headers, 'connection_error'=>$body === false];
     }
+    /** Scoped list connection for the admin-only, CSRF-protected manual pilot. */
+    public function withArticles($secret, callable $operation)
+    {
+        $check=$this->diagnose($secret);
+        if (isset($check['error'])) throw new RuntimeException('Execute TESTAR SHAREPOINT e resolva os erros antes de importar.');
+        try {
+            $s=$this->settings;
+            $response=$this->request('https://login.microsoftonline.com/'.rawurlencode($s['tenant_id']).'/oauth2/v2.0/token',
+                ['client_id'=>$s['client_id'],'client_secret'=>$secret,'scope'=>'https://graph.microsoft.com/.default','grant_type'=>'client_credentials']);
+            $auth=json_decode($response['body'] ?? '',true);
+            if (($response['status'] ?? 0)!==200 || empty($auth['access_token'])) throw new RuntimeException('Falha OAuth2 na preparação.');
+            $this->token=$auth['access_token']; unset($auth,$response);
+            $base='https://graph.microsoft.com/v1.0/sites/'.rawurlencode($s['site_id']).'/lists/'.rawurlencode($s['list_id']);
+            return call_user_func($operation,function ($method,$path,$payload=null) use ($base) {
+                if (strpos($path,$base)===0) $path=substr($path,strlen($base));
+                if ($method==='GET' && preg_match('~^/(columns|items)([?][^\r\n#]*)?$~D',$path)) {
+                    $response=$this->request($base.$path);
+                } elseif ($method==='POST' && $path==='/items' && is_array($payload)) {
+                    if ($this->transport) $response=call_user_func($this->transport,$base.$path,$payload,$this->token,'POST_JSON');
+                    else {
+                        $c=curl_init($base.$path); $headers=[];
+                        curl_setopt_array($c,[CURLOPT_POST=>true,CURLOPT_POSTFIELDS=>json_encode($payload),CURLOPT_RETURNTRANSFER=>true,
+                            CURLOPT_HTTPHEADER=>['Authorization: Bearer '.$this->token,'Content-Type: application/json','Accept: application/json'],
+                            CURLOPT_CONNECTTIMEOUT=>10,CURLOPT_TIMEOUT=>30,CURLOPT_FOLLOWLOCATION=>false,
+                            CURLOPT_SSL_VERIFYPEER=>true,CURLOPT_SSL_VERIFYHOST=>2,CURLOPT_PROTOCOLS=>CURLPROTO_HTTPS]);
+                        $body=curl_exec($c); $status=(int)curl_getinfo($c,CURLINFO_HTTP_CODE); curl_close($c);
+                        $response=['status'=>$status,'body'=>$body];
+                    }
+                } else throw new RuntimeException('Pedido fora do âmbito da importação.');
+                $data=json_decode((string)($response['body'] ?? ''),true);
+                $status=(int)($response['status'] ?? 0);
+                if ($status<200 || $status>=300 || !is_array($data)) throw new RuntimeException('Pedido de importação falhou (HTTP '.$status.').');
+                return $data;
+            });
+        } finally { $this->token=''; }
+    }
     private function safeId($value)
     {
         return is_string($value) && preg_match('/^[0-9a-f-]{36}$/iD', $value) ? $value : null;

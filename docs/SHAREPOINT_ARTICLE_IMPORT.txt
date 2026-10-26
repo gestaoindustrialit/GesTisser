@@ -1,0 +1,33 @@
+GesTISSER — importação manual de artigos para SharePoint
+
+Publicar em conjunto os quatro ficheiros PHP deste pacote, preservando os caminhos.
+Fazer uma cópia privada dos ficheiros anteriores para reversão.
+Não substituir SQLite, uploads, configuração ou segredo. Não existem migrações.
+Requer PHP 7.0.33, cURL, configuração SharePoint já validada e a coluna de texto
+GesTISSER_ID única e indexada. Não altera permissões Microsoft 365.
+
+Em Administração > Integrações > SharePoint, secção 3:
+1. Preparar pré-visualização (ID superior a 0 para começar).
+2. Rever os campos e mensagens. Até cinco artigos ordenados por ID.
+3. Importar os artigos assinalados para criar.
+4. Conferir os resultados e os registos na lista SharePoint.
+Para o próximo lote, usar o último ID apresentado na pré-visualização.
+
+Registos existentes pelo GesTISSER_ID são ignorados, nunca atualizados.
+Códigos existentes com outra chave, estados não mapeados, textos longos ou
+colunas incompatíveis bloqueiam o registo/operação sem truncar dados.
+A pré-visualização expira em 15 minutos e é consumida antes dos pedidos de escrita.
+Se houver resultado não confirmado, preparar novamente o mesmo intervalo;
+a chave única e a nova consulta evitam repetir criações já concluídas.
+O lote para no primeiro pedido de criação não confirmado.
+
+Campos enviados: GesTISSER_ID, Title, Descri_x00e7__x00e3_o, CodigoCliente,
+Cliente, Estado (Ativo=true, Inativo=false), DataAtualizacao (data UTC),
+NumeroDocumentos (contagem de documentos ativos como texto), EstadoSincronizacao.
+LinkGesTISSER não é preenchido neste piloto. Não copia documentos, não atualiza
+registos existentes e não ativa tarefas automáticas.
+Resultados e pré-visualização pertencem à sessão administrativa; não há histórico
+permanente de importações nesta entrega.
+
+Validação: PHP 7.0.33, seis testes aprovados; Graph simulado e SQLite sintético.
+Não foram usados os dados ou credenciais de produção nem executadas escritas reais.
