@@ -186,10 +186,25 @@ final class SharePointGraphClient
             if (($response['status'] ?? 0)!==200 || empty($auth['access_token'])) throw new SharePointImportFailure('POST /{tenantId}/oauth2/v2.0/token',$response);
             $this->token=$auth['access_token']; unset($auth,$response);
             $base='https://graph.microsoft.com/v1.0/sites/'.rawurlencode($s['site_id']).'/lists/'.rawurlencode($s['list_id']);
-            return call_user_func($operation,function ($method,$path,$payload=null) use ($base) {
-                if (strpos($path,$base)===0) $path=substr($path,strlen($base));
-                if ($method==='GET' && preg_match('~^/(columns|items)([?][^\r\n#]*)?$~D',$path)) {
-                    $response=$this->request($base.$path);
+            return call_user_func($operation,function ($method,$path,$payload=null) use ($base,$s) {
+                $readUrl=null;
+                if ($method==='GET' && preg_match('~^https?://~i',$path)) {
+                    $next=parse_url($path);
+                    $expected='/v1.0/sites/'.$s['site_id'].'/lists/'.$s['list_id'];
+                    $decoded=rawurldecode($next['path'] ?? '');
+                    if (!$next || ($next['scheme'] ?? '')!=='https' || strcasecmp($next['host'] ?? '','graph.microsoft.com')!==0
+                        || isset($next['user']) || isset($next['pass']) || isset($next['port']) || isset($next['fragment'])
+                        || strpbrk($path,"\r\n")!==false
+                        || (!in_array(strtolower($decoded),[strtolower($expected.'/items'),strtolower($expected.'/columns')],true))) {
+                        throw new RuntimeException('Paginação Graph rejeitada: destino fora do site/lista configurados.');
+                    }
+                    // Graph may return literal commas while configured IDs are percent-encoded.
+                    // Validate the resource identity, preserve the opaque nextLink/query exactly.
+                    $readUrl=$path;
+                    $path=substr($decoded,strlen($expected));
+                }
+                if ($method==='GET' && ($readUrl!==null || preg_match('~^/(columns|items)([?][^\r\n#]*)?$~D',$path))) {
+                    $response=$this->request($readUrl ?? $base.$path);
                 } elseif (is_array($payload) && (($method==='POST' && $path==='/items') || ($method==='PATCH' && preg_match('~^/items/[0-9]+/fields$~D',$path) && !empty($payload['etag'])))) {
                     if ($this->transport) $response=call_user_func($this->transport,$base.$path,$payload,$this->token,$method.'_JSON');
                     else {

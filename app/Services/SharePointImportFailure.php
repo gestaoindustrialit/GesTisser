@@ -24,7 +24,7 @@ final class SharePointImportFailure extends RuntimeException
         if($e instanceof self)return $e->diagnostic();
         if($e instanceof PDOException)return ['local_error'=>'Erro SQLite. Verifique disponibilidade e bloqueios da base de dados.'];
         $message=$e->getMessage();
-        if($e instanceof RuntimeException && preg_match('/^(Coluna incompatível:|Coluna obrigatória sem mapeamento:|GesTISSER_ID deve|Paginação excedeu|Coleção SharePoint inválida|Lista excedeu|Pré-visualização expirada|Os dados locais, colunas|Confirmação de criação incompleta)/u',$message))return ['local_error'=>substr($message,0,240)];
-        return ['local_error'=>'Falha local ou de transporte; nenhuma resposta sensível foi guardada.'];
+        if($e instanceof RuntimeException && preg_match('/^(Paginação Graph rejeitada:|Pedido fora do âmbito da importação\.|ETag inválido\.|Coluna incompatível:|Coluna obrigatória sem mapeamento:|GesTISSER_ID deve|Paginação excedeu|Coleção SharePoint inválida|Lista excedeu|Pré-visualização expirada|Os dados locais, colunas|Confirmação de criação incompleta)/u',$message))return ['local_error'=>substr($message,0,240)];
+        return ['local_error'=>'Falha local ou de transporte; nenhuma resposta sensível foi guardada.','exception_type'=>get_class($e),'source'=>basename($e->getFile()),'source_line'=>$e->getLine()];
     }
 }

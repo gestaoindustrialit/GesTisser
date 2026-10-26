@@ -45,9 +45,9 @@ execução pendente: encerrar e iniciar outra para o destino correto.
 O teste de cinco continua apenas de criação; as atualizações pertencem ao envio
 completo. Pré-visualizações do teste expiram em 15 minutos.
 
-Validação: PHP 7.0.33; oito testes aprovados, incluindo 1600 artigos sintéticos,
+Validação: PHP 7.0.33; nove testes aprovados, incluindo 1600 artigos sintéticos,
 retoma, criação sem confirmação, updates por ID, conflito de ETag, pausa e erros.
-324 ficheiros PHP sem erros de sintaxe no checkout de validação.
+325 ficheiros PHP sem erros de sintaxe no checkout de validação.
 Graph simulado e SQLite sintético; nenhuma escrita real em produção.
 
 ÚLTIMA PRODUÇÃO
@@ -75,3 +75,12 @@ PASTAS
 Foi criada a estrutura Documentos/Artigos/Maquetes no site raiz.
 A transferência dos ficheiros e criação automática das pastas por ID ainda não
 estão implementadas neste pacote. NumeroDocumentos continua a ser a contagem ERP.
+
+CORREÇÃO DE PAGINAÇÃO
+Os nextLink Graph são agora validados por domínio e identidade de site/lista,
+aceitando IDs com vírgulas literais ou percent-encoded. O skiptoken é preservado
+sem reconstrução. O teste cobre a passagem de 200 para 201 registos e rejeita
+destinos externos, outra lista, caminhos de itens individuais e fragmentos.
+Publicar o pacote e usar Retomar; não apagar dados ou encerrar a execução.
+Erros locais restantes apresentam tipo de exceção, ficheiro e linha, sem mensagem
+remota arbitrária ou corpo da resposta.
