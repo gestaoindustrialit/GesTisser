@@ -13,7 +13,9 @@ $service=new ProductLabelService($pdo);
 try{$data=$service->data((int)$orderId,(int)$operationId);$values=$service->validatePrint($_POST);$barcode=Code128Barcode::svg((string)$data['lot']);}
 catch(InvalidArgumentException $e){http_response_code(422);exit(h($e->getMessage()));}
 catch(RuntimeException $e){http_response_code(403);exit(h($e->getMessage()));}
-$autoPrint=($_POST['mode']??'preview')==='print';if($autoPrint)$service->audit($data,$values,(int)$user['id']);
+$autoPrint=($_POST['mode']??'preview')==='print';
+require __DIR__.'/includes/product_central_print.php';
+if($autoPrint)$service->audit($data,$values,(int)$user['id']);
 $logo=trim((string)app_setting($pdo,'logo_report_dark',''));if($logo==='')$logo=trim((string)app_setting($pdo,'logo_navbar_light',''));
 $company=trim((string)app_setting($pdo,'company_name','TISSER'))?:'TISSER';
 function product_label_number($number):string{return number_format((float)$number,fmod((float)$number,1.0)===0.0?0:2,',',' ');}

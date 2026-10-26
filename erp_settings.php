@@ -14,6 +14,7 @@ if (!is_admin($pdo, $userId)) {
 gt_erp_run_phase1_migrations($pdo);
 $flashSuccess = null;
 $flashError = null;
+require_once __DIR__.'/includes/printing_admin_actions.php';
 $administrativeCostFields = [
     'materia_prima' => 'Matéria-prima', 'tintas' => 'Tintas', 'diluente' => 'Diluente',
     'acelerador' => 'Acelerador', 'retardador' => 'Retardador', 'outro' => 'Outro',
@@ -21,7 +22,7 @@ $administrativeCostFields = [
     'energia' => 'Energia', 'embalagem' => 'Embalagem', 'caixas' => 'Caixas', 'transporte' => 'Transporte',
 ];
 
-if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && !isset($_POST['print_action'])) {
     if (!validate_csrf_or_abort(false)) {
         $flashError = 'Pedido inválido. Atualize a página e tente novamente.';
     } else {
@@ -126,8 +127,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 else{$pdo->prepare('INSERT INTO erp_printers(name,network_uri,location,driver_name,is_active) VALUES (?,?,?,?,?)')->execute($values);$id=(int)$pdo->lastInsertId();}
                 gt_erp_audit($pdo,$userId,(int)($_POST['id']??0)?'update':'create','erp_printers',$id,[],['name'=>$name,'network_uri'=>$uri]);$flashSuccess='Impressora de rede guardada com sucesso.';
             } elseif ($action === 'delete_printer') {
-                $id=(int)($_POST['id']??0);$used=$pdo->prepare('SELECT COUNT(*) FROM erp_work_centers WHERE default_printer_id=?');$used->execute([$id]);if((int)$used->fetchColumn())throw new DomainException('Não é possível remover uma impressora associada a um centro de trabalho.');
-                $pdo->prepare('DELETE FROM erp_printers WHERE id=?')->execute([$id]);gt_erp_audit($pdo,$userId,'delete','erp_printers',$id,[],[]);$flashSuccess='Impressora removida com sucesso.';
+                $id=(int)($_POST['id']??0);
+                $pdo->prepare('UPDATE erp_printers SET is_active=0 WHERE id=?')->execute([$id]);gt_erp_audit($pdo,$userId,'deactivate','erp_printers',$id,[],[]);$flashSuccess='Impressora desativada; configuração preservada.';
             } elseif ($action === 'save_operation_sector') {
                 $id=(int)($_POST['id']??0);$code=strtoupper(trim((string)($_POST['code']??'')));$name=trim((string)($_POST['name']??''));
                 $centerType=(string)($_POST['center_type']??'administrative');$machineId=(int)($_POST['machine_id']??0);$printerId=(int)($_POST['default_printer_id']??0);$capacity=(int)($_POST['daily_capacity_minutes']??480);$efficiency=(float)str_replace(',','.',(string)($_POST['efficiency_percent']??100));
@@ -340,7 +341,7 @@ require __DIR__ . '/partials/header.php';
         </div></section>
     </div>
     <div class="col-12">
-        <section class="card shadow-sm soft-card" aria-labelledby="printers-title"><div class="card-body p-4"><h2 class="h5" id="printers-title">Impressoras de rede</h2><p class="text-muted">Configure os destinos disponíveis para documentos e etiquetas em cada posto.</p>
+        <section class="card shadow-sm soft-card" aria-labelledby="printers-title"><div class="card-body p-4"><h2 class="h5" id="printers-title">Impressoras de rede</h2><?php include __DIR__.'/includes/printing_admin_panel.php'; ?><p class="text-muted">Configure os destinos disponíveis para documentos e etiquetas em cada posto.</p>
         <?php foreach($printers as$p):?><form method="post" class="row g-2 align-items-end mb-2"><?=csrf_input()?><input type="hidden" name="action" value="save_printer"><input type="hidden" name="id" value="<?=$p['id']?>"><div class="col-md-3"><label class="form-label">Nome</label><input class="form-control" name="name" required value="<?=h($p['name'])?>"></div><div class="col-md-3"><label class="form-label">Endereço de rede</label><input class="form-control" name="network_uri" required value="<?=h($p['network_uri'])?>"></div><div class="col-md-2"><label class="form-label">Local</label><input class="form-control" name="location" value="<?=h((string)$p['location'])?>"></div><div class="col-md-2"><label class="form-label">Controlador</label><input class="form-control" name="driver_name" value="<?=h((string)$p['driver_name'])?>"></div><div class="col"><input type="hidden" name="is_active" value="0"><label class="form-check d-inline-block"><input class="form-check-input" type="checkbox" name="is_active" value="1" <?=$p['is_active']?'checked':''?>> Ativa</label><button class="btn btn-outline-primary"><i class="bi bi-check-lg"></i></button> <button class="btn btn-outline-danger" name="action" value="delete_printer" formnovalidate><i class="bi bi-trash"></i></button></div></form><?php endforeach;?>
         <form method="post" class="row g-2 align-items-end mt-3 pt-3 border-top"><?=csrf_input()?><input type="hidden" name="action" value="save_printer"><input type="hidden" name="is_active" value="1"><div class="col-md-3"><label class="form-label">Nome</label><input class="form-control" name="name" required placeholder="Etiquetas produção"></div><div class="col-md-3"><label class="form-label">Endereço de rede</label><input class="form-control" name="network_uri" required placeholder="ipp://192.168.1.20/ipp/print"></div><div class="col-md-2"><label class="form-label">Local</label><input class="form-control" name="location"></div><div class="col-md-2"><label class="form-label">Controlador</label><input class="form-control" name="driver_name"></div><div class="col"><button class="btn btn-primary"><i class="bi bi-plus-lg me-1"></i>Adicionar</button></div></form>
         </div></section>

@@ -1,0 +1,30 @@
+name: Windows print agent
+on:
+  push:
+    paths:
+      - 'windows-print-agent/**'
+      - '.github/workflows/windows-print-agent.yml'
+  workflow_dispatch:
+jobs:
+  build:
+    runs-on: windows-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - name: Parse PowerShell and compile .NET Framework service
+        shell: powershell
+        run: |
+          $ErrorActionPreference='Stop'
+          Get-ChildItem windows-print-agent/*.ps1 | ForEach-Object {
+            $tokens=$null; $errors=$null
+            [System.Management.Automation.Language.Parser]::ParseFile($_.FullName,[ref]$tokens,[ref]$errors) | Out-Null
+            if($errors.Count){throw ($errors | Out-String)}
+          }
+          $compiler="$env:WINDIR\Microsoft.NET\Framework64\v4.0.30319\csc.exe"
+          & $compiler /nologo /target:exe /out:windows-print-agent/GesTisserPrintAgent.exe /reference:System.ServiceProcess.dll /reference:System.Web.Extensions.dll /reference:System.Drawing.dll /reference:System.Security.dll windows-print-agent/GesTisserPrintAgent.cs
+          if($LASTEXITCODE -ne 0){throw 'Compilation failed'}
+      - uses: actions/upload-artifact@v4
+        with:
+          name: GesTisserPrintAgent-Windows10
+          path: windows-print-agent/

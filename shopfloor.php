@@ -1,4 +1,5 @@
 <?php
+require_once __DIR__.'/app/Services/CentralPrinting.php';
 require_once __DIR__ . '/helpers.php';
 require_once __DIR__ . '/app/Services/ShopfloorAttachment.php';
 require_once __DIR__ . '/article_document.php';
@@ -1232,7 +1233,7 @@ require __DIR__ . '/partials/header.php';
     <?php if ($selectedOf): ?>
     <div class="modal fade" id="productGoodsLabelModal" tabindex="-1" aria-labelledby="productGoodsLabelTitle" aria-hidden="true">
       <div class="modal-dialog modal-dialog-centered"><div class="modal-content"><form method="post" action="product_label.php" target="_blank">
-        <?= csrf_input() ?><input type="hidden" name="production_order_id" value="<?= (int)$selectedOf['id'] ?>"><input type="hidden" name="operation_id" id="productLabelOperationId">
+        <?= csrf_input() ?><input type="hidden" name="production_order_id" value="<?= (int)$selectedOf['id'] ?>"><input type="hidden" name="central_request_key" value="<?=h(bin2hex(random_bytes(16)))?>"><input type="hidden" name="operation_id" id="productLabelOperationId">
         <div class="modal-header"><div><span class="small text-success fw-bold text-uppercase">Produção</span><h2 class="modal-title fs-5" id="productGoodsLabelTitle">Etiqueta de produto</h2></div><button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Fechar"></button></div>
         <div class="modal-body"><dl class="row small mb-3"><dt class="col-3">Cliente</dt><dd class="col-9 fw-semibold"><?= h((string)$selectedOf['customer_name']) ?><br><span class="text-secondary"><?= h((string)$selectedOf['customer_locality']) ?></span></dd><dt class="col-3">Produto</dt><dd class="col-9 fw-semibold text-break"><?= h((string)$selectedOf['product_code']) ?></dd><dt class="col-3">Descrição</dt><dd class="col-9"><?= h((string)$selectedOf['product_description']) ?></dd><dt class="col-3">Lote</dt><dd class="col-9 fw-semibold"><?= h((string)$selectedOf['lot']) ?></dd></dl>
           <div class="row g-3"><div class="col-7"><label class="form-label fw-semibold" for="productLabelQuantity">Quantidade</label><input class="form-control form-control-lg" id="productLabelQuantity" name="quantity" type="number" inputmode="decimal" min="0.001" step="0.001" required></div><div class="col-5"><label class="form-label fw-semibold" for="productLabelDate">Data</label><input class="form-control form-control-lg" id="productLabelDate" name="label_date" type="date" value="<?= date('Y-m-d') ?>" required></div><div class="col-12"><label class="form-label fw-semibold" for="productLabelCopies">N.º de etiquetas</label><div class="input-group input-group-lg"><button class="btn btn-outline-secondary" type="button" data-copy-step="-1" aria-label="Retirar uma etiqueta">−</button><input class="form-control text-center" id="productLabelCopies" name="copies" type="number" inputmode="numeric" min="1" max="99" value="1" required><button class="btn btn-outline-secondary" type="button" data-copy-step="1" aria-label="Adicionar uma etiqueta">+</button></div></div></div>
@@ -2251,7 +2252,7 @@ document.querySelectorAll('[id^="materialConsumptionModal-"]').forEach((modal) =
         try{const response=await fetch(`shopfloor.php?action=lookup_stock_unit&unit_type=${encodeURIComponent(type)}&label_number=${encodeURIComponent(label)}`);const data=await response.json();if(token!==request)return;if(!response.ok||!data.ok)throw new Error(data.message||'Etiqueta não encontrada.');
             const u=data.unit;result.textContent=`${u.article_code} · ${u.description} — ${u.weight_kg} kg${type==='ROLL'?' · '+u.metres+' m':''} · ${u.status}`;
             form.elements.expected_weight.value=u.weight_kg;form.elements.expected_metres.value=u.metres||0;form.elements.weight_kg.value=u.weight_kg;form.elements.metres.value=u.metres||0;form.elements.metres.required=type==='ROLL';form.querySelector('[data-label-metres]').hidden=type!=='ROLL';
-            form.querySelector('[data-label-print]').href=(type==='ROLL'?'raw_material_roll_label.php?printed_label_id=':'raw_material_ink_label.php?label_id=')+encodeURIComponent(u.id)+'&raw_material_id='+encodeURIComponent(u.raw_material_id)+'&print=1';actions.hidden=false;
+            form.querySelector('[data-label-print]').href=<?= (new CentralPrinting($pdo))->enabled() ? "true" : "false" ?> ? ('print_label.php?kind='+(type==='ROLL'?'roll':'ink')+'&id='+encodeURIComponent(u.id)) : (type==='ROLL'?'raw_material_roll_label.php?printed_label_id=':'raw_material_ink_label.php?label_id=')+encodeURIComponent(u.id)+'&raw_material_id='+encodeURIComponent(u.raw_material_id)+'&print=1';actions.hidden=false;
             toggle.disabled=['IN_USE','BLOCKED','CONSUMED'].includes(u.status);
         }catch(error){if(token===request)result.textContent=error.message;}
     };
@@ -2473,7 +2474,7 @@ document.querySelectorAll('[id^="materialConsumptionModal-"]').forEach((modal) =
 (() => {
     const modal=document.getElementById('productGoodsLabelModal');
     if(!modal)return;
-    modal.addEventListener('show.bs.modal',(event)=>{const button=event.relatedTarget;document.getElementById('productLabelOperationId').value=button?.dataset.productLabelOperation||'';document.getElementById('productLabelQuantity').value=button?.dataset.productLabelQuantity||'';});
+    modal.addEventListener('show.bs.modal',(event)=>{if(window.crypto?.getRandomValues){const bytes=crypto.getRandomValues(new Uint8Array(16));modal.querySelector('[name=central_request_key]').value=Array.from(bytes,b=>b.toString(16).padStart(2,'0')).join('');}const button=event.relatedTarget;document.getElementById('productLabelOperationId').value=button?.dataset.productLabelOperation||'';document.getElementById('productLabelQuantity').value=button?.dataset.productLabelQuantity||'';});
     modal.querySelectorAll('[data-copy-step]').forEach((button)=>button.addEventListener('click',()=>{const input=document.getElementById('productLabelCopies');input.value=Math.max(1,Math.min(99,Number(input.value||1)+Number(button.dataset.copyStep)));}));
 })();
 </script>

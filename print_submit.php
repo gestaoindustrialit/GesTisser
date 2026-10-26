@@ -1,0 +1,14 @@
+<?php
+require_once __DIR__.'/helpers.php';require_once __DIR__.'/app/Services/CentralPrinting.php';require_login();
+if(!is_admin($pdo,(int)$_SESSION['user_id'])){http_response_code(403);exit('Sem permissão.');}
+header('Cache-Control: no-store');$printing=new CentralPrinting($pdo);$error='';$job=null;
+if(!$printing->installed()){http_response_code(503);exit('Prepare o sistema na Configuração ERP.');}
+if($_SERVER['REQUEST_METHOD']==='POST')try{
+    if(!validate_csrf_or_abort(false))throw new RuntimeException('Pedido inválido.');
+    if(!isset($_FILES['content'])||$_FILES['content']['error']!==UPLOAD_ERR_OK||$_FILES['content']['size']>10485760)throw new RuntimeException('Ficheiro inválido (máximo 10 MB).');
+    if(!is_uploaded_file($_FILES['content']['tmp_name']))throw new RuntimeException('Upload inválido.');
+    $content=file_get_contents($_FILES['content']['tmp_name']);
+    $job=$printing->enqueue((int)$_SESSION['user_id'],(int)$_POST['work_center_id'],(int)$_POST['template_id'],(int)$_POST['printer_id'],(int)$_POST['copies'],$content,(string)$_POST['mime'],(string)$_POST['request_key']);
+}catch(Throwable $e){$error=$e->getMessage();}
+$pageTitle='Teste de impressão';require __DIR__.'/partials/header.php';?>
+<main class="container py-4"><h1 class="h3">Teste de impressão (administrador)</h1><p>Use um PDF ou ZPL de teste. Esta ação imprime fisicamente quando o sistema está ativo.</p><?php if($error):?><div class="alert alert-danger"><?=h($error)?></div><?php endif;?><?php if($job):?><div class="alert alert-success">Trabalho: <?=h($job)?></div><?php else:?><form method="post" enctype="multipart/form-data"><?=csrf_input()?><input type="hidden" name="request_key" value="<?=h((string)($_POST['request_key']??bin2hex(random_bytes(16))))?>"><?php foreach(['work_center_id'=>['Posto','erp_work_centers'],'template_id'=>['Modelo','erp_print_templates']] as $name=>$spec):?><label class="form-label"><?=$spec[0]?></label><select class="form-select mb-3" name="<?=$name?>"><?php foreach($pdo->query('SELECT id,name FROM '.$spec[1])->fetchAll(PDO::FETCH_ASSOC) as $row):?><option value="<?=$row['id']?>"><?=h($row['name'])?></option><?php endforeach;?></select><?php endforeach;?><label class="form-label">ID impressora autorizada (0 = automática)</label><input class="form-control mb-3" name="printer_id" type="number" value="0"><label>Conteúdo</label><select class="form-select mb-3" name="mime"><option value="application/pdf">PDF</option><option value="application/zpl">ZPL</option></select><input class="form-control mb-3" type="file" name="content" required><label>Cópias</label><input class="form-control mb-3" name="copies" type="number" min="1" max="100" value="1"><button class="btn btn-primary">Enviar teste de impressão</button></form><?php endif;?><a class="btn btn-link" href="erp_settings.php#printers-title">Voltar à configuração</a></main><?php require __DIR__.'/partials/footer.php';?>

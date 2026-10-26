@@ -1,0 +1,33 @@
+<?php
+require_once __DIR__.'/helpers.php';
+require_once __DIR__.'/app/Services/CentralPrinting.php';
+require_once __DIR__.'/app/Services/PrintLabelRenderer.php';
+require_once __DIR__.'/app/Services/RawMaterialRollLabelService.php';
+require_once __DIR__.'/app/Services/RawMaterialInkLabelService.php';
+require_login();header('Cache-Control: no-store');
+$printing=new CentralPrinting($pdo);$user=current_user($pdo)?:[];
+if(!$printing->enabled()){http_response_code(503);exit('Impressão central desativada. Utilize a impressão habitual.');}
+if((int)($user['is_admin']??0)!==1&&!in_array((string)($user['access_profile']??''),['Utilizador','Produção','Chefias','RH'],true)){http_response_code(403);exit('Sem permissão de impressão.');}
+$center=(int)($_SESSION['shopfloor_work_center_id']??0);$kind=(string)($_GET['kind']??'');$id=(int)($_GET['id']??0);$error='';$job=null;
+try{
+    if(!$center)throw new RuntimeException('Selecione primeiro o posto no Shopfloor.');
+    if(!in_array($kind,['roll','ink'],true))throw new InvalidArgumentException('Tipo inválido.');
+    $source=$kind==='roll'?new RawMaterialRollLabelService($pdo):new RawMaterialInkLabelService($pdo);$label=$source->find($id);if(!$label)throw new RuntimeException('Etiqueta não encontrada.');
+    $s=$pdo->prepare('SELECT t.*,f.width_mm,f.height_mm,f.orientation FROM erp_print_templates t JOIN erp_print_formats f ON f.id=t.format_id WHERE t.renderer=? AND t.active=1 ORDER BY t.id');$s->execute([$kind==='roll'?'raw_material_roll_label':'raw_material_ink_label']);$templates=$s->fetchAll(PDO::FETCH_ASSOC);
+    if(!$templates)throw new RuntimeException('Configure um modelo para esta etiqueta na Configuração ERP.');
+    $tid=(int)($_POST['template_id']??$_GET['template_id']??$templates[0]['id']);$template=null;foreach($templates as $t)if((int)$t['id']===$tid)$template=$t;if(!$template)throw new InvalidArgumentException('Modelo inválido.');
+    $options=$printing->choices($center,$template['type_id'],$template['format_id']);
+    if($_SERVER['REQUEST_METHOD']==='POST'){
+        if(!validate_csrf_or_abort(false))throw new RuntimeException('Pedido inválido.');
+        $printer=(int)($_POST['printer_id']??0);$selected=null;foreach($options as $p)if(($printer&&$p['id']==$printer&&$p['manual_allowed'])||(!$printer&&($p['is_default']||count($options)===1))){$selected=$p;break;}
+        if(!$selected)throw new RuntimeException('Sem impressora compatível.');
+        $mime=$selected['language']==='zpl'?'application/zpl':'application/pdf';$content=$mime==='application/zpl'?PrintLabelRenderer::zpl($label,$kind,$template,(int)$selected['dpi']):PrintLabelRenderer::pdf($label,$kind,$template);
+        $job=$printing->enqueue((int)$user['id'],$center,$template['id'],$printer,(int)($_POST['copies']??1),$content,$mime,(string)($_POST['request_key']??''));
+    }
+}catch(Throwable $e){$error=$e->getMessage();}
+$pageTitle='Impressão centralizada';require __DIR__.'/partials/header.php';
+?><main class="container py-4"><h1 class="h3">Imprimir etiqueta</h1><?php if($error):?><div class="alert alert-danger"><?=h($error)?></div><?php endif;?><?php if($job):?><div class="alert alert-success">Trabalho colocado na fila: <?=h($job)?>. A aceitação pelo spooler não confirma a saída física.</div><a href="shopfloor.php" class="btn btn-primary btn-lg">Voltar ao posto</a><?php elseif(isset($template)):?>
+<form method="get" class="mb-3"><input type="hidden" name="kind" value="<?=h($kind)?>"><input type="hidden" name="id" value="<?=$id?>"><label class="form-label">Modelo / formato</label><select class="form-select form-select-lg" name="template_id" onchange="this.form.submit()"><?php foreach($templates as $t):?><option value="<?=$t['id']?>" <?=$t['id']==$template['id']?'selected':''?>><?=h($t['name'])?></option><?php endforeach;?></select><noscript><button>Selecionar</button></noscript></form>
+<form method="post"><?=csrf_input()?><input type="hidden" name="request_key" value="<?=h((string)($_POST['request_key']??bin2hex(random_bytes(16))))?>"><input type="hidden" name="template_id" value="<?=$template['id']?>"><p><?=h((string)$label['barcode'])?> · <?=h((string)$label['article_code'])?></p>
+<?php if(count($options)>1):?><label class="form-label">Impressora</label><select class="form-select form-select-lg mb-3" name="printer_id"><option value="0">Predefinida do posto</option><?php foreach($options as $p):if(!$p['manual_allowed'])continue;?><option value="<?=$p['id']?>"><?=h($p['name'])?> · <?=($p['online']&&strtotime((string)$p['last_seen'].' UTC')>time()-120)?'Online':'Offline / aguarda agente'?></option><?php endforeach;?></select><?php elseif($options):?><p>Impressora: <strong><?=h($options[0]['name'])?></strong> · <?=$options[0]['online']?'Online':'Offline / aguarda agente'?></p><?php else:?><div class="alert alert-warning">Não existe impressora compatível configurada para este posto.</div><?php endif;?>
+<label class="form-label">Cópias</label><input class="form-control form-control-lg mb-3" type="number" name="copies" min="1" max="100" value="1" required><button class="btn btn-primary btn-lg w-100" <?=$options?'':'disabled'?>>Enviar para impressão</button></form><?php endif;?></main><?php require __DIR__.'/partials/footer.php';?>

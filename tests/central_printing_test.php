@@ -1,0 +1,42 @@
+<?php
+require_once __DIR__.'/../app/Services/CentralPrinting.php';
+require_once __DIR__.'/../app/Services/PrintLabelRenderer.php';
+function cp_check($condition,$message){if(!$condition)throw new RuntimeException($message);}
+function cp_reject($fn,$message){try{$fn();}catch(Exception $e){return;}throw new RuntimeException($message);}
+$dir=sys_get_temp_dir().'/printing-'.bin2hex(random_bytes(6));mkdir($dir,0700);$dbpath=$dir.'/db.sqlite';
+$db=new PDO('sqlite:'.$dbpath);$db->setAttribute(PDO::ATTR_ERRMODE,PDO::ERRMODE_EXCEPTION);$db->exec('PRAGMA foreign_keys=ON');
+$db->exec("CREATE TABLE erp_printers(id INTEGER PRIMARY KEY,name TEXT,network_uri TEXT,location TEXT,driver_name TEXT,is_active INTEGER DEFAULT 1,updated_at TEXT);CREATE TABLE erp_work_centers(id INTEGER PRIMARY KEY,name TEXT,is_active INTEGER DEFAULT 1,default_printer_id INTEGER);INSERT INTO erp_printers(id,name,network_uri) VALUES(1,'Zebra','smb://PC/Zebra');INSERT INTO erp_work_centers(id,name,default_printer_id) VALUES(1,'Corte',1),(2,'Outra',NULL)");
+$svc=new CentralPrinting($db);cp_check(!$svc->enabled(),'Deve começar desativado');$svc->migrate($dir.'/backup');$svc->migrate($dir.'/backup');cp_check(count(glob($dir.'/backup/*.sql'))===1,'Backup idempotente');
+$snapshot=new PDO('sqlite::memory:');$snapshot->exec(file_get_contents(glob($dir.'/backup/*.sql')[0]));cp_check((int)$snapshot->query('SELECT COUNT(*) FROM erp_printers')->fetchColumn()===1,'Snapshot restaurável');
+cp_check((int)$db->query('SELECT COUNT(*) FROM erp_work_center_printers')->fetchColumn()===1,'Associação legada migrada');cp_check((int)$db->query('SELECT default_printer_id FROM erp_work_centers WHERE id=1')->fetchColumn()===1,'Preserva coluna legada');
+$agent=$svc->createAgent('PC',1);$other=$svc->createAgent('PC2',1);$svc->authenticate($agent['id'],$agent['token']);cp_reject(function()use($svc,$agent){$svc->authenticate($agent['id'],str_repeat('a',64));},'Recusar credencial errada');
+$svc->heartbeat($agent['id'],[['name'=>'Zebra','online'=>true]],'0.1');$db->prepare("UPDATE erp_printers SET agent_id=?,windows_queue='Zebra',language='zpl',connection_type='windows_usb',online=1,last_seen=CURRENT_TIMESTAMP WHERE id=1")->execute([$agent['id']]);
+$type=(int)$db->query("SELECT id FROM erp_print_types WHERE code='label'")->fetchColumn();$format=(int)$db->query("SELECT id FROM erp_print_formats WHERE code='100x50'")->fetchColumn();
+$db->exec("INSERT INTO erp_print_templates(id,code,name,type_id,format_id,renderer) VALUES(1,'roll','Rolo',$type,$format,'raw_material_roll_label'),(2,'ink','Tinta',$type,$format,'raw_material_ink_label');INSERT INTO erp_work_center_printers(work_center_id,printer_id,type_id,format_id,is_default) VALUES(1,1,$type,$format,1),(2,1,$type,$format,1)");
+$key=bin2hex(random_bytes(16));cp_reject(function()use($svc,$key){$svc->enqueue(1,1,1,0,1,'^XA^XZ','application/zpl',$key);},'Recusar quando desativado');$svc->setEnabled(true,1);
+$id=$svc->enqueue(1,1,1,0,1,'^XA^XZ','application/zpl',$key);cp_check($db->query("SELECT typeof(content) FROM erp_print_jobs WHERE id='$id'")->fetchColumn()==='blob','Conteúdo binário para retenção e limites corretos');cp_check($id===$svc->enqueue(1,1,1,0,1,'^XA^XZ','application/zpl',$key),'Idempotência');
+cp_reject(function()use($svc){$svc->enqueue(1,1,1,0,1,'%PDF-1.4','application/pdf',bin2hex(random_bytes(16)));},'Recusar PDF numa fila ZPL');
+cp_reject(function()use($svc){$svc->enqueue(1,1,1,999,1,'^XA^XZ','application/zpl',bin2hex(random_bytes(16)));},'Recusar impressora não autorizada');
+$job=$svc->claim($agent['id']);cp_check($job['id']===$id,'Reserva correta');cp_check($svc->claim($agent['id'])===null,'Reserva exclusiva');cp_check($svc->claim($other['id'])===null,'Isolamento de agentes');
+cp_reject(function()use($svc,$other,$id,$job){$svc->content($other['id'],$id,$job['lease_token']);},'Não aceder a ficheiro de outro agente');
+$db->exec("UPDATE erp_print_jobs SET lease_until=datetime('now','-1 minute') WHERE id='$id'");$retry=$svc->claim($agent['id']);cp_check($retry['id']===$id&&$retry['lease_token']!==$job['lease_token'],'Renovar apenas reserva não enviada');
+cp_reject(function()use($svc,$agent,$id,$job){$svc->report($agent['id'],$id,$job['lease_token'],'processing');},'Token antigo não imprime');
+$svc->report($agent['id'],$id,$retry['lease_token'],'processing');$db->exec("UPDATE erp_print_jobs SET lease_until=datetime('now','-1 minute') WHERE id='$id'");cp_check($svc->claim($agent['id'])===null,'Não reenviar após barreira');cp_check($db->query("SELECT state FROM erp_print_jobs WHERE id='$id'")->fetchColumn()==='unknown','Resultado ambíguo desconhecido');
+cp_reject(function()use($svc,$id){$svc->cancel($id,1);},'Não cancelar trabalho já enviado');
+$id2=$svc->enqueue(1,2,2,0,2,'^XA^XZ','application/zpl',bin2hex(random_bytes(16)));$j=$svc->claim($agent['id']);$svc->report($agent['id'],$id2,$j['lease_token'],'processing');$svc->report($agent['id'],$id2,$j['lease_token'],'spooler_accepted','','42');$svc->report($agent['id'],$id2,$j['lease_token'],'spooler_accepted','','42');cp_check($svc->claim($agent['id'])===null,'Aceite não é reenviado');
+cp_check($db->query("SELECT state FROM erp_print_jobs WHERE id='$id2'")->fetchColumn()==='spooler_accepted','Não confundir spooler com impressão física');
+$id3=$svc->enqueue(1,1,1,0,1,'^XA^XZ','application/zpl',bin2hex(random_bytes(16)));$svc->cancel($id3,1);cp_check($svc->claim($agent['id'])===null,'Cancelado não é entregue');
+$id4=$svc->enqueue(1,1,1,0,1,'^XA^XZ','application/zpl',bin2hex(random_bytes(16)));$svc->heartbeat($agent['id'],[['name'=>'Zebra','online'=>false]],'0.1');cp_check($svc->claim($agent['id'])===null,'Offline conserva pendente');
+$db->prepare("INSERT INTO erp_printers(id,name,network_uri,agent_id,windows_queue,language,connection_type,online,last_seen,dpi) VALUES(2,'Zebra 2','smb://PC/Zebra2',?,'Zebra2','zpl','windows_usb',1,CURRENT_TIMESTAMP,203)")->execute([$agent['id']]);
+$db->exec("INSERT INTO erp_work_center_printers(work_center_id,printer_id,type_id,format_id,manual_allowed,is_alternative) VALUES(1,2,$type,$format,1,1)");
+$svc->reroute($id4,2,1);cp_check((int)$db->query("SELECT printer_id FROM erp_print_jobs WHERE id='$id4'")->fetchColumn()===2,'Transferência segura de pendente');
+cp_reject(function()use($svc,$id2){$svc->reroute($id2,2,1);},'Recusar transferência após spooler');
+cp_reject(function()use($svc,$id2){$svc->reprint($id2,1,false,bin2hex(random_bytes(16)));},'Exigir autorização explícita de reimpressão');
+$new=$svc->reprint($id2,1,true,bin2hex(random_bytes(16)));cp_check($new!==$id2,'Reimpressão é novo trabalho');
+cp_reject(function()use($db,$type,$format){$db->exec("UPDATE erp_work_center_printers SET is_default=1 WHERE work_center_id=1 AND printer_id=2 AND type_id=$type AND format_id=$format");},'Uma única predefinida por posto/tipo/formato');
+$db->exec("UPDATE erp_print_jobs SET created_at=datetime('now','-40 days')");$svc->cleanup();cp_check($db->query("SELECT content FROM erp_print_jobs WHERE id='$id'")->fetchColumn()===null,'Limpar payload antigo terminal');cp_check($db->query("SELECT content FROM erp_print_jobs WHERE id='$id4'")->fetchColumn()==='^XA^XZ','Preservar pendentes');
+$label=['entry_number'=>'E1','supplier_lot'=>'^XZ~JA','article_code'=>'MAT','description'=>'Têxtil','metres'=>10,'weight_kg'=>2,'label_date'=>'2026-10-26','barcode'=>'R1'];$zpl=PrintLabelRenderer::zpl($label,'roll',['width_mm'=>100,'height_mm'=>50],203);cp_check(substr_count($zpl,'^XZ')===1&&strpos($zpl,'~JA')===false,'Escapar dados ZPL');$pdf=PrintLabelRenderer::pdf($label,'ink',['width_mm'=>100,'height_mm'=>50]);cp_check(substr($pdf,0,5)==='%PDF-','Gerar PDF');
+$productPdf=PrintLabelRenderer::productPdf(['customer_name'=>'Teste','locality'=>'Porto','product_code'=>'P1','product_description'=>'Saco','lot'=>'LOT1','order_number'=>'OF1'],['date'=>new DateTimeImmutable('2026-10-26'),'quantity'=>12],'TISSER');cp_check(substr($productPdf,0,5)==='%PDF-','PDF produto com Code128 existente');
+$svc->setEnabled(false,1);cp_check(!$svc->enabled(),'Reversão sem eliminar dados');cp_check((int)$db->query('SELECT COUNT(*) FROM erp_print_jobs')->fetchColumn()===5,'Preservar histórico');
+foreach(glob($dir.'/backup/*') as $file)unlink($file);unlink($dir.'/backup/.htaccess');rmdir($dir.'/backup');$db=null;unlink($dbpath);rmdir($dir);
+echo "Impressão central: migração, backup, credenciais, compatibilidade, reserva, recuperação, idempotência, retenção e renderização validadas.\n";
