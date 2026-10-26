@@ -8,6 +8,7 @@ on:
 jobs:
   build:
     runs-on: windows-latest
+    timeout-minutes: 10
     permissions:
       contents: read
     steps:
@@ -28,3 +29,4 @@ jobs:
         with:
           name: GesTisserPrintAgent-Windows10
           path: windows-print-agent/
+          retention-days: 14
