@@ -93,7 +93,18 @@ public sealed class GesTisserPrintAgent : ServiceBase {
         }catch(Exception ex){Log("Comunicação/execução interrompida: "+ex.GetType().Name);}
         for(int i=0;i<50&&!stopping;i++)Thread.Sleep(100);}
     }
-    public static void Main(string[] args){if(args.Length==1&&args[0]=="--console"){var service=new GesTisserPrintAgent();service.Run();}else ServiceBase.Run(new GesTisserPrintAgent());}
+    static void SelfTest(){
+        var parsed=Json.Deserialize<Dictionary<string,object>>("{\"queues\":[\"Zebra\",\"HP\"]}");int count=0;foreach(object item in (System.Collections.IEnumerable)parsed["queues"])count++;
+        if(count!=2)throw new Exception("Queue configuration failed.");
+        byte[] secret=Encoding.UTF8.GetBytes("synthetic-self-test");byte[] protectedValue=ProtectedData.Protect(secret,null,DataProtectionScope.LocalMachine);
+        if(Encoding.UTF8.GetString(ProtectedData.Unprotect(protectedValue,null,DataProtectionScope.LocalMachine))!="synthetic-self-test")throw new Exception("DPAPI roundtrip failed.");
+        bool rejected=false;try{Quote("bad\"queue");}catch(IOException){rejected=true;}if(!rejected)throw new Exception("Argument validation failed.");
+        string folder=Path.Combine(Path.GetTempPath(),"gestisser-self-test-"+Guid.NewGuid().ToString("N"));Directory.CreateDirectory(folder);
+        try{var service=new GesTisserPrintAgent();var job=new Dictionary<string,object>{{"id","fixture"}};string path=Path.Combine(folder,"job.json");service.Save(path,job,"uncertain","");service.Save(path,job,"accepted","42");var restored=Json.Deserialize<Dictionary<string,object>>(File.ReadAllText(path));if(Text(restored,"local_state")!="accepted"||Text(restored,"spool_id")!="42")throw new Exception("Durable journal failed.");}
+        finally{Directory.Delete(folder,true);}
+        Console.WriteLine("PASS: queue configuration, DPAPI, argument validation and durable journal. No print requests sent.");
+    }
+    public static void Main(string[] args){if(args.Length==1&&args[0]=="--self-test"){SelfTest();return;}if(args.Length==1&&args[0]=="--console"){var service=new GesTisserPrintAgent();service.Run();}else ServiceBase.Run(new GesTisserPrintAgent());}
 }
 static class Native {
     [StructLayout(LayoutKind.Sequential,CharSet=CharSet.Unicode)]struct DocInfo{[MarshalAs(UnmanagedType.LPWStr)]public string name;[MarshalAs(UnmanagedType.LPWStr)]public string file;[MarshalAs(UnmanagedType.LPWStr)]public string type;}

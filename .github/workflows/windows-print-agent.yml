@@ -23,8 +23,12 @@ jobs:
             if($errors.Count){throw ($errors | Out-String)}
           }
           $compiler="$env:WINDIR\Microsoft.NET\Framework64\v4.0.30319\csc.exe"
-          & $compiler /nologo /target:exe /out:windows-print-agent/GesTisserPrintAgent.exe /reference:System.ServiceProcess.dll /reference:System.Web.Extensions.dll /reference:System.Drawing.dll /reference:System.Security.dll windows-print-agent/GesTisserPrintAgent.cs
+          $source=(Resolve-Path 'windows-print-agent\GesTisserPrintAgent.cs').Path
+          $output=Join-Path $PWD.Path 'windows-print-agent\GesTisserPrintAgent.exe'
+          & $compiler /nologo /target:exe "/out:$output" /reference:System.ServiceProcess.dll /reference:System.Web.Extensions.dll /reference:System.Drawing.dll /reference:System.Security.dll $source
           if($LASTEXITCODE -ne 0){throw 'Compilation failed'}
+          & $output --self-test
+          if($LASTEXITCODE -ne 0){throw 'Agent self-test failed'}
       - uses: actions/upload-artifact@v4
         with:
           name: GesTisserPrintAgent-Windows10
