@@ -6,11 +6,15 @@ $pdo->exec('CREATE TABLE app_settings(setting_key TEXT PRIMARY KEY,setting_value
 $dir=sys_get_temp_dir().'/gestisser-sp-'.bin2hex(random_bytes(6)); mkdir($dir,0700);
 try {
     $integration=new SharePointIntegration($pdo,$dir);
-    check($integration->overview()['state']==='Por configurar','initial listing state');
-    $settings=$integration->settings(); $settings['tenant_id']=$settings['client_id']='11111111-1111-1111-1111-111111111111'; $settings['drive_id']='drive';
-    $integration->save($settings); check($integration->settings()['drive_id']==='drive','settings roundtrip');
-    check($integration->overview()['state']==='Não testado','saved listing state');
-    $before=scandir($dir); $result=$integration->testStorage(); check($result['state']==='Ligado','local read/write'); check(scandir($dir)===$before,'temporary cleanup');
+    check($integration->overview()['state']==='Por configurar','initial state');
+    $settings=$integration->settings();
+    $settings['tenant_id']=$settings['client_id']='11111111-1111-1111-1111-111111111111';
+    $settings['site_id']='tisserpt.sharepoint.com,aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa,bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb';
+    $settings['list_id']='articles'; $settings['drive_id']='drive';
+    $integration->save($settings);
+    check($integration->overview()['state']==='Não testado','saved state');
+    $before=scandir($dir); check($integration->testStorage()['state']==='Ligado','local integrity');
+    check(scandir($dir)===$before,'cleanup');
     $bad=$settings; $bad['site_url']='https://localhost';
     try { $integration->save($bad); throw new LogicException('SSRF accepted'); } catch (RuntimeException $e) { check(!($e instanceof LogicException),'SSRF rejected'); }
     $result=$integration->diagnostic('graph',function () { throw new RuntimeException('permission failure'); });
