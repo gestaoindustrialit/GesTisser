@@ -25,7 +25,7 @@ Executar progressivamente na produção com a funcionalidade inicialmente deslig
 | Android Redmi Pad 2 | No Shopfloor, pesquisar rolo/tinta e etiqueta de produto A4; enviar sem diálogo do navegador | Pendente tablet |
 | Compatibilidade anterior | Com sistema desligado, páginas e botões anteriores continuam disponíveis | Testes de regressão selecionados aprovados |
 
-Não marcar os critérios de aceitação globais como concluídos antes dos ensaios físicos e da confirmação do alojamento real. O agente mantém `spooler_accepted` como resultado honesto sem confirmação física. O EXE requer compilação Windows, que o instalador também realiza localmente.
+Não marcar os critérios de aceitação globais como concluídos antes dos ensaios físicos e da confirmação do alojamento real. O agente mantém `spooler_accepted` como resultado honesto sem confirmação física. O EXE foi compilado em runner Windows e passou os testes locais de configuração, DPAPI, argumentos e diário. O instalador também compila os fontes localmente. A execução em Windows 10 com drivers reais continua pendente.
 
 Executar testes no ambiente de desenvolvimento:
 

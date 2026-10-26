@@ -64,11 +64,11 @@ Para reverter código, desativar primeiro, parar os agentes e repor os PHP priva
 
 ## Relatório de ficheiros e base de dados
 
-Foram preparados 22 ficheiros. Não foi publicada nem ativada esta alteração no alojamento. A publicação no repositório gestaoindustrialit/GesTisser e em main foi explicitamente autorizada pelo utilizador. Não foram alterados dados de produção.
+Publicação autorizada em `gestaoindustrialit/GesTisser`, branch `main`, com 22 ficheiros e impressão centralizada desativada por defeito. A publicação de código no GitHub não confirma a sincronização do cPanel. O agente não executou a migração nem alterou dados no alojamento; a preparação e ativação continuam a exigir ação explícita na Configuração ERP.
 
 Tabelas novas: `erp_print_config`, `erp_print_agents`, `erp_print_types`, `erp_print_formats`, `erp_print_templates`, `erp_work_center_printers`, `erp_print_jobs`, `erp_print_audit`. Campos aditivos em `erp_printers`: `print_code`, `printer_type`, `brand`, `model`, `connection_type`, `agent_id`, `windows_queue`, `language`, `dpi`, `online`, `last_seen`, `notes`. Preserva IDs, endereços, impressoras e associação legada. A preparação da base só ocorre por ação administrativa explícita.
 
-Validação local: PHP 7.0.33, 336 ficheiros PHP sem erros de sintaxe, sete testes selecionados aprovados e 36 verificações HTTP locais aprovadas. Fontes do serviço C# e instaladores PowerShell preparados; compilação Windows e validação física pendentes. O workflow está preparado mas não foi enviado nem executado. Backups dos PHP anteriores apenas na área local de trabalho; o backup do alojamento ainda não foi executado.
+Validação local: PHP 7.0.33, 336 ficheiros PHP sem erros de sintaxe, sete testes selecionados aprovados e 36 verificações HTTP locais aprovadas. Serviço C# compilado e sintaxe dos instaladores PowerShell validada em runner Windows (.NET Framework). Self-test aprovado: configuração de filas, DPAPI, validação de argumentos e escrita/substituição durável do diário. Execução CI: https://github.com/gestaoindustrialit/GesTisser/actions/runs/40336234760 . Validação física Windows 10/Zebra/HP/Android pendente. Backups dos PHP anteriores apenas na área local de trabalho; o backup do alojamento ainda não foi executado.
 
 | Ficheiro | Finalidade |
 |---|---|
@@ -94,3 +94,5 @@ Validação local: PHP 7.0.33, 336 ficheiros PHP sem erros de sintaxe, sete test
 | `windows-print-agent/GesTisserPrintAgent.cs` | Instalação e serviço Windows |
 | `windows-print-agent/Install.ps1` | Instalação e serviço Windows |
 | `windows-print-agent/Uninstall.ps1` | Instalação e serviço Windows |
+
+Pacote Windows compilado (EXE, fonte e instaladores): https://github.com/gestaoindustrialit/GesTisser/actions/runs/40336234760/artifacts/12656703144 . Artefacto retido até 9 de novembro de 2026; o instalador também pode compilar os fontes posteriormente. SHA-256 do ZIP: `afee1b58f75e5810d71cfa4387b56251e3e3ed6360f76bd733e528115def8900`.
