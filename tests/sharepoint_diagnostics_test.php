@@ -1,7 +1,7 @@
 <?php
 require __DIR__.'/../app/Services/SharePointIntegration.php';
 function verify($condition, $label) { if (!$condition) throw new RuntimeException($label); }
-$settings = ['tenant_id'=>'11111111-1111-1111-1111-111111111111', 'client_id'=>'22222222-2222-2222-2222-222222222222', 'site_id'=>'host,site,web', 'list_id'=>'list', 'drive_id'=>'drive'];
+$settings = ['tenant_id'=>'11111111-1111-1111-1111-111111111111', 'client_id'=>'22222222-2222-2222-2222-222222222222', 'site_id'=>'host,site,web', 'list_id'=>'list', 'drive_id'=>'drive', 'site_url'=>'https://tisserpt.sharepoint.com'];
 $claims = ['aud'=>'00000003-0000-0000-c000-000000000000', 'tid'=>$settings['tenant_id'], 'appid'=>$settings['client_id'], 'roles'=>['Sites.Selected'], 'exp'=>time()+3600];
 function jwtForTest($claims) { return 'header.'.rtrim(strtr(base64_encode(json_encode($claims)), '+/', '-_'), '=').'.signature'; }
 $token = jwtForTest($claims);
@@ -19,10 +19,14 @@ $run = function ($token, $statuses) use ($settings, $secret, $requestId) {
             return ['status'=>200, 'body'=>json_encode(['access_token'=>$token]), 'headers'=>[]];
         }
         verify($form === null && $bearer === $token, 'GET uses freshly issued app token');
-        $status = $statuses[count($calls)-2];
+        $status = $statuses[count($calls)-2] ?? 200;
+        $body = ['id'=>$settings['site_id'], 'webUrl'=>$settings['site_url'], 'displayName'=>'Tisser Central'];
+        if (strpos($url, '/columns') !== false) $body=['value'=>[]];
+        elseif (strpos($url, '/lists/') !== false) $body=['id'=>'list','webUrl'=>$settings['site_url'].'/Lists/Artigos'];
+        elseif (strpos($url, '/drives/') !== false) $body=['id'=>'drive','driveType'=>'documentLibrary','folder'=>[], 'parentReference'=>['driveId'=>'drive'],'sharepointIds'=>['siteId'=>'site','webId'=>'web','siteUrl'=>$settings['site_url']]];
         return ['status'=>$status, 'connection_error'=>$status === 0,
             'headers'=>['request-id'=>$requestId],
-            'body'=>json_encode(['error'=>['code'=>'accessDenied', 'message'=>$secret.' '.$token]])];
+            'body'=>json_encode($status === 200 ? $body : ['error'=>['code'=>'accessDenied', 'message'=>$secret.' '.$token]])];
     };
     $client = new SharePointGraphClient($settings, $transport);
     $result = $client->diagnose($secret);
@@ -32,16 +36,16 @@ $run = function ($token, $statuses) use ($settings, $secret, $requestId) {
     return [$result, $calls];
 };
 list($result, $calls) = $run($token, [403,404,401]);
-verify(count($calls) === 4, 'all independent requests run after failures');
+verify(count($calls) === 6, 'all independent requests run after failures');
 verify(substr($calls[1], -strlen('/sites/host%2Csite%2Cweb')) === '/sites/host%2Csite%2Cweb', 'configured site ID used');
 verify(substr($calls[2], -11) === '/lists/list', 'exact list request');
-verify(substr($calls[3], -13) === '/drives/drive', 'exact drive request');
+verify(strpos($calls[5], '/v1.0/drives/drive?$select=') !== false, 'direct drive request');
 foreach ([403,404,401] as $index=>$status) {
     verify($result['requests'][$index+1]['http_status'] === $status, 'individual HTTP status');
     verify($result['requests'][$index+1]['request_id'] === $requestId, 'request ID captured');
     verify($result['requests'][$index+1]['graph_error_code'] === 'accessDenied', 'Graph machine code');
 }
-verify(count(array_unique(array_column(array_slice($result['requests'],1), 'message'))) === 3, 'different HTTP messages');
+verify(count(array_unique(array_column(array_slice($result['requests'],1,3), 'message'))) === 3, 'different HTTP messages');
 list($success) = $run($token, [200,200,200]);
 verify(!isset($success['error']) && $success['write_verified'] === false, 'read success never validates writes');
 list($network) = $run($token, [0,200,200]);
@@ -49,7 +53,7 @@ verify($network['requests'][1]['http_status'] === null && strpos($network['reque
 foreach (['aud'=>'wrong', 'tid'=>'wrong', 'appid'=>'wrong', 'roles'=>[], 'scp'=>'Sites.Read.All', 'idtyp'=>'user', 'exp'=>1] as $key=>$value) {
     $bad = $claims; $bad[$key] = $value;
     list($result, $calls) = $run(jwtForTest($bad), []);
-    verify(count($calls) === 1 && count($result['requests']) === 4, 'invalid claims block Graph and mark requests skipped');
+    verify(count($calls) === 1 && count($result['requests']) === 6, 'invalid claims block Graph and mark requests skipped');
 }
 $bad = $claims; $bad['azp'] = 'wrong';
 list($result, $calls) = $run(jwtForTest($bad), []);
@@ -59,13 +63,13 @@ verify(count($calls) === 1, 'uninspectable token blocks Graph');
 $client = new SharePointGraphClient($settings, function () use ($secret) { return ['status'=>401, 'body'=>json_encode(['error'=>'invalid_client','error_description'=>$secret])]; });
 $failure = $client->diagnose($secret);
 verify($failure['requests'][0]['http_status'] === 401 && strpos(json_encode($failure), $secret) === false, 'OAuth failure safe');
-verify($failure['requests'][0]['oauth_error_code'] === 'invalid_client' && count($failure['requests']) === 4, 'OAuth error code and skipped Graph results');
+verify($failure['requests'][0]['oauth_error_code'] === 'invalid_client' && count($failure['requests']) === 6, 'OAuth error code and skipped Graph results');
 $client = new SharePointGraphClient($settings, function () use ($secret) { throw new RuntimeException($secret); });
 $failure = $client->diagnose($secret);
-verify(strpos(json_encode($failure), $secret) === false && count($failure['requests']) === 4, 'transport exceptions redacted and reported');
+verify(strpos(json_encode($failure), $secret) === false && count($failure['requests']) === 6, 'transport exceptions redacted and reported');
 $v2 = $claims; unset($v2['appid']); $v2['azp'] = $settings['client_id'];
 list($result, $calls) = $run(jwtForTest($v2), [200,200,200]);
-verify(count($calls) === 4 && !isset($result['error']), 'v2 azp application identity supported');
+verify(count($calls) === 6 && !isset($result['error']), 'v2 azp application identity supported');
 $pdo = new PDO('sqlite::memory:');
 $pdo->exec('CREATE TABLE app_settings (setting_key TEXT PRIMARY KEY, setting_value TEXT)');
 $integration = new SharePointIntegration($pdo, sys_get_temp_dir());

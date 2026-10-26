@@ -55,7 +55,7 @@ require __DIR__.'/partials/header.php';
 <?php endif; ?>
 <?php if (!empty($result['requests'])): ?>
 <div class="table-responsive"><table class="table table-sm"><thead><tr><th>Endpoint lógico</th><th>HTTP</th><th>Código Graph / OAuth2</th><th>request-id</th><th>Diagnóstico</th></tr></thead><tbody>
-<?php foreach ($result['requests'] as $request): ?><tr><td><code><?=h($request['endpoint'])?></code></td><td><?=h($request['http_status'] ?? '—')?></td><td><?=h($request['graph_error_code'] ?? ($request['oauth_error_code'] ?? '—'))?></td><td><?=h($request['request_id'] ?? '—')?></td><td><?=h($request['message'])?></td></tr><?php endforeach; ?>
+<?php foreach ($result['requests'] as $request): ?><tr><td><code><?=h($request['endpoint'])?></code></td><td><?=h($request['http_status'] ?? '—')?></td><td><?=h($request['graph_error_code'] ?? ($request['oauth_error_code'] ?? '—'))?></td><td><?=h($request['request_id'] ?? '—')?></td><td><?=h($request['message'])?><?php if (!empty($request['graph_message'])): ?><br>Mensagem Graph: <?=h($request['graph_message'])?><?php endif; ?></td></tr><?php endforeach; ?>
 </tbody></table></div>
 <?php endif; ?>
 <?php if (isset($result['free_bytes'])): ?><p>Espaço disponível: <?=h(number_format($result['free_bytes']/1048576,1,',','.'))?> MiB</p><?php endif; ?>
@@ -65,16 +65,16 @@ require __DIR__.'/partials/header.php';
 <div class="card mb-4"><div class="card-body"><h2 class="h5">4. Sincronização dos documentos</h2><p>Ainda indisponível. O fluxo atual de anexos mantém-se operacional; ainda não há replicação remota.</p></div></div>
 <div class="card mb-4"><div class="card-body"><h2 id="diagnostics" class="h5">5. Histórico e diagnóstico</h2><p>Esta primeira etapa conserva o último diagnóstico de cada serviço. Histórico de sincronizações e fila serão acrescentados com o worker.</p>
 <p>Client Secret disponível: <?=SharePointClientSecret::available() ? 'Sim' : 'Não'?></p>
-<?php $remote=$integration->lastDiagnostic('graph'); if (array_key_exists('roles_checked',$remote)): ?>
-<p>Claim roles legível: <?= $remote['roles_checked'] ? 'Sim' : 'Não' ?>. Sites.Selected presente: <?= !empty($remote['sites_selected_present']) ? 'Sim' : 'Não' ?>.</p>
-<?php endif; ?>
-<?php if (!empty($remote['requests'])): ?>
-<div class="table-responsive"><table class="table"><thead><tr><th>Pedido</th><th>HTTP</th><th>Resultado</th><th>Código Graph</th><th>request-id</th></tr></thead><tbody>
-<?php foreach ($remote['requests'] as $request): ?><tr><td><code><?=h($request['method'].' '.$request['endpoint'])?></code></td><td><?=h((string)($request['http_status'] ?? '—'))?></td><td><?=h($request['outcome'])?></td><td><?=h($request['graph_error_code'] ?? '—')?></td><td><code><?=h($request['request_id'] ?? '—')?></code></td></tr><?php endforeach; ?>
-</tbody></table></div>
-<?php endif; ?>
-<?php if (!empty($remote['first_403_endpoint'])): ?><p class="text-danger">Primeiro endpoint com HTTP 403: <code><?=h($remote['first_403_endpoint'])?></code></p><?php endif; ?>
-<?php if (isset($remote['column_count'])): ?><p>Colunas verificadas: <?=h((string)$remote['column_count'])?><?= !empty($remote['columns_has_more']) ? ' (primeira página; existem mais colunas)' : '' ?>. As definições das colunas não são guardadas.</p><?php endif; ?>
+<?php $remote=$integration->lastDiagnostic('graph'); ?>
+<?php if (!empty($remote['configuration'])): ?><h3 class="h6">Configuração usada no último teste</h3>
+<?php foreach ($remote['configuration'] as $field=>$value): ?><p><?=h($field)?>: <code><?=h($value)?></code></p><?php endforeach; endif; ?>
+<p><?=h($remote['site_identity'] ?? 'Identidade do site ainda não verificada.')?></p>
+<?php if (isset($remote['site_display_name'])): ?><p>Nome devolvido pelo Graph: <?=h($remote['site_display_name'])?></p><?php endif; ?>
+<p>Roles da aplicação no token: <?=h(implode(', ', $remote['application_roles'] ?? []))?></p>
+<p><?=h($remote['site_permission_note'] ?? '')?></p>
+<?php if (!empty($remote['first_403_endpoint'])): ?><p class="text-danger">Primeiro HTTP 403: <code><?=h($remote['first_403_endpoint'])?></code></p><?php endif; ?>
+<p>Se persistir o 403: no Microsoft Entra, abrir Aplicações → Registos de aplicações → aplicação correspondente ao Client ID → Permissões de API. Consultar Microsoft Graph, Sites.Selected, tipo Application e consentimento administrativo. Não alterar permissões.</p>
+<p>No Centro de administração SharePoint → Sites ativos → Tisser Central, confirmar o URL. Uma identidade administrativa já autorizada deve consultar GET /sites/{site_id}/permissions e comparar a aplicação em grantedToIdentities/grantedToIdentitiesV2 e as roles com os IDs acima. Esta consulta não é executada pela aplicação do ERP.</p>
+<p>Recolher apenas o URL, Site ID, Client ID, roles da concessão e request-id. Nunca partilhar segredo ou token. Mensagens Graph abaixo são limitadas e redigidas; os corpos completos não são guardados.</p>
 </div></div>
 <?php require __DIR__.'/partials/footer.php'; ?>
-

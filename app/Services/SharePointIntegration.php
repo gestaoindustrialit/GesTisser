@@ -143,6 +143,7 @@ final class SharePointGraphClient
     private $settings;
     private $transport;
     private $token = '';
+    private $secret = '';
     public function __construct(array $settings, callable $transport = null)
     { $this->settings = $settings; $this->transport = $transport; }
     private function request($url, $form = null)
@@ -187,10 +188,18 @@ final class SharePointGraphClient
         $messages = [401=>'Autenticação recusada: token inválido, expirado ou com destinatário incorreto.',
             403=>'Acesso recusado: verificar concessão Sites.Selected para esta aplicação e este Site ID.',
             404=>'Recurso não encontrado ou ocultado por falta de acesso; verificar os IDs e a associação ao site.'];
-        $ok = $status >= 200 && $status < 300 && empty($response['connection_error']);
+        $ok = $status >= 200 && $status < 300 && empty($response['connection_error']) && is_array($data);
+        $remoteMessage = null;
+        if ($status === 403 && is_string($data['error']['message'] ?? null)) {
+            $remoteMessage = $data['error']['message'];
+            foreach ([$this->token, $this->secret] as $private) if ($private !== '') $remoteMessage = str_replace($private, '[redigido]', $remoteMessage);
+            $remoteMessage = preg_replace('/[\x00-\x1f\x7f]/', ' ', $remoteMessage);
+            $remoteMessage = preg_replace('/https?:\/\/[^\s]+|[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/i', '[redigido]', $remoteMessage);
+            $remoteMessage = substr($remoteMessage, 0, 1000);
+        }
         return ['endpoint'=>$endpoint, 'http_status'=>$status ?: null, 'graph_error_code'=>$code, 'oauth_error_code'=>$oauthCode,
             'request_id'=>$this->safeId($response['headers']['request-id'] ?? ($data['error']['innerError']['request-id'] ?? null)),
-            'ok'=>$ok, 'message'=>!empty($response['connection_error']) || !$status
+            'graph_message'=>$remoteMessage, 'ok'=>$ok, 'message'=>!empty($response['connection_error']) || !$status
                 ? 'Erro de ligação: verificar DNS, rede, TLS e disponibilidade do cURL.'
                 : ($ok ? 'Pedido concluído.' : ($messages[$status] ?? 'Erro HTTP na comunicação com a Microsoft.'))];
     }
@@ -207,8 +216,12 @@ final class SharePointGraphClient
     {
         $this->token = '';
         $s = $this->settings;
+        $this->secret = is_string($secret) ? $secret : '';
         $report = ['state'=>'Erro', 'error'=>'Diagnóstico incompleto.', 'write_verified'=>false,
-            'requests'=>[], 'token_checks'=>[]];
+            'requests'=>[], 'token_checks'=>[], 'first_403_endpoint'=>null,
+            'configuration'=>array_intersect_key($s, array_flip(['tenant_id','client_id','site_id','site_url','list_id','drive_id'])),
+            'site_identity'=>'Não verificada: consulta do site ainda sem sucesso.',
+            'site_permission_note'=>'Sites.Selected no token não comprova a concessão ao site. A role write tem de estar atribuída ao mesmo Client ID neste Site ID.'];
         foreach (['tenant_id', 'client_id'] as $key) {
             if (!$this->safeId($s[$key] ?? null)) throw new RuntimeException('Configure Tenant ID e Client ID válidos.');
         }
@@ -224,7 +237,7 @@ final class SharePointGraphClient
                 $oauth['ok'] = false;
                 if ($oauth['http_status'] && $oauth['http_status'] >= 200 && $oauth['http_status'] < 300) $oauth['message'] = 'Resposta OAuth2 sem access_token válido.';
                 $report['requests'][] = $oauth;
-                foreach (['GET /sites/{siteId}', 'GET /sites/{siteId}/lists/{listId}', 'GET /sites/{siteId}/drives/{driveId}'] as $endpoint) {
+                foreach (['GET /sites/{siteId}', 'GET /sites/{siteId}/lists/{listId}', 'GET /sites/{siteId}/lists/{listId}/columns', 'GET /drives/{driveId}/root', 'GET /drives/{driveId}'] as $endpoint) {
                     $report['requests'][] = ['endpoint'=>$endpoint, 'http_status'=>null, 'graph_error_code'=>null, 'request_id'=>null, 'ok'=>false, 'message'=>'Não executado: obtenção do token falhou.'];
                 }
                 $report['error'] = 'Falha na obtenção do token OAuth2.';
@@ -249,6 +262,8 @@ final class SharePointGraphClient
                 'validade_temporal'=>is_numeric($c['exp'] ?? null) && $c['exp'] > time() && (!isset($c['nbf']) || (is_numeric($c['nbf']) && $c['nbf'] <= time()))
             ];
             $report['token_checks'] = $checks;
+            $report['application_roles'] = [];
+            foreach (($c['roles'] ?? []) as $role) if (is_string($role) && preg_match('/^[A-Za-z][A-Za-z0-9.]{0,99}$/D', $role)) $report['application_roles'][] = $role;
             $report['token_origin'] = 'Token novo obtido por client_credentials com o Client ID e segredo configurados; sem token de sessão ou do conector.';
             $report['claims_note'] = 'Inspeção local das claims; não constitui validação criptográfica da assinatura. O Graph valida o token nos pedidos.';
             if (in_array(false, $checks, true)) {
@@ -258,8 +273,11 @@ final class SharePointGraphClient
             $targets = [
                 ['GET /sites/{siteId}', $base, ['site_id']],
                 ['GET /sites/{siteId}/lists/{listId}', $base.'/lists/'.rawurlencode($s['list_id'] ?? ''), ['site_id','list_id']],
-                ['GET /sites/{siteId}/drives/{driveId}', $base.'/drives/'.rawurlencode($s['drive_id'] ?? ''), ['site_id','drive_id']]
+                ['GET /sites/{siteId}/lists/{listId}/columns', $base.'/lists/'.rawurlencode($s['list_id'] ?? '').'/columns', ['site_id','list_id']],
+                ['GET /drives/{driveId}/root', '/drives/'.rawurlencode($s['drive_id'] ?? '').'/root?$select=id,folder,parentReference,sharepointIds', ['drive_id']],
+                ['GET /drives/{driveId}', '/drives/'.rawurlencode($s['drive_id'] ?? '').'?$select=id,driveType,sharepointIds', ['site_id','drive_id']]
             ];
+            $resources = [];
             $allOk = !in_array(false, $checks, true);
             foreach ($targets as $target) {
                 $missing = false;
@@ -269,23 +287,60 @@ final class SharePointGraphClient
                 } elseif ($missing) {
                     $row = ['endpoint'=>$target[0], 'http_status'=>null, 'graph_error_code'=>null, 'request_id'=>null, 'ok'=>false, 'message'=>'Não executado: ID não configurado.'];
                 } else {
-                    try { $row = $this->result($target[0], $this->request('https://graph.microsoft.com/v1.0'.$target[1])); }
+                    try {
+                        $response = $this->request('https://graph.microsoft.com/v1.0'.$target[1]);
+                        $row = $this->result($target[0], $response);
+                        if ($row['ok']) $resources[$target[0]] = json_decode($response['body'], true);
+                        unset($response);
+                    }
                     catch (Throwable $e) { $row = $this->result($target[0], ['connection_error'=>true]); }
                 }
                 $report['requests'][] = $row;
+                if ($row['http_status'] === 403 && $report['first_403_endpoint'] === null) $report['first_403_endpoint'] = $row['endpoint'];
                 if (!$row['ok']) $allOk = false;
+            }
+            $site = $resources['GET /sites/{siteId}'] ?? [];
+            if ($site) {
+                $report['site_display_name'] = substr((string)($site['displayName'] ?? ''), 0, 200);
+                $identityOk = ($site['id'] ?? '') === ($s['site_id'] ?? '')
+                    && rtrim((string)($site['webUrl'] ?? ''), '/') === rtrim((string)($s['site_url'] ?? ''), '/')
+                    && strcasecmp(trim($site['displayName'] ?? ''), 'Tisser Central') === 0;
+                $report['site_identity'] = $identityOk ? 'Site ID e URL correspondem a Tisser Central.' : 'Site ID, URL ou nome não correspondem a Tisser Central; confirmar configuração.';
+                if (!$identityOk) $allOk = false;
+            }
+            $list = $resources['GET /sites/{siteId}/lists/{listId}'] ?? [];
+            $drive = $resources['GET /drives/{driveId}'] ?? [];
+            $root = $resources['GET /drives/{driveId}/root'] ?? [];
+            $columns = $resources['GET /sites/{siteId}/lists/{listId}/columns'] ?? [];
+            if ($list && (($list['id'] ?? '') !== ($s['list_id'] ?? '') || rtrim($list['webUrl'] ?? '', '/') !== rtrim($s['site_url'], '/').'/Lists/Artigos')) $allOk = false;
+            if ($columns && !is_array($columns['value'] ?? null)) $allOk = false;
+            if ($drive && $root) {
+                $parts = explode(',', $s['site_id']);
+                $verified = false; $conflict = false;
+                foreach ([$drive, $root] as $resource) {
+                    $ids = $resource['sharepointIds'] ?? [];
+                    if (!$ids) continue;
+                    $match = count($parts) === 3 && strcasecmp(trim($ids['siteId'] ?? '', '{}'), $parts[1]) === 0
+                        && strcasecmp(trim($ids['webId'] ?? '', '{}'), $parts[2]) === 0
+                        && rtrim($ids['siteUrl'] ?? '', '/') === rtrim($s['site_url'], '/');
+                    $verified = $verified || $match; $conflict = $conflict || !$match;
+                }
+                $report['library_verified'] = $verified && !$conflict && ($drive['id'] ?? '') === $s['drive_id']
+                    && ($drive['driveType'] ?? '') === 'documentLibrary' && isset($root['folder'])
+                    && ($root['parentReference']['driveId'] ?? '') === $s['drive_id'];
+                if (!$report['library_verified']) $allOk = false;
             }
             if ($allOk) {
                 $report['state'] = 'Leitura validada; escrita não testada';
                 unset($report['error']);
                 foreach (['site_id','list_id','drive_id'] as $key) $report[$key] = $s[$key];
-            } elseif (!in_array(false, $checks, true)) $report['error'] = 'Um ou mais pedidos Graph falharam. Consulte cada resultado.';
+            } elseif (!in_array(false, $checks, true)) $report['error'] = 'Falha num pedido Graph ou na correspondência dos recursos configurados. Consulte cada resultado.';
+            if ($report['first_403_endpoint']) $report['error'] = 'Primeiro HTTP 403: '.$report['first_403_endpoint'].'. A concessão ao site ainda não foi confirmada.';
             return $report;
         } catch (Throwable $e) {
             // Do not persist exception messages: transports can include sensitive values.
             $report['error'] = 'Falha de ligação ou resposta inválida durante o diagnóstico.';
             return $report;
-        } finally { $this->token = ''; }
+        } finally { $this->token = ''; $this->secret = ''; }
     }
 }
-
