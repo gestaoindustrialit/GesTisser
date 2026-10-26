@@ -33,7 +33,7 @@ nem alterações de permissões. LinkGesTISSER não é preenchido nesta entrega.
 
 Campos: GesTISSER_ID, Title, Descri_x00e7__x00e3_o, CodigoCliente, Cliente,
 Estado (Ativo=true, Inativo=false), DataAtualizacao, NumeroDocumentos,
-EstadoSincronizacao. Textos acima do limite não são truncados; artigos com dados
+EstadoSincronizacao, DataUltimaProducao. Textos acima do limite não são truncados; artigos com dados
 inválidos são assinalados e os restantes continuam. Após os corrigir, iniciar
 nova execução. A contagem de criados/atualizados pode classificar como iguais
 pedidos já concluídos cujo resultado se perdeu antes de guardar o progresso.
@@ -49,3 +49,13 @@ Validação: PHP 7.0.33; sete testes aprovados, incluindo 1600 artigos sintétic
 retoma, criação sem confirmação, updates por ID, conflito de ETag, pausa e erros.
 322 ficheiros PHP sem erros de sintaxe no checkout de validação.
 Graph simulado e SQLite sintético; nenhuma escrita real em produção.
+
+ÚLTIMA PRODUÇÃO
+Antes de publicar, criar na lista a coluna DataUltimaProducao do tipo Data
+e hora, formato só data (usar criar-coluna-ultima-producao.json no Graph Explorer
+com POST no endpoint /sites/{site_id}/lists/{list_id}/columns).
+A regra usa registos terminados com quantidade boa positiva e fechos de OF
+com produção positiva. Sem produção registada: vazio. Não é a data prevista.
+Depois de publicar, executar novamente Enviar/atualizar todos para preencher
+os registos existentes, sem os apagar. Encerrar uma execução antiga pendente
+antes de iniciar a nova, para também rever os IDs já processados.

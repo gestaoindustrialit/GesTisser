@@ -11,6 +11,7 @@ $insert=$pdo->prepare('INSERT INTO erp_finished_products VALUES(?,?,?,?,?,NULL)'
 for($i=1;$i<=1600;$i++)$insert->execute([$i,'A'.$i,'Artigo '.$i,'Ativo','2026-10-26 12:00:00']);
 $columns=[];foreach(['Title','Descri_x00e7__x00e3_o','CodigoCliente','Cliente','NumeroDocumentos','EstadoSincronizacao','GesTISSER_ID']as$name)$columns[]=['name'=>$name,'text'=>['maxLength'=>255],'indexed'=>true,'enforceUniqueValues'=>true];
 $columns[]=['name'=>'Estado','boolean'=>[]];$columns[]=['name'=>'DataAtualizacao','dateTime'=>[]];
+$columns[]=['name'=>'DataUltimaProducao','dateTime'=>[]];
 $remote=[];$posts=0;$patches=0;$conflict=false;$uncertain=false;
 $api=function($method,$path,$payload)use(&$remote,&$columns,&$posts,&$patches,&$conflict,&$uncertain){
  if($method==='GET')return['value'=>$path==='/columns'?$columns:array_values($remote)];

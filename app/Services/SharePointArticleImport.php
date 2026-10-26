@@ -23,7 +23,7 @@ final class SharePointArticleImport
         $columns=[];
         foreach ($this->collection('/columns') as $column) $columns[$column['name']]=$column;
         $types=['Title'=>'text','Descri_x00e7__x00e3_o'=>'text','CodigoCliente'=>'text','Cliente'=>'text',
-            'Estado'=>'boolean','DataAtualizacao'=>'dateTime','NumeroDocumentos'=>'text','EstadoSincronizacao'=>'text','GesTISSER_ID'=>'text'];
+            'Estado'=>'boolean','DataAtualizacao'=>'dateTime','NumeroDocumentos'=>'text','EstadoSincronizacao'=>'text','GesTISSER_ID'=>'text','DataUltimaProducao'=>'dateTime'];
         foreach ($types as $name=>$type) {
             if (!isset($columns[$name][$type]) || !empty($columns[$name]['readOnly'])) throw new RuntimeException('Coluna incompatível: '.$name.'.');
         }
@@ -35,7 +35,7 @@ final class SharePointArticleImport
     }
     private function remote()
     {
-        return $this->collection('/items?$expand=fields($select=Title,GesTISSER_ID,Descri_x00e7__x00e3_o,CodigoCliente,Cliente,Estado,DataAtualizacao,NumeroDocumentos,EstadoSincronizacao)&$top=200');
+        return $this->collection('/items?$expand=fields($select=Title,GesTISSER_ID,Descri_x00e7__x00e3_o,CodigoCliente,Cliente,Estado,DataAtualizacao,NumeroDocumentos,EstadoSincronizacao,DataUltimaProducao)&$top=200');
     }
     private function fields(array $row, array $columns)
     {
@@ -47,7 +47,13 @@ final class SharePointArticleImport
             'Descri_x00e7__x00e3_o'=>(string)$row['description'],'CodigoCliente'=>(string)$row['customer_code'],
             'Cliente'=>(string)$row['customer_name'],'Estado'=>$row['status']==='Ativo',
             'DataAtualizacao'=>$date.'T00:00:00Z','NumeroDocumentos'=>(string)$row['document_count'],
-            'EstadoSincronizacao'=>'Importado do GesTISSER'];
+            'EstadoSincronizacao'=>'Importado do GesTISSER','DataUltimaProducao'=>null];
+        if (!empty($row['last_production'])) {
+            $last=substr($row['last_production'],0,10);
+            $lastDate=DateTime::createFromFormat('!Y-m-d',$last,new DateTimeZone('UTC'));
+            if (!$lastDate || $lastDate->format('Y-m-d')!==$last) throw new RuntimeException('Data de última produção inválida.');
+            $fields['DataUltimaProducao']=$last.'T00:00:00Z';
+        }
         if (trim($fields['Title'])==='') throw new RuntimeException('Código vazio.');
         foreach ($fields as $name=>$value) {
             if (is_string($value) && isset($columns[$name]['text'])) {
@@ -58,9 +64,29 @@ final class SharePointArticleImport
         }
         return $fields;
     }
+    private function productionExpression()
+    {
+        $tables=$this->pdo->query("SELECT name FROM sqlite_master WHERE type='table'")->fetchAll(PDO::FETCH_COLUMN);
+        if (!in_array('erp_production_orders',$tables,true)) return 'NULL';
+        $parts=['NULL'];
+        if (in_array('erp_operation_time_entries',$tables,true) && in_array('erp_production_order_operations',$tables,true)) {
+            $parts[]='(SELECT MAX(t.ended_at) FROM erp_operation_time_entries t
+                JOIN erp_production_order_operations op ON op.id=t.production_order_operation_id
+                JOIN erp_production_orders o ON o.id=op.production_order_id
+                WHERE o.finished_product_id=a.id AND t.quantity_good>0
+                AND julianday(t.ended_at) IS NOT NULL AND julianday(t.started_at) IS NOT NULL)';
+        }
+        if (in_array('erp_production_order_closures',$tables,true)) {
+            $parts[]='(SELECT MAX(c.closed_at) FROM erp_production_order_closures c
+                JOIN erp_production_orders o ON o.id=c.production_order_id
+                WHERE o.finished_product_id=a.id AND o.produced_quantity>0 AND julianday(c.closed_at) IS NOT NULL)';
+        }
+        if (count($parts)===1) return 'NULL';
+        return "NULLIF(MAX(".implode(',',array_map(function ($sql) { return "COALESCE(".$sql.",'')"; },$parts))."),'')";
+    }
     private function source($after,$limit=5)
     {
-        $q=$this->pdo->prepare('SELECT a.id,a.code,a.description,a.status,a.updated_at,c.code customer_code,c.name customer_name,
+        $q=$this->pdo->prepare('SELECT a.id,a.code,a.description,a.status,a.updated_at,c.code customer_code,c.name customer_name,'. $this->productionExpression().' last_production,
             (SELECT COUNT(*) FROM erp_product_documents d WHERE d.entity_type="finished_product" AND d.entity_id=a.id AND d.status="Ativo") document_count
             FROM erp_finished_products a LEFT JOIN erp_customers c ON c.id=a.customer_id WHERE a.id>? ORDER BY a.id LIMIT '.(int)$limit);
         $q->execute([(int)$after]); return $q->fetchAll(PDO::FETCH_ASSOC);
@@ -83,7 +109,7 @@ final class SharePointArticleImport
                             foreach ($entry['fields'] as $name=>$value) {
                                 $existing=$f[$name] ?? null;
                                 if ($name==='Estado') $equal=$existing!==null && filter_var($existing,FILTER_VALIDATE_BOOLEAN)===$value;
-                                elseif ($name==='DataAtualizacao') $equal=substr((string)$existing,0,10)===substr($value,0,10);
+                                elseif (in_array($name,['DataAtualizacao','DataUltimaProducao'],true)) $equal=substr((string)$existing,0,10)===substr($value,0,10);
                                 else $equal=(string)$existing===(string)$value;
                                 if (!$equal) $changed=true;
                             }

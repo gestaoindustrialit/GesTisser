@@ -67,7 +67,7 @@ function gt_sp_article_panel(PDO $pdo)
     ?>
 <h2 class="h5">3. Artigos — teste e envio completo</h2>
 <p>Teste os primeiros cinco artigos antes de enviar todos. O envio completo cria os artigos em falta e atualiza os campos mapeados dos existentes por GesTISSER_ID, incluindo os códigos alterados. Registos iguais são ignorados. Não apaga registos, não copia documentos e não agenda tarefas. LinkGesTISSER fica por preencher.</p>
-<p>Mapeamento: código → Title; descrição → Descrição; código e nome do cliente → CodigoCliente/Cliente; Ativo/Inativo → Estado; data → DataAtualizacao; documentos ativos → NumeroDocumentos; ID local → GesTISSER_ID.</p>
+<p>Mapeamento: código → Title; descrição → Descrição; código e nome do cliente → CodigoCliente/Cliente; Ativo/Inativo → Estado; data → DataAtualizacao; última produção efetiva → DataUltimaProducao; documentos ativos → NumeroDocumentos; ID local → GesTISSER_ID.</p>
 <form id="sp-job-form" method="post" action="integrations.php?action=sharepoint#article-import" class="mb-3">
 <?=csrf_input()?><input type="hidden" name="run" value="<?=h($job['run'] ?? '')?>">
 <?php if (in_array($job['state'] ?? '',['running','paused'],true)): ?>

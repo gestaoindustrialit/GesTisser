@@ -11,6 +11,7 @@ INSERT INTO erp_product_documents VALUES(1,"finished_product",1,"Ativo");');
 for($i=1;$i<=6;$i++)$pdo->prepare('INSERT INTO erp_finished_products VALUES(?,?,?,?,?,?)')->execute([$i,'A'.$i,'Descrição '.$i,'Ativo','2026-10-26 08:00:00',1]);
 $columns=[];foreach(['Title','Descri_x00e7__x00e3_o','CodigoCliente','Cliente','NumeroDocumentos','EstadoSincronizacao','GesTISSER_ID'] as $name) $columns[]=['name'=>$name,'text'=>['maxLength'=>255],'indexed'=>true,'enforceUniqueValues'=>true];
 $columns[]=['name'=>'Estado','boolean'=>[]];$columns[]=['name'=>'DataAtualizacao','dateTime'=>[]];
+$columns[]=['name'=>'DataUltimaProducao','dateTime'=>[]];
 $remote=[];$posts=[];$uncertain=false;
 $api=function($method,$path,$body)use(&$columns,&$remote,&$posts,&$uncertain){
  if($method==='GET')return ['value'=>$path==='/columns'?$columns:$remote];
@@ -35,6 +36,25 @@ $pdo->exec('UPDATE erp_finished_products SET description="valid" WHERE id=6');
 $remote[]=['id'=>'foreign','fields'=>['Title'=>'A6','GesTISSER_ID'=>'other']];assert_import($service->preview(5)['rows'][0]['action']==='Bloqueado','foreign code collision');array_pop($remote);
 $uncertain=true;$r=$service->execute($service->preview(5));assert_import(strpos($r[0]['result'],'Não confirmado')===0,'uncertain creation stops');
 $count=count($posts);$r=$service->execute($service->preview(5));assert_import(count($posts)===$count,'uncertain success reconciles without duplicate');
+// Last production uses actual good output and closures, never a planned date.
+$pdo->exec('CREATE TABLE erp_production_orders(id INTEGER PRIMARY KEY,finished_product_id INTEGER,produced_quantity REAL);
+CREATE TABLE erp_production_order_operations(id INTEGER PRIMARY KEY,production_order_id INTEGER);
+CREATE TABLE erp_operation_time_entries(id INTEGER PRIMARY KEY,production_order_operation_id INTEGER,quantity_good REAL,started_at TEXT,ended_at TEXT);
+CREATE TABLE erp_production_order_closures(id INTEGER PRIMARY KEY,production_order_id INTEGER,closed_at TEXT);
+INSERT INTO erp_production_orders VALUES(10,1,2),(11,2,0);
+INSERT INTO erp_production_order_operations VALUES(20,10);
+INSERT INTO erp_operation_time_entries VALUES(1,20,2,"2026-10-20 08:00:00","2026-10-20 12:00:00"),
+(2,20,0,"2026-10-25 08:00:00","2026-10-25 12:00:00"),
+(3,20,4,"2026-10-26 08:00:00",NULL);
+INSERT INTO erp_production_order_closures VALUES(1,10,"2026-10-22 18:00:00"),(2,11,"2026-10-25 12:00:00");');
+$dated=$service->preview();
+assert_import($dated['rows'][0]['fields']['DataUltimaProducao']==='2026-10-22T00:00:00Z','latest positive-production closure');
+assert_import($dated['rows'][1]['fields']['DataUltimaProducao']===null,'no production remains empty');
+$pdo->exec('DELETE FROM erp_production_order_closures WHERE production_order_id=10');
+$dated=$service->preview();
+assert_import($dated['rows'][0]['fields']['DataUltimaProducao']==='2026-10-20T00:00:00Z','ignore open operations and zero good quantity');
+$pdo->exec('UPDATE erp_operation_time_entries SET quantity_good=0');
+assert_import($service->preview()['rows'][0]['fields']['DataUltimaProducao']===null,'clear date if no qualifying production');
 $columns[6]['enforceUniqueValues']=false;
 try{$service->preview();throw new LogicException('nonunique key accepted');}catch(RuntimeException $e){assert_import(!($e instanceof LogicException),'unique schema required');}
 // Exercise the actual scoped adapter with mocked HTTP envelopes.

@@ -1,0 +1,7 @@
+{
+  "name": "DataUltimaProducao",
+  "displayName": "Última produção",
+  "description": "Data da última produção efetiva registada no GesTISSER.",
+  "required": false,
+  "dateTime": {"displayAs": "standard", "format": "dateOnly"}
+}
