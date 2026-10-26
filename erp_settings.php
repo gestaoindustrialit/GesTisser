@@ -222,20 +222,30 @@ $sequenceLabels = [
     'sales_order_confirmation' => 'Confirmações de encomenda',
 ];
 
+$erpOpenBlock = '';
+$erpAction = (string) ($_POST['action'] ?? '');
+if (isset($_POST['print_action']) || isset($_GET['print_state']) || isset($_GET['print_date']) || isset($_GET['print_center']) || isset($_GET['print_printer'])) $erpOpenBlock = 'printers';
+else {
+    $erpActionBlocks = ['save_production_costs'=>'costs','save_document_control'=>'documents','save_material_type'=>'materials','delete_material_type'=>'materials','save_ink_type'=>'inks','delete_ink_type'=>'inks','save_operation_type'=>'operations','delete_operation_type'=>'operations','save_operation_sector'=>'centers','delete_operation_sector'=>'centers','save_printer'=>'printers','delete_printer'=>'printers','set_commercial_sequence'=>'numbering','reset_work_order_sequence'=>'numbering','delete_all_work_orders'=>'maintenance','save_settings'=>'rules'];
+    $erpOpenBlock = $erpActionBlocks[$erpAction] ?? '';
+}
+
 $pageTitle = 'Configuração ERP';
 require __DIR__ . '/partials/header.php';
 ?>
-<h1 class="h3 mb-2">Configuração ERP</h1>
-<p class="text-muted">Defina regras transversais do ERP e a numeração automática dos documentos.</p>
+<link rel="stylesheet" href="assets/erp-settings.css?v=<?=h((string)filemtime(__DIR__.'/assets/erp-settings.css'))?>">
+<div class="erp-settings-page">
+<header class="erp-settings-header"><div><span class="erp-settings-eyebrow">Administração</span><h1>Configuração ERP</h1><p>Organize as regras, os documentos e os recursos da produção.</p></div><div class="erp-settings-tools"><button type="button" class="btn btn-outline-secondary" data-settings-expand="1">Expandir blocos</button><button type="button" class="btn btn-outline-secondary" data-settings-expand="0">Recolher blocos</button></div></header>
+<nav class="erp-settings-nav" aria-label="Acesso rápido à configuração"><a href="#settings-printers"><i class="bi bi-printer" aria-hidden="true"></i> Impressão</a><a href="#settings-centers"><i class="bi bi-building" aria-hidden="true"></i> Centros de trabalho</a><a href="#settings-materials">Materiais e tintas</a><a href="#settings-numbering">Numeração</a><a href="#settings-rules">Regras e indicadores</a></nav>
 
 <?php if ($flashSuccess): ?><div class="alert alert-success"><?= h($flashSuccess) ?></div><?php endif; ?>
 <?php if ($flashError): ?><div class="alert alert-danger"><?= h($flashError) ?></div><?php endif; ?>
 
-<section class="card shadow-sm soft-card mb-4" aria-labelledby="production-costs-title">
+<details class="erp-settings-block" id="settings-costs"<?= $erpOpenBlock==='costs' ? ' open' : '' ?>><summary class="erp-settings-summary"><span class="erp-settings-icon"><i class="bi bi-cash-coin" aria-hidden="true"></i></span><span class="erp-settings-label"><span class="erp-settings-title" id="production-costs-title">Custos de produção</span><span class="erp-settings-description">Valores unitários e rubricas de referência</span></span><span class="erp-settings-count"><?= count($productionCosts) ?></span><i class="bi bi-chevron-down erp-settings-chevron" aria-hidden="true"></i></summary><section class="card shadow-sm soft-card" aria-labelledby="production-costs-title">
     <div class="card-body p-4">
         <div class="d-flex flex-wrap justify-content-between align-items-start gap-3 mb-3">
             <div>
-                <h2 class="h5 mb-1" id="production-costs-title"><i class="bi bi-cash-coin me-2 text-primary"></i>Custos inerentes à produção</h2>
+
                 <p class="text-muted mb-0">Defina os valores unitários usados como referência na produção. Pode acrescentar rubricas existentes no relatório administrativo de custos.</p>
             </div>
         </div>
@@ -272,12 +282,12 @@ require __DIR__ . '/partials/header.php';
             </div>
         </form>
     </div>
-</section>
+</section></details>
 
-<section class="card shadow-sm soft-card mb-4" aria-labelledby="document-control-title">
+<details class="erp-settings-block" id="settings-documents"<?= $erpOpenBlock==='documents' ? ' open' : '' ?>><summary class="erp-settings-summary"><span class="erp-settings-icon"><i class="bi bi-journal-check" aria-hidden="true"></i></span><span class="erp-settings-label"><span class="erp-settings-title" id="document-control-title">Controlo documental</span><span class="erp-settings-description">Modelos, identificação e controlo ISO 9001</span></span><span class="erp-settings-count"><?= count($controlledDocuments) ?></span><i class="bi bi-chevron-down erp-settings-chevron" aria-hidden="true"></i></summary><section class="card shadow-sm soft-card" aria-labelledby="document-control-title">
     <div class="card-body p-4">
         <div class="d-flex flex-wrap justify-content-between align-items-start gap-3 mb-3">
-            <div><h2 class="h5 mb-1" id="document-control-title"><i class="bi bi-journal-check me-2 text-primary"></i>Controlo documental ISO 9001</h2><p class="text-muted mb-0">Listagem central de todos os modelos e documentos gerados pelo sistema. Cada tipo possui um número de controlo único e rastreável.</p></div>
+            <div><p class="text-muted mb-0">Listagem central de todos os modelos e documentos gerados pelo sistema. Cada tipo possui um número de controlo único e rastreável.</p></div>
             <span class="badge text-bg-primary rounded-pill"><?= count($controlledDocuments) ?> documentos</span>
         </div>
         <div class="table-responsive">
@@ -297,33 +307,33 @@ require __DIR__ . '/partials/header.php';
         </div>
         <p class="small text-muted mt-3 mb-0"><i class="bi bi-info-circle me-1"></i>O número identifica o tipo/modelo documental; os números transacionais (por exemplo, OF e movimentos) continuam a ser geridos nas sequências abaixo. As alterações ficam registadas na auditoria.</p>
     </div>
-</section>
+</section></details>
 
 <div class="row g-4 mb-4">
     <div class="col-12">
-        <section class="card shadow-sm soft-card" aria-labelledby="material-types-title"><div class="card-body p-4">
-            <h2 class="h5" id="material-types-title">Tipos de material</h2><p class="text-muted">Crie e edite os tipos usados nos artigos. Só é possível eliminar tipos sem artigos ou características associados.</p>
+        <details class="erp-settings-block" id="settings-materials"<?= $erpOpenBlock==='materials' ? ' open' : '' ?>><summary class="erp-settings-summary"><span class="erp-settings-icon"><i class="bi bi-box-seam" aria-hidden="true"></i></span><span class="erp-settings-label"><span class="erp-settings-title" id="material-types-title">Tipos de material</span><span class="erp-settings-description">Catálogo utilizado nos artigos</span></span><span class="erp-settings-count"><?= count($materialTypes) ?></span><i class="bi bi-chevron-down erp-settings-chevron" aria-hidden="true"></i></summary><section class="card shadow-sm soft-card" aria-labelledby="material-types-title"><div class="card-body p-4">
+            <p class="text-muted">Crie e edite os tipos usados nos artigos. Só é possível eliminar tipos sem artigos ou características associados.</p>
             <?php foreach($materialTypes as$type):?><form method="post" class="row g-2 align-items-center mb-2"><?=csrf_input()?><input type="hidden" name="action" value="save_material_type"><input type="hidden" name="id" value="<?=(int)$type['id']?>"><div class="col-md-3"><input class="form-control" name="code" required value="<?=h($type['code'])?>" aria-label="Código do tipo de material"></div><div class="col"><input class="form-control" name="name" required value="<?=h($type['name'])?>" aria-label="Nome do tipo de material"></div><div class="col-auto"><input type="hidden" name="is_active" value="0"><label class="form-check form-check-inline"><input class="form-check-input" type="checkbox" name="is_active" value="1" <?=$type['is_active']?'checked':''?>> Ativo</label><button class="btn btn-outline-primary" aria-label="Guardar tipo de material"><i class="bi bi-check-lg"></i></button> <button class="btn btn-outline-danger" name="action" value="delete_material_type" formnovalidate aria-label="Remover tipo de material" onclick="return confirm('Remover este tipo de material?')"><i class="bi bi-trash"></i></button></div></form><?php endforeach;?>
             <form method="post" class="row g-2 align-items-center mt-3 pt-3 border-top"><?=csrf_input()?><input type="hidden" name="action" value="save_material_type"><input type="hidden" name="is_active" value="1"><div class="col-md-3"><input class="form-control" name="code" required placeholder="Código"></div><div class="col"><input class="form-control" name="name" required placeholder="Novo tipo de material"></div><div class="col-auto"><button class="btn btn-primary"><i class="bi bi-plus-lg me-1"></i>Adicionar</button></div></form>
-        </div></section>
+        </div></section></details>
     </div>
     <div class="col-12">
-        <section class="card shadow-sm soft-card" aria-labelledby="ink-types-title"><div class="card-body p-4">
-            <h2 class="h5" id="ink-types-title">Tipos de tinta</h2><p class="text-muted">Configure os tipos disponíveis e o ícone apresentado antes do nome da cor.</p>
+        <details class="erp-settings-block" id="settings-inks"<?= $erpOpenBlock==='inks' ? ' open' : '' ?>><summary class="erp-settings-summary"><span class="erp-settings-icon"><i class="bi bi-droplet" aria-hidden="true"></i></span><span class="erp-settings-label"><span class="erp-settings-title" id="ink-types-title">Tipos de tinta</span><span class="erp-settings-description">Cores, classificações e ícones</span></span><span class="erp-settings-count"><?= count($inkTypes) ?></span><i class="bi bi-chevron-down erp-settings-chevron" aria-hidden="true"></i></summary><section class="card shadow-sm soft-card" aria-labelledby="ink-types-title"><div class="card-body p-4">
+            <p class="text-muted">Configure os tipos disponíveis e o ícone apresentado antes do nome da cor.</p>
             <?php $inkIconOptions=['bi-droplet-fill'=>'Gota','bi-bucket-fill'=>'Balde','bi-paint-bucket'=>'Balde de tinta','bi-palette-fill'=>'Paleta','bi-circle-fill'=>'Círculo','bi-water'=>'Água'];foreach($inkTypes as$type):?><form method="post" class="row g-2 align-items-center mb-2"><?=csrf_input()?><input type="hidden" name="action" value="save_ink_type"><input type="hidden" name="id" value="<?=(int)$type['id']?>"><div class="col-md-2"><input class="form-control" name="code" required value="<?=h($type['code'])?>" aria-label="Código do tipo de tinta"></div><div class="col-md-3"><input class="form-control" name="name" required value="<?=h($type['name'])?>" aria-label="Nome do tipo de tinta"></div><div class="col-md-3"><select class="form-select" name="icon" aria-label="Ícone do tipo de tinta"><?php foreach($inkIconOptions as$icon=>$label):?><option value="<?=h($icon)?>" <?=$type['icon']===$icon?'selected':''?>><?=h($label)?></option><?php endforeach;?></select></div><div class="col-auto"><i class="bi <?=h($type['icon'])?> fs-5 me-2" title="<?=h($type['name'])?>"></i><input type="hidden" name="is_active" value="0"><label class="form-check form-check-inline"><input class="form-check-input" type="checkbox" name="is_active" value="1" <?=$type['is_active']?'checked':''?>> Ativo</label><button class="btn btn-outline-primary" aria-label="Guardar tipo de tinta"><i class="bi bi-check-lg"></i></button> <button class="btn btn-outline-danger" name="action" value="delete_ink_type" formnovalidate aria-label="Remover tipo de tinta" onclick="return confirm('Remover este tipo de tinta?')"><i class="bi bi-trash"></i></button></div></form><?php endforeach;?>
             <form method="post" class="row g-2 align-items-center mt-3 pt-3 border-top"><?=csrf_input()?><input type="hidden" name="action" value="save_ink_type"><input type="hidden" name="is_active" value="1"><div class="col-md-2"><input class="form-control" name="code" required placeholder="Código"></div><div class="col-md-3"><input class="form-control" name="name" required placeholder="Novo tipo de tinta"></div><div class="col-md-3"><select class="form-select" name="icon"><?php foreach($inkIconOptions as$icon=>$label):?><option value="<?=h($icon)?>"><?=h($label)?></option><?php endforeach;?></select></div><div class="col-auto"><button class="btn btn-primary"><i class="bi bi-plus-lg me-1"></i>Adicionar</button></div></form>
-        </div></section>
-    </div>
-    <div class="col-xl-6">
-        <section class="card shadow-sm soft-card h-100" aria-labelledby="operation-types-title"><div class="card-body p-4">
-            <h2 class="h5" id="operation-types-title">Tipos de operações</h2><p class="text-muted">Adicione, edite ou remova as opções apresentadas no campo Tipo das operações.</p>
-            <?php foreach($operationTypes as $type): ?><form method="post" class="row g-2 align-items-center mb-2"><?=csrf_input()?><input type="hidden" name="action" value="save_operation_type"><input type="hidden" name="id" value="<?=(int)$type['id']?>"><div class="col-4"><input class="form-control" name="code" required value="<?=h($type['code'])?>" aria-label="Código do tipo"></div><div class="col"><input class="form-control" name="name" required value="<?=h($type['name'])?>" aria-label="Nome do tipo"></div><div class="col-auto"><button class="btn btn-outline-primary" aria-label="Guardar tipo"><i class="bi bi-check-lg"></i></button><button class="btn btn-outline-danger" name="action" value="delete_operation_type" formnovalidate aria-label="Remover tipo" onclick="return confirm('Remover este tipo de operação?')"><i class="bi bi-trash"></i></button></div></form><?php endforeach; ?>
-            <form method="post" class="row g-2 align-items-center mt-3 pt-3 border-top"><?=csrf_input()?><input type="hidden" name="action" value="save_operation_type"><div class="col-4"><input class="form-control" name="code" required placeholder="Código"></div><div class="col"><input class="form-control" name="name" required placeholder="Novo tipo"></div><div class="col-auto"><button class="btn btn-primary"><i class="bi bi-plus-lg me-1"></i>Adicionar</button></div></form>
-        </div></section>
+        </div></section></details>
     </div>
     <div class="col-12">
-        <section class="card shadow-sm soft-card" aria-labelledby="work-centers-title"><div class="card-body p-4">
-            <h2 class="h5" id="work-centers-title">Centros de trabalho e capacidade</h2>
+        <details class="erp-settings-block" id="settings-operations"<?= $erpOpenBlock==='operations' ? ' open' : '' ?>><summary class="erp-settings-summary"><span class="erp-settings-icon"><i class="bi bi-gear" aria-hidden="true"></i></span><span class="erp-settings-label"><span class="erp-settings-title" id="operation-types-title">Tipos de operações</span><span class="erp-settings-description">Classificação das operações de produção</span></span><span class="erp-settings-count"><?= count($operationTypes) ?></span><i class="bi bi-chevron-down erp-settings-chevron" aria-hidden="true"></i></summary><section class="card shadow-sm soft-card" aria-labelledby="operation-types-title"><div class="card-body p-4">
+            <p class="text-muted">Adicione, edite ou remova as opções apresentadas no campo Tipo das operações.</p>
+            <?php foreach($operationTypes as $type): ?><form method="post" class="row g-2 align-items-center mb-2"><?=csrf_input()?><input type="hidden" name="action" value="save_operation_type"><input type="hidden" name="id" value="<?=(int)$type['id']?>"><div class="col-4"><input class="form-control" name="code" required value="<?=h($type['code'])?>" aria-label="Código do tipo"></div><div class="col"><input class="form-control" name="name" required value="<?=h($type['name'])?>" aria-label="Nome do tipo"></div><div class="col-auto"><button class="btn btn-outline-primary" aria-label="Guardar tipo"><i class="bi bi-check-lg"></i></button><button class="btn btn-outline-danger" name="action" value="delete_operation_type" formnovalidate aria-label="Remover tipo" onclick="return confirm('Remover este tipo de operação?')"><i class="bi bi-trash"></i></button></div></form><?php endforeach; ?>
+            <form method="post" class="row g-2 align-items-center mt-3 pt-3 border-top"><?=csrf_input()?><input type="hidden" name="action" value="save_operation_type"><div class="col-4"><input class="form-control" name="code" required placeholder="Código"></div><div class="col"><input class="form-control" name="name" required placeholder="Novo tipo"></div><div class="col-auto"><button class="btn btn-primary"><i class="bi bi-plus-lg me-1"></i>Adicionar</button></div></form>
+        </div></section></details>
+    </div>
+    <div class="col-12">
+        <details class="erp-settings-block" id="settings-centers"<?= $erpOpenBlock==='centers' ? ' open' : '' ?>><summary class="erp-settings-summary"><span class="erp-settings-icon"><i class="bi bi-building" aria-hidden="true"></i></span><span class="erp-settings-label"><span class="erp-settings-title" id="work-centers-title">Centros de trabalho</span><span class="erp-settings-description">Postos, máquinas e capacidade disponível</span></span><span class="erp-settings-count"><?= count($operationSectors) ?></span><i class="bi bi-chevron-down erp-settings-chevron" aria-hidden="true"></i></summary><section class="card shadow-sm soft-card" aria-labelledby="work-centers-title"><div class="card-body p-4">
+
             <p class="text-muted">Defina se o posto é administrativo ou utiliza uma máquina. A capacidade líquida alimenta automaticamente a previsão das operações.</p>
             <?php foreach($operationSectors as $sector): ?>
             <form method="post" class="row g-2 align-items-end mb-3 pb-3 border-bottom"><?=csrf_input()?><input type="hidden" name="action" value="save_operation_sector"><input type="hidden" name="id" value="<?=(int)$sector['id']?>">
@@ -338,16 +348,17 @@ require __DIR__ . '/partials/header.php';
                 <div class="col"><input type="hidden" name="is_active" value="0"><label class="form-check d-inline-block me-2"><input class="form-check-input" type="checkbox" name="is_active" value="1" <?=$sector['is_active']?'checked':''?>> Ativo</label><button class="btn btn-outline-primary"><i class="bi bi-check-lg"></i> Guardar</button> <button class="btn btn-outline-danger" name="action" value="delete_operation_sector" formnovalidate onclick="return confirm('Remover este centro de trabalho?')"><i class="bi bi-trash"></i></button></div>
             </form><?php endforeach; ?>
             <form method="post" class="row g-2 align-items-end"><?=csrf_input()?><input type="hidden" name="action" value="save_operation_sector"><input type="hidden" name="is_active" value="1"><div class="col-md-2"><label class="form-label">Código</label><input class="form-control" name="code" required></div><div class="col-md-3"><label class="form-label">Novo centro</label><input class="form-control" name="name" required></div><div class="col-md-2"><label class="form-label">Tipo</label><select class="form-select js-center-type" name="center_type"><option value="administrative">Administrativo</option><option value="machine">Máquina</option></select></div><div class="col-md-3 js-center-machine"><label class="form-label">Máquina utilizada</label><select class="form-select" name="machine_id"><option value="">Selecione…</option><?php foreach($machines as$m):?><option value="<?=$m['id']?>"><?=h($m['code'].' · '.$m['name'])?></option><?php endforeach;?></select></div><div class="col-md-2"><label class="form-label">Impressora</label><select class="form-select" name="default_printer_id"><option value="">Sem impressora</option><?php foreach($printers as$p):if(!$p['is_active'])continue;?><option value="<?=$p['id']?>"><?=h($p['name'])?></option><?php endforeach;?></select></div><div class="col-md-2"><label class="form-label">Capacidade/dia</label><input class="form-control" type="number" min="1" name="daily_capacity_minutes" value="480"></div><div class="col-md-2"><label class="form-label">Eficiência %</label><input class="form-control" type="number" min="1" max="100" name="efficiency_percent" value="100"></div><div class="col-md-2"><label class="form-label">Custo/hora</label><input class="form-control" type="number" min="0" step=".01" name="hourly_rate" value="0"></div><div class="col"><button class="btn btn-primary"><i class="bi bi-plus-lg me-1"></i>Adicionar centro</button></div></form>
-        </div></section>
+        </div></section></details>
     </div>
     <div class="col-12">
-        <section class="card shadow-sm soft-card" aria-labelledby="printers-title"><div class="card-body p-4"><h2 class="h5" id="printers-title">Impressoras de rede</h2><?php include __DIR__.'/includes/printing_admin_panel.php'; ?><p class="text-muted">Configure os destinos disponíveis para documentos e etiquetas em cada posto.</p>
-        <?php foreach($printers as$p):?><form method="post" class="row g-2 align-items-end mb-2"><?=csrf_input()?><input type="hidden" name="action" value="save_printer"><input type="hidden" name="id" value="<?=$p['id']?>"><div class="col-md-3"><label class="form-label">Nome</label><input class="form-control" name="name" required value="<?=h($p['name'])?>"></div><div class="col-md-3"><label class="form-label">Endereço de rede</label><input class="form-control" name="network_uri" required value="<?=h($p['network_uri'])?>"></div><div class="col-md-2"><label class="form-label">Local</label><input class="form-control" name="location" value="<?=h((string)$p['location'])?>"></div><div class="col-md-2"><label class="form-label">Controlador</label><input class="form-control" name="driver_name" value="<?=h((string)$p['driver_name'])?>"></div><div class="col"><input type="hidden" name="is_active" value="0"><label class="form-check d-inline-block"><input class="form-check-input" type="checkbox" name="is_active" value="1" <?=$p['is_active']?'checked':''?>> Ativa</label><button class="btn btn-outline-primary"><i class="bi bi-check-lg"></i></button> <button class="btn btn-outline-danger" name="action" value="delete_printer" formnovalidate><i class="bi bi-trash"></i></button></div></form><?php endforeach;?>
-        <form method="post" class="row g-2 align-items-end mt-3 pt-3 border-top"><?=csrf_input()?><input type="hidden" name="action" value="save_printer"><input type="hidden" name="is_active" value="1"><div class="col-md-3"><label class="form-label">Nome</label><input class="form-control" name="name" required placeholder="Etiquetas produção"></div><div class="col-md-3"><label class="form-label">Endereço de rede</label><input class="form-control" name="network_uri" required placeholder="ipp://192.168.1.20/ipp/print"></div><div class="col-md-2"><label class="form-label">Local</label><input class="form-control" name="location"></div><div class="col-md-2"><label class="form-label">Controlador</label><input class="form-control" name="driver_name"></div><div class="col"><button class="btn btn-primary"><i class="bi bi-plus-lg me-1"></i>Adicionar</button></div></form>
-        </div></section>
+        <details class="erp-settings-block" id="settings-printers"<?= $erpOpenBlock==='printers' ? ' open' : '' ?>><summary class="erp-settings-summary"><span class="erp-settings-icon"><i class="bi bi-printer" aria-hidden="true"></i></span><span class="erp-settings-label"><span class="erp-settings-title" id="printers-title">Impressoras e impressão centralizada</span><span class="erp-settings-description">Agentes Windows, filas e destinos por posto</span></span><span class="erp-settings-count"><?= count($printers) ?></span><i class="bi bi-chevron-down erp-settings-chevron" aria-hidden="true"></i></summary><section class="card shadow-sm soft-card" aria-labelledby="printers-title"><div class="card-body p-4"><?php include __DIR__.'/includes/printing_admin_panel.php'; ?><p class="text-muted">Configure os destinos disponíveis para documentos e etiquetas em cada posto.</p>
+        <?php foreach($printers as$p):?><form method="post" class="row g-3 align-items-end mb-2 erp-printer-card"><?=csrf_input()?><input type="hidden" name="action" value="save_printer"><input type="hidden" name="id" value="<?=$p['id']?>"><div class="col-md-3"><label class="form-label">Nome</label><input class="form-control" name="name" required value="<?=h($p['name'])?>"></div><div class="col-md-3"><label class="form-label">Endereço de rede</label><input class="form-control" name="network_uri" required value="<?=h($p['network_uri'])?>"></div><div class="col-md-2"><label class="form-label">Local</label><input class="form-control" name="location" value="<?=h((string)$p['location'])?>"></div><div class="col-md-2"><label class="form-label">Controlador</label><input class="form-control" name="driver_name" value="<?=h((string)$p['driver_name'])?>"></div><div class="col-12 d-flex flex-wrap align-items-center gap-2 erp-printer-actions"><input type="hidden" name="is_active" value="0"><label class="form-check d-inline-block"><input class="form-check-input" type="checkbox" name="is_active" value="1" <?=$p['is_active']?'checked':''?>> Ativa</label><button class="btn btn-outline-primary"><i class="bi bi-check-lg me-1" aria-hidden="true"></i>Guardar</button> <button class="btn btn-outline-danger" name="action" value="delete_printer" formnovalidate><i class="bi bi-pause-circle me-1" aria-hidden="true"></i>Desativar</button></div></form><?php endforeach;?>
+        <form method="post" class="row g-3 align-items-end mt-3 erp-printer-card erp-printer-new"><?=csrf_input()?><input type="hidden" name="action" value="save_printer"><input type="hidden" name="is_active" value="1"><div class="col-md-3"><label class="form-label">Nome</label><input class="form-control" name="name" required placeholder="Etiquetas produção"></div><div class="col-md-3"><label class="form-label">Endereço de rede</label><input class="form-control" name="network_uri" required placeholder="ipp://192.168.1.20/ipp/print"></div><div class="col-md-2"><label class="form-label">Local</label><input class="form-control" name="location"></div><div class="col-md-2"><label class="form-label">Controlador</label><input class="form-control" name="driver_name"></div><div class="col"><button class="btn btn-primary"><i class="bi bi-plus-lg me-1"></i>Adicionar</button></div></form>
+        </div></section></details>
     </div>
 </div>
 
+<details class="erp-settings-block" id="settings-numbering"<?= $erpOpenBlock==='numbering' ? ' open' : '' ?>><summary class="erp-settings-summary"><span class="erp-settings-icon"><i class="bi bi-123" aria-hidden="true"></i></span><span class="erp-settings-label"><span class="erp-settings-title">Contadores de documentos</span><span class="erp-settings-description">Próximos números das encomendas e ordens de fabrico</span></span><i class="bi bi-chevron-down erp-settings-chevron" aria-hidden="true"></i></summary><div class="erp-settings-content">
 <?php foreach(['sales_order'=>'Encomendas de clientes','sales_order_confirmation'=>'Confirmações de encomenda'] as $sequenceCode=>$sequenceLabel):$commercialSequence=$commercialSequences[$sequenceCode];?>
 <form method="post" class="card card-body border-primary mb-3">
     <?=csrf_input()?><input type="hidden" name="action" value="set_commercial_sequence"><input type="hidden" name="commercial_sequence" value="<?=h($sequenceCode)?>">
@@ -367,6 +378,8 @@ require __DIR__ . '/partials/header.php';
 </form>
 <?php endif; ?>
 
+</div></details>
+<details class="erp-settings-block erp-settings-maintenance" id="settings-maintenance"<?= $erpOpenBlock==='maintenance' ? ' open' : '' ?>><summary class="erp-settings-summary"><span class="erp-settings-icon"><i class="bi bi-exclamation-triangle" aria-hidden="true"></i></span><span class="erp-settings-label"><span class="erp-settings-title">Manutenção dos dados</span><span class="erp-settings-description">Eliminação de ordens de fabrico e histórico</span></span><i class="bi bi-chevron-down erp-settings-chevron" aria-hidden="true"></i></summary><div class="erp-settings-content">
 <form method="post" class="card shadow-sm soft-card border-danger mb-4">
     <?= csrf_input() ?><input type="hidden" name="action" value="delete_all_work_orders"><input type="hidden" name="delete_confirmation" value="ELIMINAR">
     <div class="card-body p-4"><div class="row g-3 align-items-center">
@@ -375,7 +388,8 @@ require __DIR__ . '/partials/header.php';
     </div></div>
 </form>
 
-<form method="post" class="card shadow-sm soft-card">
+</div></details>
+<details class="erp-settings-block" id="settings-rules"<?= $erpOpenBlock==='rules' ? ' open' : '' ?>><summary class="erp-settings-summary"><span class="erp-settings-icon"><i class="bi bi-sliders" aria-hidden="true"></i></span><span class="erp-settings-label"><span class="erp-settings-title">Regras, numeração e indicadores</span><span class="erp-settings-description">Stock, codificação, sequências e modo TV</span></span><i class="bi bi-chevron-down erp-settings-chevron" aria-hidden="true"></i></summary><form method="post" class="card shadow-sm soft-card">
     <?= csrf_input() ?>
     <input type="hidden" name="action" value="save_settings">
     <div class="card-body p-4">
@@ -427,7 +441,9 @@ require __DIR__ . '/partials/header.php';
         </div>
         <button class="btn btn-primary"><i class="bi bi-check-lg me-1"></i>Guardar configuração ERP</button>
     </div>
-</form>
+</form></details>
+</div>
+<script src="assets/erp-settings.js?v=<?=h((string)filemtime(__DIR__.'/assets/erp-settings.js'))?>" defer></script>
 <script>
 document.querySelectorAll('.js-center-type').forEach(function (type) {
     function toggleMachine() {
