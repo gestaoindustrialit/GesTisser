@@ -303,9 +303,8 @@ final class SharePointGraphClient
             if ($site) {
                 $report['site_display_name'] = substr((string)($site['displayName'] ?? ''), 0, 200);
                 $identityOk = ($site['id'] ?? '') === ($s['site_id'] ?? '')
-                    && rtrim((string)($site['webUrl'] ?? ''), '/') === rtrim((string)($s['site_url'] ?? ''), '/')
-                    && strcasecmp(trim($site['displayName'] ?? ''), 'Tisser Central') === 0;
-                $report['site_identity'] = $identityOk ? 'Site ID e URL correspondem a Tisser Central.' : 'Site ID, URL ou nome não correspondem a Tisser Central; confirmar configuração.';
+                    && rtrim((string)($site['webUrl'] ?? ''), '/') === rtrim((string)($s['site_url'] ?? ''), '/');
+                $report['site_identity'] = $identityOk ? 'Site ID e URL correspondem ao site configurado.' : 'Site ID ou URL não correspondem ao site configurado; confirmar configuração.';
                 if (!$identityOk) $allOk = false;
             }
             $list = $resources['GET /sites/{siteId}/lists/{listId}'] ?? [];
