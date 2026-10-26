@@ -1,6 +1,6 @@
 <?php
 if(!$centralPrinting->installed()): ?>
-<form method="post" class="alert alert-info"><?=csrf_input()?><p>O novo sistema começa desativado. A preparação guarda um snapshot SQL das impressoras e centros antes da migração incremental.</p><button class="btn btn-outline-primary" name="print_action" value="prepare">Preparar impressão centralizada</button></form>
+<form method="post" class="alert alert-info"><?=csrf_input()?><p>O novo sistema começa desativado. A preparação guarda um snapshot SQL das impressoras e centros antes da migração incremental.</p><button class="btn btn-outline-primary" name="print_action" value="prepare">Preparar impressão centralizada para testes</button></form>
 <?php else:
 $printAgents=$pdo->query('SELECT id,name,active,last_seen,version,inventory FROM erp_print_agents ORDER BY name')->fetchAll(PDO::FETCH_ASSOC);
 $printTypes=$pdo->query('SELECT * FROM erp_print_types')->fetchAll(PDO::FETCH_ASSOC);
@@ -11,6 +11,15 @@ function printing_select($name,$rows,$key='id',$selected=null){echo '<select cla
 ?>
 <div class="border rounded p-3 my-3">
 <h3 class="h5">Impressão centralizada</h3>
+<?php $printPreparation=(new CentralPrintingSetup($pdo))->status(); ?>
+<div class="alert alert-<?=$printPreparation['erp_ready']?'success':'info'?>" role="status">
+<strong><?=$printPreparation['erp_ready']?'ERP preparado para configurar e testar os agentes':'Preparar os modelos iniciais do ERP'?></strong>
+<p class="mb-2">A preparação não imprime nem cria agentes ou impressoras fictícios. Registe os computadores abaixo; instale depois o agente em cada PC, autorize as filas detetadas e associe-as aos postos antes de ativar o envio.</p>
+<ul class="mb-2"><?php foreach($printPreparation['models'] as $model):?><li><?=h($model['name'])?> — <?=$model['ready']?'Disponível':'Por configurar ou inativo'?></li><?php endforeach;?></ul>
+<p class="mb-2">Agentes autorizados: <?=$printPreparation['agents']?> · Em comunicação: <?=$printPreparation['agents_online']?> · Impressoras autorizadas: <?=$printPreparation['printers']?> · Associações configuradas: <?=$printPreparation['associations']?>.</p>
+<form method="post"><?=csrf_input()?><button class="btn btn-outline-primary" name="print_action" value="prepare">Preparar / atualizar modelos iniciais</button></form>
+<a class="d-inline-block mt-2" href="https://github.com/gestaoindustrialit/GesTisser/blob/main/docs/printing/INSTALACAO.md" target="_blank" rel="noopener">Instruções de instalação nos PCs Windows</a>
+</div>
 <form method="post" class="mb-3"><?=csrf_input()?><input type="hidden" name="print_action" value="enabled"><label class="form-check"><input type="checkbox" class="form-check-input" name="enabled" value="1" <?=$centralPrinting->enabled()?'checked':''?>> Ativar envio centralizado (desmarcar suspende novas reservas e conserva os dados)</label><button class="btn btn-outline-primary">Guardar ativação</button></form>
 <?php if($agentCredential):?><div class="alert alert-warning"><strong>Guarde agora as credenciais; o token só é mostrado nesta resposta.</strong><div>ID: <code><?=h($agentCredential['id'])?></code></div><div>Token: <code><?=h($agentCredential['token'])?></code></div></div><?php endif;?>
 <details><summary class="h6">Agentes Windows</summary>

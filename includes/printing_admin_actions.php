@@ -1,11 +1,16 @@
 <?php
-require_once __DIR__.'/../app/Services/CentralPrinting.php';
+require_once __DIR__.'/../app/Services/CentralPrintingSetup.php';
 header('Cache-Control: no-store');
 $centralPrinting=new CentralPrinting($pdo);$agentCredential=null;
 if($_SERVER['REQUEST_METHOD']==='POST'&&isset($_POST['print_action'])){
     if(!validate_csrf_or_abort(false)){$flashError='Pedido inválido.';}else try{
         $pa=(string)$_POST['print_action'];
-        if($pa==='prepare'){$centralPrinting->migrate(__DIR__.'/../storage/backups/printing');$flashSuccess='Sistema preparado e desativado. Backup criado.';}
+        if($pa==='prepare'){
+            $preparation=(new CentralPrintingSetup($pdo))->prepare(__DIR__.'/../storage/backups/printing',$userId);
+            $flashSuccess=$preparation['erp_ready']?'ERP preparado para configurar os agentes.':'Preparação concluída com modelos por rever; as configurações existentes foram preservadas.';
+            $flashSuccess.=$preparation['enabled']?' A ativação existente foi preservada.':' Envio centralizado desativado.';
+            $flashSuccess.=' Modelos criados: '.$preparation['models_created'].'.';
+        }
         elseif(!$centralPrinting->installed())throw new RuntimeException('Prepare o sistema primeiro.');
         elseif($pa==='enabled')$centralPrinting->setEnabled(!empty($_POST['enabled']),$userId);
         elseif($pa==='agent')$agentCredential=$centralPrinting->createAgent(trim((string)$_POST['name']),$userId);

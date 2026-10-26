@@ -32,9 +32,11 @@ Executar testes no ambiente de desenvolvimento:
 ```sh
 source /workspace/gestisser-env/activate.sh
 php -v
-python3 scripts/test_php70.py central_printing_test.php central_printing_concurrency_test.php work_center_capacity_test.php shopfloor_page_sections_test.php product_label_feature_test.php raw_material_roll_label_test.php raw_material_ink_label_test.php
+python3 scripts/test_php70.py central_printing_setup_test.php central_printing_test.php central_printing_concurrency_test.php work_center_capacity_test.php shopfloor_page_sections_test.php product_label_feature_test.php raw_material_roll_label_test.php raw_material_ink_label_test.php
 ```
 
 O runner usa cópias isoladas e bases sintéticas. Não equivale a um teste com os dados de produção. Executar também os testes HTTP autenticados e o diagnóstico TLS no alojamento após publicação.
 
-Teste HTTP reproduzível numa cópia descartável (requer PHP 7.0.33 no PATH e sockets loopback): `python3 tests/central_printing_http.py`. Inclui 36 verificações, instalação de uma base sintética, autenticação web, configuração, proteção CSRF, migração, inventário, reserva, download, transições e revogação. Para testar a API em loopback, um router exclusivo da cópia descartável simula o indicador HTTPS do servidor; não é publicado e não comprova certificados TLS reais. A API normal é testada separadamente para recusar HTTP sem TLS. O fixture inicializa os esquemas existentes das máquinas/custos através dos migradores já disponíveis; não altera esses módulos na implementação.
+Teste HTTP reproduzível numa cópia descartável (requer PHP 7.0.33 no PATH e sockets loopback): `python3 tests/central_printing_http.py`. Inclui 43 verificações, instalação de uma base sintética, autenticação web, configuração, proteção CSRF, migração, inventário, reserva, download, transições e revogação. Para testar a API em loopback, um router exclusivo da cópia descartável simula o indicador HTTPS do servidor; não é publicado e não comprova certificados TLS reais. A API normal é testada separadamente para recusar HTTP sem TLS. O fixture inicializa os esquemas existentes das máquinas/custos através dos migradores já disponíveis; não altera esses módulos na implementação.
+
+Preparação sem PCs: confirmar que são criados três modelos, que os modelos personalizados/desativados permanecem intactos e que nenhuma fila recebe trabalhos. Repetir a ação e confirmar zero modelos novos. O teste de preparação cobre também colisão de códigos sem substituir configurações e preservação de uma ativação já existente. O teste HTTP cobre diagnóstico CLI sem escritas, recusa de uma base inexistente, preparação CLI idempotente e recusa de acesso HTTP ao comando CLI.

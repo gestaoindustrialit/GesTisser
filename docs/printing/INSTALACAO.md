@@ -12,6 +12,23 @@ As filas Windows podem corresponder a USB ou a impressoras de rede instaladas co
 
 Os modelos de rolo e tinta reutilizam os serviços e os registos existentes. O adaptador PDF/ZPL mantém os campos, mas tem um layout simples próprio para envio ao spooler; a reprodução visual exata dos layouts HTML, logótipos não está concluída. Não existe novo editor. A integração silenciosa do Shopfloor cobre etiquetas de rolo/tinta e produto acabado A4. Este último reutiliza ProductLabelService e Code128Barcode. As restantes páginas mantêm o percurso habitual.
 
+## Preparar o ERP antes dos testes nas máquinas
+
+Em Configuração ERP → Impressoras de rede, clicar em **Preparar impressão centralizada para testes**. Se a primeira versão já foi preparada, usar **Preparar / atualizar modelos iniciais**. A ação cria o que falta, com backup, sem substituir modelos equivalentes personalizados nem reativar modelos desativados. Não regista PCs fictícios, não cria trabalhos e não liga a impressão.
+
+Ficam disponíveis os modelos de identificação de rolo e de tinta (ambos 100 × 50 mm) e produto acabado A4. O painel distingue a preparação do ERP das etapas que dependem dos PCs: registar o agente, instalar no Windows, autorizar as filas detetadas, associar aos postos e ativar apenas quando pronto. Não são inferidos modelos nem linguagens das impressoras existentes. Conflitos com configurações personalizadas aparecem como pendências, preservando essas configurações.
+
+Também é possível preparar pelo Terminal cPanel, com PHP 7.0.33, sem processos permanentes:
+
+```sh
+/opt/cpanel/ea-php70/root/usr/bin/php /CAMINHO/GesTisser/scripts/prepare_central_printing.php
+/opt/cpanel/ea-php70/root/usr/bin/php /CAMINHO/GesTisser/scripts/prepare_central_printing.php --apply
+```
+
+Sem `--apply` apenas consulta o estado. Com `--apply` aplica a preparação numa base já existente; recusa criar uma base nova e não executa migradores gerais do ERP. O comando devolve JSON sem credenciais. Código de saída 0 = ERP preparado, 2 = configuração pendente, 1 = erro. A preparação inicial mantém a impressão desativada; ao atualizar uma instalação que já esteja ativa, preserva a ativação existente.
+
+Há dois snapshots quando é necessária uma preparação completa: `printing-*.sql` das impressoras/centros antes da migração inicial e `catalog-*.sql` do catálogo antes dos modelos iniciais. Repetir sem alterações não duplica modelos nem gera novos snapshots. Os modelos existentes não são apagados. O agente de desenvolvimento não tem acesso ao Terminal nem à sessão administrativa do cPanel: a execução na base real ocorre pela ação acima ou pelo comando no alojamento.
+
 ## Publicação progressiva
 
 1. Publicar os ficheiros desta alteração em conjunto no branch `main`. Não publicar `work/`, backups, credenciais ou bases locais. O branch `gestisser-dev` não é alterado.
@@ -64,15 +81,18 @@ Para reverter código, desativar primeiro, parar os agentes e repor os PHP priva
 
 ## Relatório de ficheiros e base de dados
 
-Publicação autorizada em `gestaoindustrialit/GesTisser`, branch `main`, com 22 ficheiros e impressão centralizada desativada por defeito. A publicação de código no GitHub não confirma a sincronização do cPanel. O agente não executou a migração nem alterou dados no alojamento; a preparação e ativação continuam a exigir ação explícita na Configuração ERP.
+Publicação autorizada em `gestaoindustrialit/GesTisser`, branch `main`, com 25 ficheiros e impressão centralizada desativada por defeito. A publicação de código no GitHub não confirma a sincronização do cPanel. O agente não executou a migração nem alterou dados no alojamento; a preparação e ativação continuam a exigir ação explícita na Configuração ERP.
 
 Tabelas novas: `erp_print_config`, `erp_print_agents`, `erp_print_types`, `erp_print_formats`, `erp_print_templates`, `erp_work_center_printers`, `erp_print_jobs`, `erp_print_audit`. Campos aditivos em `erp_printers`: `print_code`, `printer_type`, `brand`, `model`, `connection_type`, `agent_id`, `windows_queue`, `language`, `dpi`, `online`, `last_seen`, `notes`. Preserva IDs, endereços, impressoras e associação legada. A preparação da base só ocorre por ação administrativa explícita.
 
-Validação local: PHP 7.0.33, 336 ficheiros PHP sem erros de sintaxe, sete testes selecionados aprovados e 36 verificações HTTP locais aprovadas. Serviço C# compilado e sintaxe dos instaladores PowerShell validada em runner Windows (.NET Framework). Self-test aprovado: configuração de filas, DPAPI, validação de argumentos e escrita/substituição durável do diário. Execução CI: https://github.com/gestaoindustrialit/GesTisser/actions/runs/40336234760 . Validação física Windows 10/Zebra/HP/Android pendente. Backups dos PHP anteriores apenas na área local de trabalho; o backup do alojamento ainda não foi executado.
+Validação local: PHP 7.0.33, 339 ficheiros PHP sem erros de sintaxe, oito testes selecionados aprovados e 43 verificações HTTP locais aprovadas. Serviço C# compilado e sintaxe dos instaladores PowerShell validada em runner Windows (.NET Framework). Self-test aprovado: configuração de filas, DPAPI, validação de argumentos e escrita/substituição durável do diário. Execução CI: https://github.com/gestaoindustrialit/GesTisser/actions/runs/40336234760 . Validação física Windows 10/Zebra/HP/Android pendente. Backups dos PHP anteriores apenas na área local de trabalho; o backup do alojamento ainda não foi executado.
 
 | Ficheiro | Finalidade |
 |---|---|
 | `.github/workflows/windows-print-agent.yml` | Compilação Windows em CI |
+| `app/Services/CentralPrintingSetup.php` | Preparação idempotente e diagnóstico sem contactar máquinas |
+| `scripts/prepare_central_printing.php` | Preparação ou diagnóstico no Terminal cPanel, apenas CLI |
+| `tests/central_printing_setup_test.php` | Preservação, backups e modelos iniciais |
 | `app/Services/CentralPrinting.php` | Backend, API, administração ou migração |
 | `app/Services/PrintLabelRenderer.php` | Backend, API, administração ou migração |
 | `cron/printing_cleanup.php` | Backend, API, administração ou migração |
