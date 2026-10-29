@@ -69,7 +69,8 @@ with tempfile.TemporaryDirectory(prefix='assist-http-') as directory:
             token=re.search(r'name="_token" value="([^"]+)"',body).group(1)
             db=sqlite3.connect(root/'database.sqlite')
             category=db.execute("SELECT id FROM assist_categories WHERE name='Tintas'").fetchone()[0]
-            status,body,_=request('assist_admin.php',dict(action='save',category_id=category,title='Verificação viscosidade',procedure='1. Consultar a ficha interna.\n2. Registar a observação.',safety='Parar em segurança. <script>window.assistPwned=1</script>',synonyms='tinta grossa',language='pt',_token=token))
+            machine_id=db.execute("INSERT INTO erp_machines(code,name) VALUES('M-CTX','Impressora contexto')").lastrowid;db.commit()
+            status,body,_=request('assist_admin.php',dict(action='save',category_id=category,title='Verificação viscosidade',procedure='1. Consultar a ficha interna.\n2. Registar a observação.',safety='Parar em segurança. <script>window.assistPwned=1</script>',synonyms='tinta grossa',equipment='M-CTX',language='pt',_token=token))
             check(status==200 and 'Rascunho guardado' in body,'admin creates draft through CSRF form')
             article=db.execute('SELECT id FROM assist_articles').fetchone()[0]
             for action in ['submit','approve','publish']:
@@ -139,9 +140,12 @@ with tempfile.TemporaryDirectory(prefix='assist-http-') as directory:
             check(db.execute('SELECT value FROM assist_settings WHERE key="enabled"').fetchone()[0]=='0','shared activation leaves general feature flag disabled')
             status,page,_=request('shopfloor.php',who=first);check(status==200 and 'id="assist-open"' in page,'SACO launcher appears for actual employee PIN session')
             first_token=re.search(r'data-token="([^"]+)"',page).group(1)
-            status,body,_=request('assist_api.php',dict(action='ask',question='viscosidade',language='pt',_token=first_token),who=first);first_answer=json.loads(body)
+            status,body,_=request('assist_api.php',dict(action='ask',question='viscosidade',language='pt',_token=first_token,**{'context[equipment]':machine_id}),who=first);first_answer=json.loads(body)
             actual_owner=db.execute('SELECT user_id FROM assist_messages WHERE id=?',(first_answer['id'],)).fetchone()[0]
-            check(status==200 and first_answer['answer']['outcome']=='answer' and actual_owner==employees[0] and actual_owner!=gateway_id,'PIN question attributed to employee instead of gateway')
+            check(status==200 and first_answer['answer']['outcome']=='answer' and actual_owner==employees[0] and actual_owner!=gateway_id,'PIN machine ID retrieves code-scoped answer and attributes it to employee')
+            status,body,_=request('assist_api.php',dict(action='ask',question='viscosidade',language='pt',_token=first_token,**{'context[equipment]':machine_id+999}),who=first);check(json.loads(body)['answer']['outcome']=='none','unknown machine context does not receive another machine procedure')
+            status,body,_=request('assist_api.php?'+urllib.parse.urlencode({'context[equipment]':machine_id}),who=first);check(status==200 and any(s['title']=='Verificação viscosidade' for s in json.loads(body)['suggestions']),'PIN suggestions resolve the same machine ID as answers')
+            status,body,_=request('assist_api.php?'+urllib.parse.urlencode({'context[equipment]':machine_id+999}),who=first);check(status==200 and not any(s['title']=='Verificação viscosidade' for s in json.loads(body)['suggestions']),'suggestions do not offer procedures excluded by machine scope')
             second=fresh_client();status,page,_=login_pin(second,pins[1],True)
             check(status==200 and 'id="assist-open"' in page,'direct keypad chooses shared gateway even without its own PIN')
             second_token=re.search(r'data-token="([^"]+)"',page).group(1)
@@ -183,7 +187,7 @@ with tempfile.TemporaryDirectory(prefix='assist-http-') as directory:
             db.execute('UPDATE assist_settings SET value=? WHERE key="pilot_users"',(str(user_id),));db.commit()
             status,body,_=request('shopfloor.php');check('id="assist-open"' not in body,'pilot without assist.use does not receive launcher')
             db.execute('INSERT INTO erp_user_permissions(user_id,permission_code,is_allowed) VALUES (?,"assist.use",1)',(user_id,));db.commit()
-            center_id=db.execute("INSERT INTO erp_work_centers(code,name,center_type) VALUES('ASSIST-TEST','Posto Assist','administrative')").lastrowid;db.commit()
+            center_id=db.execute("INSERT INTO erp_work_centers(code,name,center_type,machine_id) VALUES('ASSIST-TEST','Posto Assist','machine',?)",(machine_id,)).lastrowid;db.commit()
             status,body,_=request('shopfloor.php',dict(action='select_work_center',work_center_id=center_id,_token=token));check(status==200,'existing Shopfloor workstation selection')
             cookies=[dict(name=c.name,value=c.value,domain=c.domain,path=c.path) for c in jar]
             fixture=dict(url='http://127.0.0.1:8093/shopfloor.php',cookies=cookies,source=str(source),article=article)

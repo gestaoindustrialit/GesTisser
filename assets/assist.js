@@ -19,7 +19,7 @@
     function request(data) {
         var options = {credentials:'same-origin', cache:'no-store'};
         if (data) { data.append('_token', panel.dataset.token); options.method = 'POST'; options.body = data; }
-        return fetch('assist_api.php?language='+encodeURIComponent(language), options).then(function (r) { return r.json().then(function (json) { if (!r.ok) throw new Error(json.error || 'Pedido indisponível.'); return json; }); });
+        return fetch('assist_api.php?language='+encodeURIComponent(language)+'&context[equipment]='+encodeURIComponent(panel.dataset.equipment || ''), options).then(function (r) { return r.json().then(function (json) { if (!r.ok) throw new Error(json.error || 'Pedido indisponível.'); return json; }); });
     }
     function action(name, values) { var data = new FormData(); data.append('action', name); Object.keys(values).forEach(function (key) { data.append(key, values[key]); }); return request(data); }
     function element(tag, text, className) { var node = document.createElement(tag); node.textContent = text; if(className) node.className=className; return node; }
@@ -41,7 +41,7 @@
         block.appendChild(element('p',answer.text));
         if(answer.verification){block.appendChild(element('strong',words().verification));block.appendChild(element('p',answer.verification));}
         (answer.sources || []).forEach(function (source) {
-            var button=element('button','#'+source.id+' · v'+source.version+' · '+source.title+(source.material?' · '+source.material:''),'btn btn-outline-primary assist-source');button.type='button';
+            var button=element('button','#'+source.id+' · v'+source.version+' · '+source.title+(source.material?' · '+source.material:'')+(source.equipment?' · '+source.equipment:''),'btn btn-outline-primary assist-source');button.type='button';
             button.addEventListener('click',function(){documentView(source);});block.appendChild(button);
         });
         [1,0].forEach(function(value){var button=element('button',value?words().useful:words().unhelpful,'btn btn-sm btn-light');button.type='button';button.addEventListener('click',function(){action('feedback',{message_id:row.id,useful:value}).then(function(){status.textContent='Feedback registado.';}).catch(fail);});block.appendChild(button);});

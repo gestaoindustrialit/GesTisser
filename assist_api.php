@@ -5,7 +5,7 @@ header('Cache-Control: no-store');
 try {
     $assist->demand('assist.use');
     $method=(string)($_SERVER['REQUEST_METHOD']??'GET');
-    if($method==='GET') $result=['messages'=>$assist->history(),'suggestions'=>$assist->suggestions((string)($_GET['language']??'pt'))];
+    if($method==='GET') $result=['messages'=>$assist->history(),'suggestions'=>$assist->suggestions((string)($_GET['language']??'pt'),(array)($_GET['context']??[]))];
     elseif($method==='POST') {
         if(!validate_csrf_or_abort(false)) throw new RuntimeException('Pedido inválido (CSRF).',419);
         $action=(string)($_POST['action']??'ask');

@@ -1,5 +1,7 @@
 # GesTISSER Assist — instalação no servidor
 
+[**Correção de respostas com máquina selecionada**](dist/Gestisser-Assist-CORRECAO-RESPOSTAS.zip): substituir os três ficheiros do pacote: `app/Services/AssistService.php`, `assist_api.php` e `assets/assist.js`. As sugestões e as perguntas usam o mesmo contexto. Corrige a comparação entre ID da máquina e código/nome do artigo. Não altera permissões ou publicação. Artigos importados em rascunho precisam de aprovação e publicação.
+
 [**Atualização para entrada Shopfloor com PIN individual**](dist/Gestisser-Assist-ATUALIZACAO-PIN.zip)
 
 Nos tablets, `shopfloor@tisser.pt` é a entrada partilhada; o PIN identifica o colaborador. Esta atualização permite autorizar a consulta uma só vez para essa entrada, mantendo histórico e permissões sensíveis por colaborador.

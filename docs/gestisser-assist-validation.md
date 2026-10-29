@@ -89,3 +89,17 @@ A administração inclui **Ativar SACO para o Shopfloor por PIN**: ação explí
 PHP 7.0.33: **356 ficheiros sem erros de sintaxe**, **72 verificações do serviço**, **37 de importação**, **29 de entrada partilhada** e regressão de seleção do centro de trabalho aprovados. **59 verificações HTTP** aprovadas, incluindo PIN inválido, ativação central, entrada real de dois colaboradores sem permissões individuais, propriedade do histórico, troca de utilizador, revogação, conta inativa, password sem herança, parâmetros forjados e cookie de email pessoal. Fluxos Chromium desktop, tablet retrato/paisagem e ecrã estreito passaram. Não foi testado no tablet físico nem houve deploy.
 
 O novo pacote `dist/Gestisser-Assist-ATUALIZACAO-PIN.zip` contém 12 ficheiros atuais e instruções. Os pacotes de atualização anteriores foram atualizados com as mesmas dependências para evitar que um painel novo invoque uma classe antiga sem fromSession. O pacote completo tem 16 ficheiros; ZIPs verificados quanto a conteúdo, datas e permissões 0644. O PNG e a base de dados são preservados.
+
+## Respostas quando o Shopfloor envia o ID da máquina
+
+O utilizador confirmou receber a mensagem de ausência de procedimento, distinguindo-a de uma recusa de acesso. Foi encontrada e reproduzida uma condição de exclusão indevida: a máquina segue no contexto como ID, mas o âmbito do artigo pode estar escrito por código/nome. A comparação anterior falhou no cenário de regressão numa cópia temporária.
+
+Corrigida a correspondência com os dados reais de código/nome de `erp_machines` e `erp_operations`, sem criar associações técnicas presumidas nem alterar autorização/publicação. Não resolve procedimentos de outra máquina ou operação. A resposta mantém o texto exato aprovado e a referência original. Tabelas opcionais ausentes preservam a comparação literal.
+
+PHP 7.0.33: **357 ficheiros sem erros de sintaxe**; **72 verificações do serviço**, **29 de entrada PIN** e **29 de contexto** aprovadas. **60 verificações HTTP** aprovadas, incluindo PIN com contexto numérico e artigo aprovado associado pelo código, máquina desconhecida recusada, privacidade e documentos em rascunho fora da pesquisa. O centro de trabalho dos testes de navegador passou a ser de tipo máquina, para efetivamente enviar esse contexto nos quatro formatos de ecrã. Sem deploy.
+
+`dist/Gestisser-Assist-CORRECAO-RESPOSTAS.zip` contém os três ficheiros de aplicação necessários à correção e instruções. Os restantes pacotes também incluem a correção. É necessária a pergunta/título concretos do utilizador para confirmar outras causas no servidor real; o caso corrigido foi validado em instalação sintética.
+
+O utilizador acrescentou que também falhavam as questões sugeridas na conta do tablet, enquanto a conta habitual respondia. Foi verificado que as sugestões anteriormente ignoravam o contexto, ao contrário das respostas. Agora ambas aplicam a mesma correspondência de máquina; o frontend envia o contexto no GET e no POST, e as referências mostram o equipamento aprovado.
+
+Validação final: 357 ficheiros PHP sem erros de sintaxe, 72 verificações do serviço, 29 de PIN e 37 de contexto; 62 verificações HTTP aprovadas. As verificações incluem sugestão correta com ID de máquina e ausência de sugestões de outro equipamento. Pacote dedicado atualizado para três ficheiros, sem alteração de permissões, esquema ou publicação. Os pacotes completos/de atualização incluem as mesmas versões de serviço/API/JavaScript.
