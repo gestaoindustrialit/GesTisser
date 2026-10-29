@@ -4,16 +4,17 @@
     if (!panel) return;
     var open = document.getElementById('assist-open'), messages = document.getElementById('assist-messages'), form = document.getElementById('assist-form'), question = document.getElementById('assist-question'), status = document.getElementById('assist-status');
     var conversation = 0, lastMessage = 0, loaded = false, busy = false;
+    var language = panel.dataset.language || 'pt';
     var strings = {
         pt: {search:'Pesquisar', report:'Reportar problema', useful:'Útil', unhelpful:'Não útil', safety:'Segurança', conditions:'Condições', verification:'Verificação'},
         en: {search:'Search', report:'Report a problem', useful:'Useful', unhelpful:'Not useful', safety:'Safety', conditions:'Conditions', verification:'Verification'},
         hi: {search:'खोजें', report:'समस्या की रिपोर्ट करें', useful:'उपयोगी', unhelpful:'उपयोगी नहीं', safety:'सुरक्षा', conditions:'शर्तें', verification:'सत्यापन'}
     };
-    function words() { return strings[document.getElementById('assist-language').value]; }
+    function words() { return strings[language]; }
     function request(data) {
         var options = {credentials:'same-origin', cache:'no-store'};
         if (data) { data.append('_token', panel.dataset.token); options.method = 'POST'; options.body = data; }
-        return fetch('assist_api.php?language='+encodeURIComponent(document.getElementById('assist-language').value), options).then(function (r) { return r.json().then(function (json) { if (!r.ok) throw new Error(json.error || 'Pedido indisponível.'); return json; }); });
+        return fetch('assist_api.php?language='+encodeURIComponent(language), options).then(function (r) { return r.json().then(function (json) { if (!r.ok) throw new Error(json.error || 'Pedido indisponível.'); return json; }); });
     }
     function action(name, values) { var data = new FormData(); data.append('action', name); Object.keys(values).forEach(function (key) { data.append(key, values[key]); }); return request(data); }
     function element(tag, text, className) { var node = document.createElement(tag); node.textContent = text; if(className) node.className=className; return node; }
@@ -49,9 +50,8 @@
     panel.addEventListener('keydown',function(e){if(e.key==='Escape'){e.stopPropagation();close();}});
     document.getElementById('assist-new').addEventListener('click',function(){if(busy)return;conversation=0;lastMessage=0;messages.textContent='';question.value='';question.focus();});
     document.getElementById('assist-document-close').addEventListener('click',function(){document.getElementById('assist-document').hidden=true;messages.hidden=false;});
-    document.getElementById('assist-language').addEventListener('change',function(){request().then(function(data){suggestions(data.suggestions);}).catch(fail);form.querySelector('[type=submit]').textContent=words().search;document.getElementById('assist-report-open').textContent=words().report;});
     form.addEventListener('submit',function(e){e.preventDefault();if(busy)return;busy=true;status.textContent='';var button=form.querySelector('[type=submit]');button.disabled=true;
-        action('ask',{question:question.value,language:document.getElementById('assist-language').value,conversation_id:conversation,'context[equipment]':panel.dataset.equipment || '', 'context[order]':panel.dataset.order || ''}).then(function(row){render(row);question.value='';}).catch(fail).then(function(){busy=false;button.disabled=false;question.focus();});
+        action('ask',{question:question.value,language:language,conversation_id:conversation,'context[equipment]':panel.dataset.equipment || '', 'context[order]':panel.dataset.order || ''}).then(function(row){render(row);question.value='';}).catch(fail).then(function(){busy=false;button.disabled=false;question.focus();});
     });
     var report=document.getElementById('assist-report');
     document.getElementById('assist-report-open').addEventListener('click',function(){report.hidden=false;report.querySelector('textarea').focus();});

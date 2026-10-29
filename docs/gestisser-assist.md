@@ -37,7 +37,7 @@ Na ausência de fonte suficiente é devolvida a mensagem de abstenção. Nesta v
 
 Histórico e fontes diretas são revalidados: uma versão alterada, retirada, expirada ou já não autorizada deixa de ser reproduzida no histórico. O pedido do documento inclui a versão esperada e recusa uma versão diferente. Informação já visualizada no navegador antes da retirada não pode ser apagada retroativamente.
 
-A interface tem controlos e mensagens de pesquisa em português, inglês e hindi, e pesquisa por idioma de conteúdo. Os textos técnicos nunca são traduzidos automaticamente; é necessário criar e validar cada versão linguística. A administração e parte das mensagens operacionais continuam em português.
+O painel abre diretamente em português, sem seletor de idioma. A API e os artigos mantêm suporte a conteúdo em português, inglês e hindi, com pesquisa por idioma de conteúdo. Os textos técnicos nunca são traduzidos automaticamente; é necessário criar e validar cada versão linguística. A administração e parte das mensagens operacionais continuam em português.
 
 ## Estrutura SQLite
 
@@ -74,7 +74,7 @@ Todas as entradas exigem sessão válida e conta ativa, além de ativação do m
 ## Permissões e configuração
 
 1. Instalar os ficheiros com backup normal da aplicação/base e permissões de escrita SQLite já exigidas pelo ERP. Não há mudança de credenciais ou configuração Composer.
-2. Entrar como administrador e abrir `assist_admin.php` ou **SACO · Assist → Base de conhecimento**. A migração aditiva é aplicada automaticamente na primeira abertura do rodapé autenticado ou de um endpoint Assist.
+2. Entrar como administrador e abrir `assist_admin.php` ou **ícone do SACO → Base de conhecimento**. A migração aditiva é aplicada automaticamente na primeira abertura do rodapé autenticado ou de um endpoint Assist.
 3. A predefinição é `enabled=0` e lista piloto vazia. Administradores existentes têm acesso; os restantes utilizadores não veem o botão.
 4. Em Configurações, indicar IDs piloto separados por vírgulas. Não basta inserir o ID: atribuir também capacidades pela área de permissões do módulo, que escreve nas tabelas **existentes do ERP**.
 5. Operador: `assist.use`. Editor: `assist.use` e `assist.edit`. Validador: anteriores e `assist.validate` (todas as categorias autorizadas) ou `assist.validate.category.ID`. Publicação: `assist.edit` e `assist.publish`. Administração: `assist.edit` e `assist.admin`, mais outras capacidades se a conta não for um administrador global.
@@ -101,7 +101,7 @@ Na fase 3, reutilizar `UploadService` após confirmar a política de MIME/limite
 
 ### Mascote SACO
 
-O painel e o botão usam o nome SACO. A marcação está preparada para carregar `assets/assist-saco.png`, com texto alternativo e dimensão de 52 px. A imagem mostrada na conversa não foi disponibilizada como ficheiro no ambiente; apenas o TXT chegou a `attachments`. Colocar o PNG original nesse caminho permite usar a mascote exata sem gerar uma cópia aproximada. Enquanto o ficheiro não existir, o painel apresenta a identidade textual, sem imagem quebrada. A imagem continua pendente de integração.
+O botão fechado mostra exclusivamente a imagem `assets/assist-saco.png`, sem texto visível ou fundo, mantendo um nome acessível para leitores de ecrã. A imagem tem 72 px no botão e 52 px no cabeçalho. Deve conservar-se o PNG original já instalado nesse caminho; o pacote não o substitui nem inclui uma reprodução. O painel abre diretamente em português, sem escolha de língua.
 
 ### Ativação no Shopfloor
 

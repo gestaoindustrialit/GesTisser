@@ -1,5 +1,7 @@
 # GesTISSER Assist — instalação no servidor
 
+Já tem o Assist instalado? [**Descarregar apenas a atualização do botão e painel**](dist/Gestisser-Assist-ATUALIZACAO-UI.zip). Substituir os três ficheiros do pacote; conservar `assets/assist-saco.png`.
+
 [**Descarregar o ZIP para o servidor**](dist/Gestisser-Assist-SERVIDOR.zip)
 
 No GitHub, abrir o ZIP e clicar no ícone **Download raw file** para descarregar o pacote. Este ZIP contém apenas os 11 ficheiros da aplicação necessários e o ficheiro `LEIA-ME-SERVIDOR.txt`. O botão **Code → Download ZIP** descarrega o repositório completo, incluindo este pacote.

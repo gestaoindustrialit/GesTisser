@@ -49,3 +49,11 @@ Após instalar no ambiente de teste, entrar como administrador e abrir `assist_a
 - `tests/assist_browser.js`
 - `tests/assist_http.py`
 - `tests/assist_service_test.php`
+
+## Atualização da interface — 29 de outubro de 2026
+
+O botão fechado apresenta apenas `assets/assist-saco.png`, sem legenda visível ou fundo. O painel abre diretamente em português, sem seletor nem aviso de língua. Mantém-se o nome acessível do botão. CSS/JavaScript incluem versão de cache pelo ficheiro.
+
+Revalidação em PHP 7.0.33: sintaxe dos 352 ficheiros aprovada, 72 verificações do serviço Assist aprovadas e 24 verificações HTTP aprovadas, incluindo o uso em computador e tablet Android simulado. `node --check assets/assist.js` e `git diff --check` aprovados. Não houve alteração do motor de respostas ou do esquema da base de dados.
+
+Para instalações existentes, `dist/Gestisser-Assist-ATUALIZACAO-UI.zip` contém apenas `partials/assist_panel.php`, `assets/assist.css`, `assets/assist.js` e instruções. Conservar a imagem original já instalada em `assets/assist-saco.png`. O pacote completo também foi atualizado.
