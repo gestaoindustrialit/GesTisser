@@ -3,7 +3,7 @@ require_once dirname(__DIR__).'/assist_migrations.php';
 require_once dirname(__DIR__).'/app/Services/AssistService.php';
 assist_run_migrations($pdo);
 $assistShellUser=current_user($pdo);
-$assistShell=new AssistService($pdo,$assistShellUser?:[]);
+$assistShell=AssistService::fromSession($pdo,$assistShellUser?:[]);
 $assistMascotPath=dirname(__DIR__).'/assets/assist-saco.png';
 $assistMascotVersion=(string)(@filemtime($assistMascotPath)?:'1');
 if($assistShell->enabled() && $assistShell->can('assist.use')):

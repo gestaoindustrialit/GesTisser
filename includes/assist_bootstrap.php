@@ -7,4 +7,4 @@ assist_run_migrations($pdo);
 $assistUser=current_user($pdo);
 $assistActive=$pdo->prepare('SELECT is_active FROM users WHERE id=?');$assistActive->execute([(int)($assistUser['id']??0)]);
 if (!$assistUser || (int)$assistActive->fetchColumn()!==1) { http_response_code(401); exit('Autenticação obrigatória.'); }
-$assist=new AssistService($pdo,$assistUser);
+$assist=AssistService::fromSession($pdo,$assistUser);

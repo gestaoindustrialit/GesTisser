@@ -22,15 +22,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && (string) ($_POST['pin_entry'] ?? ''
 }
 
 // Shared Shopfloor terminals return directly to the keypad when an operator
-// changes user. Use an active PIN-enabled account only as the login gateway;
-// the PIN itself still identifies the actual employee below.
-if ($directPinLogin && $email === '') {
+// changes user. Prefer the active shared gateway, even without its own PIN;
+// only a successfully verified employee PIN establishes the session below.
+if ($directPinLogin && trim((string) ($_POST['email'] ?? '')) === '') {
     $pinGatewayStmt = $pdo->query(
         'SELECT email FROM users
          WHERE is_active = 1
-           AND (TRIM(COALESCE(pin_code_hash, "")) <> ""
+           AND (LOWER(TRIM(email)) = "shopfloor@tisser.pt"
+                OR TRIM(COALESCE(pin_code_hash, "")) <> ""
                 OR TRIM(COALESCE(pin_code, "")) <> "")
-         ORDER BY pin_only_login DESC, id ASC
+         ORDER BY CASE WHEN LOWER(TRIM(email)) = "shopfloor@tisser.pt" THEN 0 ELSE 1 END, pin_only_login DESC, id ASC
          LIMIT 1'
     );
     $email = trim((string) ($pinGatewayStmt->fetchColumn() ?: ''));
@@ -102,6 +103,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     $_SESSION['user_id'] = (int) $pendingUser['id'];
                     $_SESSION['login_at'] = date('Y-m-d H:i:s');
                     $_SESSION['login_mode'] = 'password';
+                    unset($_SESSION['shopfloor_gateway_user_id']);
                     RateLimiter::recordLoginAttempt($pdo, $identifier, $requestIp, true);
                     $pdo->prepare('UPDATE users SET last_login_at = CURRENT_TIMESTAMP WHERE id = ?')->execute([(int) $pendingUser['id']]);
                     AuditLog::write($pdo, (int) $pendingUser['id'], 'auth.login_success', ['mode' => 'password']);
@@ -142,6 +144,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     $_SESSION['user_id'] = (int) $matchedPinUser['id'];
                     $_SESSION['login_at'] = date('Y-m-d H:i:s');
                     $_SESSION['login_mode'] = 'pin';
+                    unset($_SESSION['shopfloor_gateway_user_id']);
+                    if(strtolower(trim((string)$pendingUser['email']))==='shopfloor@tisser.pt')$_SESSION['shopfloor_gateway_user_id']=(int)$pendingUser['id'];
                     RateLimiter::recordLoginAttempt($pdo, $identifier, $requestIp, true);
                     $pdo->prepare('UPDATE users SET last_login_at = CURRENT_TIMESTAMP WHERE id = ?')->execute([(int) $matchedPinUser['id']]);
                     AuditLog::write($pdo, (int) $matchedPinUser['id'], 'auth.login_success', ['mode' => 'pin']);

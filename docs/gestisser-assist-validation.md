@@ -77,3 +77,15 @@ Retirado o link de administração do chat; Nova conversa foi colocado no rodap�
 Revalidação PHP 7.0.33: 355 ficheiros sem erros de sintaxe e 72 verificações do serviço aprovadas. O teste HTTP passou 38 verificações; o navegador validou desktop, tablet retrato, tablet paisagem e ecrã estreito. Inclui hit-test do botão após scroll, toque, PNG carregado/falhado e fluxo completo de chat, fontes, feedback, reporte e nova conversa. Verificou-se também que a conta não piloto ou sem assist.use não recebe o botão. Node syntax e diff sem problemas.
 
 O utilizador ainda não comparou a mesma conta entre computador e tablet. Não foi possível confirmar a causa específica no dispositivo/servidor real. A atualização corrige a situação reproduzida de imagem falhada e preserva as regras de acesso; as instruções do ZIP explicam como configurar a conta do tablet. Não houve deploy nem alteração automática de permissões.
+
+## Entrada shopfloor@tisser.pt com PIN de cada colaborador
+
+A análise do login confirmou que `user_id` é substituído pelo colaborador identificado pelo PIN. Logo, as autorizações da conta de entrada não eram aplicadas às consultas do colaborador. Foi implementada herança limitada de `assist.use` e ativação piloto da entrada canónica, conservando a identidade individual.
+
+`login.php` regista o ID da entrada partilhada apenas após PIN válido e limpa-o em login por password ou outra entrada. O teclado direto prefere a conta canónica ativa mesmo sem PIN próprio e não é desviado por um email pessoal lembrado. O painel e a API obtêm o mesmo contexto através de `AssistService::fromSession`. A autorização exige entrada ativa e configurada, honra negações explícitas, revalida permissões e nunca delega capacidades de gestão ou categorias restritas.
+
+A administração inclui **Ativar SACO para o Shopfloor por PIN**: ação explícita com CSRF e assist.admin, que autoriza consulta e põe apenas shopfloor@tisser.pt nos pilotos. Não ativa globalmente, não copia permissões para todos, não cria contas nem altera PINs. Após instalar, é necessário ativar uma vez e sair/voltar a entrar por PIN nos tablets. Não há migração adicional.
+
+PHP 7.0.33: **356 ficheiros sem erros de sintaxe**, **72 verificações do serviço**, **37 de importação**, **29 de entrada partilhada** e regressão de seleção do centro de trabalho aprovados. **59 verificações HTTP** aprovadas, incluindo PIN inválido, ativação central, entrada real de dois colaboradores sem permissões individuais, propriedade do histórico, troca de utilizador, revogação, conta inativa, password sem herança, parâmetros forjados e cookie de email pessoal. Fluxos Chromium desktop, tablet retrato/paisagem e ecrã estreito passaram. Não foi testado no tablet físico nem houve deploy.
+
+O novo pacote `dist/Gestisser-Assist-ATUALIZACAO-PIN.zip` contém 12 ficheiros atuais e instruções. Os pacotes de atualização anteriores foram atualizados com as mesmas dependências para evitar que um painel novo invoque uma classe antiga sem fromSession. O pacote completo tem 16 ficheiros; ZIPs verificados quanto a conteúdo, datas e permissões 0644. O PNG e a base de dados são preservados.

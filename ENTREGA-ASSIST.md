@@ -1,14 +1,18 @@
 # GesTISSER Assist — instalação no servidor
 
-[**Atualização do painel e do botão para tablets**](dist/Gestisser-Assist-ATUALIZACAO-TABLETS.zip): três ficheiros, sem alterar a base de dados. Retira o link administrativo do painel e move Nova conversa para junto de Reportar problema. Inclui ícone de recurso para falhas do PNG. A conta do tablet precisa de `assist.use` e ativação/piloto; ver instruções do ZIP.
+[**Atualização para entrada Shopfloor com PIN individual**](dist/Gestisser-Assist-ATUALIZACAO-PIN.zip)
 
-Já tem o Assist instalado? [**Descarregar apenas a atualização do botão e painel**](dist/Gestisser-Assist-ATUALIZACAO-UI.zip). Substituir os três ficheiros do pacote para atualizar apenas o aspeto; para importar Excel, usar o pacote abaixo. Conservar `assets/assist-saco.png`.
+Nos tablets, `shopfloor@tisser.pt` é a entrada partilhada; o PIN identifica o colaborador. Esta atualização permite autorizar a consulta uma só vez para essa entrada, mantendo histórico e permissões sensíveis por colaborador.
+
+Depois de instalar os ficheiros, entrar como administrador em **assist_admin.php → Configurações → Ativar SACO para o Shopfloor por PIN**. Nos tablets, sair e voltar a entrar por PIN. Não é necessário dar acesso de administração aos operadores nem configurar cada um como piloto.
+
+Os pacotes de atualização incluem agora as dependências atuais da base de conhecimento, a interface e a integração PIN. Não misturar ficheiros de versões diferentes. Conservar `assets/assist-saco.png`, a configuração e a base de dados.
 
 [**Descarregar o ZIP para o servidor**](dist/Gestisser-Assist-SERVIDOR.zip)
 
 No GitHub, abrir o ZIP e clicar no ícone **Download raw file** para descarregar o pacote. Este ZIP contém os ficheiros da aplicação necessários e o ficheiro `LEIA-ME-SERVIDOR.txt`. O botão **Code → Download ZIP** descarrega o repositório completo, incluindo este pacote.
 
-Extrair o pacote na raiz do GesTisser, onde estão `erp.php`, `shopfloor.php` e `config.php`, mantendo as pastas. Fazer backup primeiro. Os dois ficheiros existentes substituídos são `app/routes.php` e `partials/footer.php`; integrar eventuais alterações posteriores do servidor antes da substituição. Preservar `database.sqlite` e a configuração do servidor.
+Extrair o pacote na raiz do GesTisser, onde estão `erp.php`, `shopfloor.php` e `config.php`, mantendo as pastas. Fazer backup primeiro. O pacote atualiza também `login.php`, além dos ficheiros Assist, `app/routes.php` e `partials/footer.php`; integrar eventuais alterações posteriores do servidor antes da substituição. Preservar `database.sqlite` e a configuração do servidor.
 
 ## Template e importação de conhecimento
 

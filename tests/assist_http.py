@@ -113,6 +113,68 @@ with tempfile.TemporaryDirectory(prefix='assist-http-') as directory:
             check(json.loads(body)['answer']['outcome']=='none','imported draft remains outside SACO responses')
             status,body=upload('assist_admin.php',{'action':'preview_import'},'conhecimento.xlsx',filled.getvalue());check(status==419,'CSRF enforced on spreadsheet uploads')
             status,_,_=request('assist_template.php',who=anonymous);check(status==401,'anonymous template download denied')
+            # Real shared gateway + two separate employee PIN logins, not a simulated session flag.
+            password_hash=db.execute("SELECT password FROM users WHERE email='assist@example.invalid'").fetchone()[0]
+            gateway_id=db.execute('INSERT INTO users(name,email,password,is_active,is_admin,access_profile,pin_only_login) VALUES (?,?,?,1,0,"Utilizador",1)',('Gateway fixture','shopfloor@tisser.pt',password_hash)).lastrowid
+            pins=['135790','246801'];employees=[]
+            for index,pin in enumerate(pins):
+                hashed=subprocess.check_output([php,'-r','echo password_hash("'+pin+'", PASSWORD_DEFAULT);'],text=True)
+                employee=db.execute('INSERT INTO users(name,email,password,is_active,is_admin,access_profile,pin_only_login,pin_code_hash) VALUES (?,?,?,1,0,"Utilizador",0,?)',('PIN fixture '+str(index),'pin-'+str(index)+'@example.invalid',password_hash,hashed)).lastrowid
+                employees.append(employee)
+            db.commit()
+            def fresh_client():return urllib.request.build_opener(urllib.request.HTTPCookieProcessor(http.cookiejar.CookieJar()))
+            def login_pin(who,pin,direct=False):
+                status,page,_=request('login.php?mode=pin' if direct else 'login.php',who=who)
+                csrf=re.search(r'name="_token" value="([^"]+)"',page).group(1)
+                fields=dict(action='login_pin',pin=pin,_token=csrf)
+                if direct:fields['pin_entry']='1'
+                else:fields['email']='shopfloor@tisser.pt'
+                return request('login.php',fields,who=who)
+            first=fresh_client();status,page,_=login_pin(first,'999999')
+            status,_,_=request('assist_api.php',who=first);check(status==401,'invalid PIN cannot establish gateway access')
+            status,page,_=login_pin(first,pins[0]);check(status==200 and 'id="assist-open"' not in page,'real PIN login stays blocked before gateway activation')
+            status,page,_=request('assist_admin.php',{'action':'enable_shopfloor','_token':token})
+            gate_grant=db.execute('SELECT is_allowed FROM erp_user_permissions WHERE user_id=? AND permission_code="assist.use"',(gateway_id,)).fetchone()
+            check(status==200 and gate_grant==(1,) and db.execute('SELECT COUNT(*) FROM erp_user_permissions WHERE user_id IN (?,?)',employees).fetchone()[0]==0,'one administrator action configures gateway without employee grants')
+            check(db.execute('SELECT value FROM assist_settings WHERE key="enabled"').fetchone()[0]=='0','shared activation leaves general feature flag disabled')
+            status,page,_=request('shopfloor.php',who=first);check(status==200 and 'id="assist-open"' in page,'SACO launcher appears for actual employee PIN session')
+            first_token=re.search(r'data-token="([^"]+)"',page).group(1)
+            status,body,_=request('assist_api.php',dict(action='ask',question='viscosidade',language='pt',_token=first_token),who=first);first_answer=json.loads(body)
+            actual_owner=db.execute('SELECT user_id FROM assist_messages WHERE id=?',(first_answer['id'],)).fetchone()[0]
+            check(status==200 and first_answer['answer']['outcome']=='answer' and actual_owner==employees[0] and actual_owner!=gateway_id,'PIN question attributed to employee instead of gateway')
+            second=fresh_client();status,page,_=login_pin(second,pins[1],True)
+            check(status==200 and 'id="assist-open"' in page,'direct keypad chooses shared gateway even without its own PIN')
+            second_token=re.search(r'data-token="([^"]+)"',page).group(1)
+            status,body,_=request('assist_api.php',who=second);check(status==200 and json.loads(body)['messages']==[],'second PIN employee cannot see first employee history')
+            status,_,_=request('assist_api.php',dict(action='feedback',message_id=first_answer['id'],useful=1,_token=second_token),who=second);check(status==404,'shared entry does not merge feedback ownership')
+            # Giving the gateway management/restricted rights must not delegate those rights.
+            for capability in ['assist.edit','assist.admin','assist.restricted']:
+                db.execute('INSERT INTO erp_user_permissions(user_id,permission_code,is_allowed) VALUES (?,?,1)',(gateway_id,capability))
+            db.commit()
+            status,_,_=request('assist_admin.php',who=second);check(status==403,'gateway administration permission is not inherited by PIN employee')
+            status,_,_=request('assist_template.php',who=second);check(status==403,'gateway editing permission is not inherited by PIN employee')
+            db.execute('INSERT INTO erp_user_permissions(user_id,permission_code,is_allowed) VALUES (?,"assist.use",0)',(employees[0],));db.commit()
+            status,_,_=request('assist_api.php',who=first);check(status==403,'personal deny overrides shared PIN grant')
+            db.execute('DELETE FROM erp_user_permissions WHERE user_id=? AND permission_code="assist.use"',(employees[0],));db.commit()
+            db.execute('UPDATE erp_user_permissions SET is_allowed=0 WHERE user_id=? AND permission_code="assist.use"',(gateway_id,));db.commit()
+            status,_,_=request('assist_api.php',who=second);check(status==403,'gateway grant revocation applies to active PIN session')
+            db.execute('UPDATE erp_user_permissions SET is_allowed=1 WHERE user_id=? AND permission_code="assist.use"',(gateway_id,));db.execute('UPDATE users SET is_active=0 WHERE id=?',(gateway_id,));db.commit()
+            status,_,_=request('assist_api.php',who=second);check(status==403,'inactive shared gateway cannot authorize PIN session')
+            db.execute('UPDATE users SET is_active=1 WHERE id=?',(gateway_id,));db.commit()
+            status,page,_=request('logout.php?next=pin',who=first)
+            check('value="shopfloor@tisser.pt"' in page,'changing employee returns to canonical shared keypad')
+            status,_,_=request('assist_api.php',who=first);check(status==401,'logout removes PIN employee and gateway authorization')
+            csrf=re.search(r'name="_token" value="([^"]+)"',page).group(1)
+            status,page,_=request('login.php',dict(action='login_password',email='pin-0@example.invalid',password=password,remember_login='1',_token=csrf),who=first)
+            status,_,_=request('assist_api.php',who=first);check(status==403,'password login cannot inherit shared PIN authorization')
+            status,page,_=request('shopfloor.php',who=first);password_token=re.search(r'name="_token" value="([^"]+)"',page).group(1)
+            status,_,_=request('assist_api.php',dict(action='ask',question='viscosidade',language='pt',shopfloor_gateway_user_id=gateway_id,_token=password_token),who=first);check(status==403,'gateway ID in request cannot forge session authorization')
+            status,page,_=request('logout.php?next=pin',who=first);check('value="shopfloor@tisser.pt"' in page,'personal remembered email cannot replace direct shared keypad gateway')
+            status,page,_=login_pin(first,pins[1],True)
+            status,body,_=request('assist_api.php',who=first);check(status==200 and json.loads(body)['messages']==[],'switching PIN employee resets history ownership')
+            db.execute('UPDATE users SET is_active=0 WHERE id=?',(employees[1],));db.commit()
+            status,_,_=request('assist_api.php',who=first);check(status==401,'inactive PIN employee denied independently of gateway')
+            db.execute('UPDATE users SET is_active=1 WHERE id=?',(employees[1],));db.execute('UPDATE assist_settings SET value="" WHERE key="pilot_users"');db.commit()
             user_id=db.execute("SELECT id FROM users WHERE email='assist@example.invalid'").fetchone()[0]
             # Turn the fixture into a normal PIN operator; exercise exactly the same session.
             db.execute('UPDATE users SET is_admin=0,access_profile="Utilizador",pin_only_login=1 WHERE id=?',(user_id,))

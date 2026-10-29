@@ -7,19 +7,62 @@ final class AssistService
     private $pdo;
     private $user;
     private $inAtomic = false;
+    private $pinGatewayId;
     const FIELDS = ['description','symptoms','causes','conditions','procedure','safety','tools','expected','verification','keywords','synonyms','equipment','material','operation'];
 
-    public function __construct(PDO $pdo, array $user) { $this->pdo=$pdo; $this->user=$user; }
+    public function __construct(PDO $pdo, array $user, int $pinGatewayId = 0) { $this->pdo=$pdo; $this->user=$user; $this->pinGatewayId=$pinGatewayId; }
+    /** Context comes only from the ERP session written after a valid employee PIN. */
+    public static function fromSession(PDO $pdo, array $user): AssistService
+    {
+        $gateway=0;
+        if((string)($_SESSION['login_mode']??'')==='pin'&&(int)($_SESSION['user_id']??0)===(int)($user['id']??0))$gateway=(int)($_SESSION['shopfloor_gateway_user_id']??0);
+        return new self($pdo,$user,$gateway);
+    }
+    private function pinGateway(): array
+    {
+        if($this->pinGatewayId<=0||empty($this->user['id']))return [];
+        $gateway=$this->query('SELECT id,email,is_admin,is_active,access_profile FROM users WHERE id=? AND is_active=1 AND LOWER(TRIM(email))=?',[$this->pinGatewayId,'shopfloor@tisser.pt'])->fetch(PDO::FETCH_ASSOC);
+        return $gateway?:[];
+    }
+    private function gatewayEnabled(array $gateway): bool
+    {
+        // An administrator gateway does not implicitly activate every employee.
+        return $gateway && ($this->setting('enabled')==='1'||in_array((string)$gateway['id'],explode(',',$this->setting('pilot_users')),true));
+    }
     private function query(string $sql, array $args = []) { $s=$this->pdo->prepare($sql); $s->execute($args); return $s; }
     public function setting(string $key, string $default = ''): string { $v=$this->query('SELECT value FROM assist_settings WHERE key=?',[$key])->fetchColumn(); return $v===false?$default:(string)$v; }
     public function can(string $permission): bool
     {
-        return !empty($this->user['id']) && gt_erp_user_can($this->pdo,$this->user,$permission);
+        if(empty($this->user['id']))return false;
+        if(gt_erp_user_can($this->pdo,$this->user,$permission))return true;
+        if($permission!=='assist.use')return false;
+        // A personal explicit denial must override the shared entry's grant.
+        $specific=$this->query('SELECT is_allowed FROM erp_user_permissions WHERE user_id=? AND permission_code=?',[$this->user['id'],$permission])->fetchColumn();
+        if($specific!==false)return (int)$specific===1;
+        $gateway=$this->pinGateway();
+        if(!$this->gatewayEnabled($gateway))return false;
+        $gatewayRule=$this->query('SELECT is_allowed FROM erp_user_permissions WHERE user_id=? AND permission_code=?',[$gateway['id'],'assist.use'])->fetchColumn();
+        if($gatewayRule!==false)return (int)$gatewayRule===1;
+        return gt_erp_user_can($this->pdo,$gateway,'assist.use');
     }
     public function enabled(): bool
     {
         if (empty($this->user['id'])) return false;
-        return !empty($this->user['is_admin']) || $this->setting('enabled')==='1' || in_array((string)$this->user['id'],explode(',',$this->setting('pilot_users')),true);
+        if(!empty($this->user['is_admin']) || $this->setting('enabled')==='1' || in_array((string)$this->user['id'],explode(',',$this->setting('pilot_users')),true))return true;
+        return $this->gatewayEnabled($this->pinGateway());
+    }
+    public function enableShopfloorGateway(): int
+    {
+        $this->demand('assist.admin');
+        return $this->atomic(function(){
+            $id=$this->query('SELECT id FROM users WHERE is_active=1 AND LOWER(TRIM(email))=?',['shopfloor@tisser.pt'])->fetchColumn();
+            if($id===false)throw new InvalidArgumentException('A conta shopfloor@tisser.pt tem de existir e estar ativa.');
+            $id=(int)$id;$this->setPermission($id,'assist.use','allow');
+            $pilots=array_values(array_filter(explode(',',$this->setting('pilot_users')),'strlen'));
+            if(!in_array((string)$id,$pilots,true))$pilots[]=(string)$id;
+            $this->query('UPDATE assist_settings SET value=? WHERE key="pilot_users"',[implode(',',$pilots)]);
+            $this->audit('shopfloor_gateway.enable',['gateway_id'=>$id]);return $id;
+        });
     }
     public function demand(string $permission)
     {
