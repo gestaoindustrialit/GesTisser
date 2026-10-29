@@ -5,6 +5,11 @@
     var open = document.getElementById('assist-open'), messages = document.getElementById('assist-messages'), form = document.getElementById('assist-form'), question = document.getElementById('assist-question'), status = document.getElementById('assist-status');
     var conversation = 0, lastMessage = 0, loaded = false, busy = false;
     var language = panel.dataset.language || 'pt';
+    // A failed/missing PNG must never leave the touch launcher invisible.
+    var mascot = open.querySelector('img');
+    function updateMascot() { open.classList.toggle('has-mascot', Boolean(mascot && mascot.complete && mascot.naturalWidth > 0)); }
+    if (mascot) { mascot.addEventListener('load', updateMascot); mascot.addEventListener('error', updateMascot); }
+    updateMascot();
     var strings = {
         pt: {search:'Pesquisar', report:'Reportar problema', useful:'Útil', unhelpful:'Não útil', safety:'Segurança', conditions:'Condições', verification:'Verificação'},
         en: {search:'Search', report:'Report a problem', useful:'Useful', unhelpful:'Not useful', safety:'Safety', conditions:'Conditions', verification:'Verification'},
@@ -48,13 +53,13 @@
     open.addEventListener('click',function(){panel.hidden=false;open.setAttribute('aria-expanded','true');question.focus();if(!loaded){request().then(function(data){messages.textContent='';data.messages.forEach(render);suggestions(data.suggestions);loaded=true;}).catch(fail);}});
     document.getElementById('assist-close').addEventListener('click',close);
     panel.addEventListener('keydown',function(e){if(e.key==='Escape'){e.stopPropagation();close();}});
-    document.getElementById('assist-new').addEventListener('click',function(){if(busy)return;conversation=0;lastMessage=0;messages.textContent='';question.value='';question.focus();});
+    document.getElementById('assist-new').addEventListener('click',function(){if(busy)return;conversation=0;lastMessage=0;messages.textContent='';question.value='';status.textContent='';document.getElementById('assist-document').hidden=true;document.getElementById('assist-report').hidden=true;messages.hidden=false;question.focus();});
     document.getElementById('assist-document-close').addEventListener('click',function(){document.getElementById('assist-document').hidden=true;messages.hidden=false;});
     form.addEventListener('submit',function(e){e.preventDefault();if(busy)return;busy=true;status.textContent='';var button=form.querySelector('[type=submit]');button.disabled=true;
         action('ask',{question:question.value,language:language,conversation_id:conversation,'context[equipment]':panel.dataset.equipment || '', 'context[order]':panel.dataset.order || ''}).then(function(row){render(row);question.value='';}).catch(fail).then(function(){busy=false;button.disabled=false;question.focus();});
     });
     var report=document.getElementById('assist-report');
-    document.getElementById('assist-report-open').addEventListener('click',function(){report.hidden=false;report.querySelector('textarea').focus();});
+    document.getElementById('assist-report-open').addEventListener('click',function(){report.style.top=panel.querySelector('.assist-header').offsetHeight+'px';report.hidden=false;report.querySelector('textarea').focus();});
     document.getElementById('assist-report-cancel').addEventListener('click',function(){report.hidden=true;question.focus();});
     report.addEventListener('submit',function(e){e.preventDefault();var data=new FormData(report);data.append('action','report');data.append('message_id',lastMessage);var button=report.querySelector('[type=submit]');button.disabled=true;request(data).then(function(){report.reset();report.hidden=true;status.textContent='Problema reportado ao responsável.';}).catch(fail).then(function(){button.disabled=false;});});
 }());

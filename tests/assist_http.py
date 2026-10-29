@@ -2,6 +2,7 @@
 """Disposable PHP 7.0 integration + desktop/Android Chromium validation."""
 import http.cookiejar
 import io
+import base64
 import zipfile
 import xml.etree.ElementTree as ET
 import json
@@ -33,6 +34,8 @@ with tempfile.TemporaryDirectory(prefix='assist-http-') as directory:
     for name in filter(None,files):
         if name.startswith(('work/','vendor/','node_modules/')): continue
         destination=root/name;destination.parent.mkdir(parents=True,exist_ok=True);shutil.copy2(source/name,destination)
+    # Synthetic PNG only in the disposable installation; never replace the real mascot.
+    (root/'assets/assist-saco.png').write_bytes(base64.b64decode('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+aR9sAAAAASUVORK5CYII='))
     if (source/'vendor').exists():(root/'vendor').symlink_to((source/'vendor').resolve(),target_is_directory=True)
     with (root/'http.log').open('w') as log:
         server=subprocess.Popen([php,'-S','127.0.0.1:8093','-t',str(root)],cwd=root,env=dict(os.environ,APP_ENV='development',GESTISSER_DB_PATH=str(root/'database.sqlite')),stdout=log,stderr=log)
@@ -113,7 +116,10 @@ with tempfile.TemporaryDirectory(prefix='assist-http-') as directory:
             user_id=db.execute("SELECT id FROM users WHERE email='assist@example.invalid'").fetchone()[0]
             # Turn the fixture into a normal PIN operator; exercise exactly the same session.
             db.execute('UPDATE users SET is_admin=0,access_profile="Utilizador",pin_only_login=1 WHERE id=?',(user_id,))
-            db.execute('UPDATE assist_settings SET value=? WHERE key="pilot_users"',(str(user_id),))
+            db.commit()
+            status,body,_=request('shopfloor.php');check('id="assist-open"' not in body,'non-pilot operator does not receive launcher')
+            db.execute('UPDATE assist_settings SET value=? WHERE key="pilot_users"',(str(user_id),));db.commit()
+            status,body,_=request('shopfloor.php');check('id="assist-open"' not in body,'pilot without assist.use does not receive launcher')
             db.execute('INSERT INTO erp_user_permissions(user_id,permission_code,is_allowed) VALUES (?,"assist.use",1)',(user_id,));db.commit()
             center_id=db.execute("INSERT INTO erp_work_centers(code,name,center_type) VALUES('ASSIST-TEST','Posto Assist','administrative')").lastrowid;db.commit()
             status,body,_=request('shopfloor.php',dict(action='select_work_center',work_center_id=center_id,_token=token));check(status==200,'existing Shopfloor workstation selection')

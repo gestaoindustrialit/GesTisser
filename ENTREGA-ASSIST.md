@@ -1,5 +1,7 @@
 # GesTISSER Assist — instalação no servidor
 
+[**Atualização do painel e do botão para tablets**](dist/Gestisser-Assist-ATUALIZACAO-TABLETS.zip): três ficheiros, sem alterar a base de dados. Retira o link administrativo do painel e move Nova conversa para junto de Reportar problema. Inclui ícone de recurso para falhas do PNG. A conta do tablet precisa de `assist.use` e ativação/piloto; ver instruções do ZIP.
+
 Já tem o Assist instalado? [**Descarregar apenas a atualização do botão e painel**](dist/Gestisser-Assist-ATUALIZACAO-UI.zip). Substituir os três ficheiros do pacote para atualizar apenas o aspeto; para importar Excel, usar o pacote abaixo. Conservar `assets/assist-saco.png`.
 
 [**Descarregar o ZIP para o servidor**](dist/Gestisser-Assist-SERVIDOR.zip)

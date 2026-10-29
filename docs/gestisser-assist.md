@@ -74,7 +74,7 @@ Todas as entradas exigem sessão válida e conta ativa, além de ativação do m
 ## Permissões e configuração
 
 1. Instalar os ficheiros com backup normal da aplicação/base e permissões de escrita SQLite já exigidas pelo ERP. Não há mudança de credenciais ou configuração Composer.
-2. Entrar como administrador e abrir `assist_admin.php` ou **ícone do SACO → Base de conhecimento**. A migração aditiva é aplicada automaticamente na primeira abertura do rodapé autenticado ou de um endpoint Assist.
+2. Entrar como administrador e abrir `assist_admin.php` (o link administrativo foi retirado do painel de chat). A migração aditiva é aplicada automaticamente na primeira abertura do rodapé autenticado ou de um endpoint Assist.
 3. A predefinição é `enabled=0` e lista piloto vazia. Administradores existentes têm acesso; os restantes utilizadores não veem o botão.
 4. Em Configurações, indicar IDs piloto separados por vírgulas. Não basta inserir o ID: atribuir também capacidades pela área de permissões do módulo, que escreve nas tabelas **existentes do ERP**.
 5. Operador: `assist.use`. Editor: `assist.use` e `assist.edit`. Validador: anteriores e `assist.validate` (todas as categorias autorizadas) ou `assist.validate.category.ID`. Publicação: `assist.edit` e `assist.publish`. Administração: `assist.edit` e `assist.admin`, mais outras capacidades se a conta não for um administrador global.
@@ -101,7 +101,7 @@ Na fase 3, reutilizar `UploadService` após confirmar a política de MIME/limite
 
 ### Mascote SACO
 
-O botão fechado mostra exclusivamente a imagem `assets/assist-saco.png`, sem texto visível ou fundo, mantendo um nome acessível para leitores de ecrã. A imagem tem 72 px no botão e 52 px no cabeçalho. Deve conservar-se o PNG original já instalado nesse caminho; o pacote não o substitui nem inclui uma reprodução. O painel abre diretamente em português, sem escolha de língua. O cabeçalho apresenta **SACO · Sistema de Apoio a Conhecimento Operacional**.
+O botão fechado apresenta a imagem `assets/assist-saco.png` quando carregada, sem texto visível, mantendo um nome acessível para leitores de ecrã. Se o PNG faltar ou falhar, um SVG local de saco mantém o botão visível sem dependência de imagens ou fontes externas. A imagem tem 72 px no botão e 52 px no cabeçalho. Deve conservar-se o PNG original já instalado nesse caminho; o pacote não o substitui nem inclui uma reprodução. O painel abre diretamente em português, sem escolha de língua. O cabeçalho apresenta **SACO · Sistema de Apoio a Conhecimento Operacional**.
 
 ### Ativação no Shopfloor
 
@@ -155,3 +155,11 @@ Até 200 artigos e 5 MB por ficheiro; o conjunto de artigos descodificados não 
 A gravação é aditiva e transacional: todos os artigos são novos rascunhos com versão 1 e autor autenticado. Nunca importa estados, IDs de artigo ou aprovações. Um erro em qualquer registo anula o lote, incluindo versões e auditoria intermédia. Um título já existente na mesma categoria/idioma ou repetido no lote cancela a operação; não se substitui conhecimento existente. Editar artigos existentes pelo editor normal. Depois da importação, submeter os rascunhos à validação e publicar explicitamente. Até lá, não aparecem nas respostas do SACO.
 
 O processamento reutiliza `ArticleSpreadsheet` e a geração reutiliza `SimpleXlsx`, sem alterar esses serviços nem adicionar dependências Composer. O novo serviço é `app/Services/AssistKnowledgeSpreadsheet.php`; as ações administrativas são `preview_import`, `confirm_import` e `cancel_import`, com a capacidade `assist.edit`. Não há nova migração de base de dados.
+
+## Painel e tablets
+
+O painel já não contém o link de administração; usar diretamente `assist_admin.php` com as permissões adequadas. Nova conversa fica no rodapé, ao lado de Reportar problema, e limpa a vista de documento/estado ao iniciar a conversa. Em ecrãs estreitos, Pesquisar ocupa uma linha e os dois botões secundários permanecem lado a lado.
+
+O botão flutuante tem alvo de toque de 80 px, PNG com versão de cache, SVG de recurso visível sem PNG/JS, posição fixa e margens com safe-area. A largura do painel tem alternativa a `min()` para browsers menos recentes. Os testes de navegador confirmam alcance por hit-test antes/depois de scroll, toque e reabertura, em desktop 1440×1000, tablet 800×1280, tablet 1280×800 e ecrã 390×844, com imagem carregada ou falhada.
+
+Isto não contorna a política de ativação: uma conta sem `assist.use`, fora da lista piloto quando a ativação geral está desligada, não recebe o botão. Se o tablet usar outra conta, configurar essa conta em Configurações de `assist_admin.php`. Comparar com a mesma conta no computador ajuda a distinguir configuração de problema visual. A causa no dispositivo real exige essa verificação; os testes são simulações Chromium, não uma inspeção remota do tablet.

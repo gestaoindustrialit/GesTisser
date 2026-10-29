@@ -69,3 +69,11 @@ A administração inclui upload `.xlsx`/CSV UTF-8, pré-visualização protegida
 Validação em PHP 7.0.33: **355 ficheiros PHP sem erros de sintaxe**, **72 verificações do serviço**, **37 verificações de importação**, dois testes de regressão (`raw_material_spreadsheet_test.php`, `user_spreadsheet_export_test.php`) e **36 verificações HTTP**, incluindo computador e tablet Android simulado. Testado download de template real, upload de workbook preenchido, pré-visualização sem gravação, HTML escapado, token inválido, confirmação, replay, CSRF e recusa de utilizadores sem permissão. As datas Excel 1900/1904 são respeitadas. Nenhum deploy foi executado.
 
 Pacote completo atualizado; `dist/Gestisser-Assist-ATUALIZACAO-EXCEL.zip` contém os 10 ficheiros necessários à atualização e instruções, incluindo os dois serviços partilhados existentes como dependências. `dist/modelo_conhecimento_SACO.xlsx` é um template vazio com categorias iniciais. Não há migração adicional de esquema.
+
+## Visibilidade em tablets e simplificação do painel
+
+Retirado o link de administração do chat; Nova conversa foi colocado no rodapé junto de Reportar problema. O botão usa a mascote quando carregada e um SVG autónomo quando o PNG está em falta/falha. PNG com cache por data do ficheiro, posição fixa com safe-area, alvo de toque de 80 px e largura do painel compatível sem CSS min().
+
+Revalidação PHP 7.0.33: 355 ficheiros sem erros de sintaxe e 72 verificações do serviço aprovadas. O teste HTTP passou 38 verificações; o navegador validou desktop, tablet retrato, tablet paisagem e ecrã estreito. Inclui hit-test do botão após scroll, toque, PNG carregado/falhado e fluxo completo de chat, fontes, feedback, reporte e nova conversa. Verificou-se também que a conta não piloto ou sem assist.use não recebe o botão. Node syntax e diff sem problemas.
+
+O utilizador ainda não comparou a mesma conta entre computador e tablet. Não foi possível confirmar a causa específica no dispositivo/servidor real. A atualização corrige a situação reproduzida de imagem falhada e preserva as regras de acesso; as instruções do ZIP explicam como configurar a conta do tablet. Não houve deploy nem alteração automática de permissões.
