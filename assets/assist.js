@@ -19,7 +19,7 @@
     function request(data) {
         var options = {credentials:'same-origin', cache:'no-store'};
         if (data) { data.append('_token', panel.dataset.token); options.method = 'POST'; options.body = data; }
-        return fetch('assist_api.php?language='+encodeURIComponent(language)+'&context[equipment]='+encodeURIComponent(panel.dataset.equipment || ''), options).then(function (r) { return r.json().then(function (json) { if (!r.ok) throw new Error(json.error || 'Pedido indisponível.'); return json; }); });
+        return fetch('assist_api.php?language='+encodeURIComponent(language), options).then(function (r) { return r.json().then(function (json) { if (!r.ok) throw new Error(json.error || 'Pedido indisponível.'); return json; }); });
     }
     function action(name, values) { var data = new FormData(); data.append('action', name); Object.keys(values).forEach(function (key) { data.append(key, values[key]); }); return request(data); }
     function element(tag, text, className) { var node = document.createElement(tag); node.textContent = text; if(className) node.className=className; return node; }
@@ -47,7 +47,7 @@
         [1,0].forEach(function(value){var button=element('button',value?words().useful:words().unhelpful,'btn btn-sm btn-light');button.type='button';button.addEventListener('click',function(){action('feedback',{message_id:row.id,useful:value}).then(function(){status.textContent='Feedback registado.';}).catch(fail);});block.appendChild(button);});
         messages.appendChild(block); messages.scrollTop=messages.scrollHeight;
     }
-    function suggestions(rows) { var target=document.getElementById('assist-suggestions');target.textContent='';(rows||[]).forEach(function(row){var button=element('button',row.title,'btn btn-sm btn-outline-secondary');button.type='button';button.addEventListener('click',function(){question.value=row.title;question.focus();});target.appendChild(button);}); }
+    function suggestions(rows) { var target=document.getElementById('assist-suggestions');target.textContent='';if(!(rows||[]).length)target.appendChild(element('span','Sem sugestões publicadas disponíveis para esta conta.','small'));(rows||[]).forEach(function(row){var button=element('button',row.title,'btn btn-sm btn-outline-secondary');button.type='button';button.addEventListener('click',function(){question.value=row.title;question.focus();});target.appendChild(button);}); }
     function fail(error) { status.textContent = error.message || 'Não foi possível concluir o pedido.'; }
     function close() { panel.hidden=true;open.setAttribute('aria-expanded','false');open.focus(); }
     open.addEventListener('click',function(){panel.hidden=false;open.setAttribute('aria-expanded','true');question.focus();if(!loaded){request().then(function(data){messages.textContent='';data.messages.forEach(render);suggestions(data.suggestions);loaded=true;}).catch(fail);}});

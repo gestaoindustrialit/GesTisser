@@ -228,29 +228,6 @@ final class AssistService
         $stop=explode(' ','a o os as um uma uns umas de da do das dos e em na no nas nos por para com ao que qual quais como quanto quanta quantos qual é esta está estou tenho muito muita demasiado demasiada resolver corrigir fazer preciso pode podes favor se não nao the a an is are how what can i to of for with my please está tinta');
         return array_values(array_unique(array_filter(explode(' ',self::normalize($question)),function($w)use($stop){return strlen($w)>1 && !in_array($w,$stop,true);} )));
     }
-    /** Resolve context identifiers to existing ERP labels, never to technical instructions. */
-    private function contextTerms(array $context): array
-    {
-        $result=[];
-        foreach(['equipment'=>'erp_machines','operation'=>'erp_operations'] as $field=>$table){
-            if(empty($context[$field]))continue;
-            $value=trim((string)$context[$field]);$terms=[self::normalize($value)];
-            if(ctype_digit($value)&&$this->query("SELECT 1 FROM sqlite_master WHERE type='table' AND name=?",[$table])->fetchColumn()){
-                $columns=$this->query('PRAGMA table_info('.$table.')')->fetchAll(PDO::FETCH_COLUMN,1);
-                if(in_array('code',$columns,true)&&in_array('name',$columns,true)){
-                    $entity=$this->query('SELECT code,name FROM '.$table.' WHERE id=?',[(int)$value])->fetch(PDO::FETCH_ASSOC);
-                    if($entity){foreach([$entity['code'],$entity['name'],$entity['code'].' '.$entity['name']] as $label){$label=self::normalize((string)$label);if($label!=='')$terms[]=$label;}}
-                }
-            }
-            $result[$field]=array_values(array_unique($terms));
-        }
-        return $result;
-    }
-    private function matchesContext(array $content, array $terms): bool
-    {
-        foreach($terms as $field=>$aliases)if(($content[$field]??'')!==''&&!in_array(self::normalize($content[$field]),$aliases,true))return false;
-        return true;
-    }
     public function retrieve(string $question, string $language = 'pt', array $context = []): array
     {
         $this->demand('assist.use');
@@ -260,7 +237,6 @@ final class AssistService
         // Never infer which numerical value in a procedure answers a free-form question.
         if (!$words || count($words)>40 || preg_match('/[0-9]/u',$question) || preg_match('/\b(quanto|quanta|quantos|quantas|valor|valores|percentagem|temperatura|tempo|tempos|quantidade|quantidades|dosagem|dose|medida|medidas|parametro|parametros|ph|how much|how many|temperature|time|duration|quantity|dosage|value|percentage)\b/u',$normalized)) return $none;
         $matches=[];
-        $contextTerms=$this->contextTerms($context);
         $where=[];$args=[$language];
         foreach ($words as $word) { $where[]='a.search_text LIKE ?';$args[]='%'.$word.'%'; }
         // FTS5 helps candidate discovery; the same literal LIKE candidates preserve fallback parity.
@@ -279,7 +255,6 @@ final class AssistService
             $hits=0;foreach ($words as $w) if (preg_match('/(?:^| )'.preg_quote($w,'/').'(?: |$)/u',$a['search_text'])) $hits++;
             $ratio=$hits/count($words);
             if ($ratio<0.6) continue;
-            if(!$this->matchesContext($content,$contextTerms))continue;
             $a['content']=$content;$a['score']=$ratio;$matches[]=$a;
         }
         if (!$matches) return $none;
@@ -313,9 +288,9 @@ final class AssistService
     }
     public function suggestions(string $language = 'pt', array $context = []): array
     {
-        $this->demand('assist.use');$suggestions=[];$terms=$this->contextTerms($context);
+        $this->demand('assist.use');$suggestions=[];
         $rows=$this->query('SELECT a.*,c.required_permission FROM assist_articles a JOIN assist_categories c ON c.id=a.category_id WHERE a.status="published" AND a.language=? ORDER BY a.updated_at DESC,a.id DESC',[$language])->fetchAll(PDO::FETCH_ASSOC);
-        foreach($rows as $a){$content=json_decode($a['content_json'],true);if($this->categoryAllowed($a)&&$this->usable($a)&&$this->matchesContext($content,$terms))$suggestions[]=['title'=>$a['title']];if(count($suggestions)>=5)break;}
+        foreach($rows as $a){$content=json_decode($a['content_json'],true);if($this->categoryAllowed($a)&&$this->usable($a))$suggestions[]=['title'=>$a['title']];if(count($suggestions)>=5)break;}
         return $suggestions;
     }
     public function history(): array
