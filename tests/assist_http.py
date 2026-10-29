@@ -1,0 +1,100 @@
+#!/usr/bin/env python3
+"""Disposable PHP 7.0 integration + desktop/Android Chromium validation."""
+import http.cookiejar
+import json
+import os
+from pathlib import Path
+import re
+import secrets
+import shutil
+import sqlite3
+import subprocess
+import tempfile
+import time
+import urllib.error
+import urllib.parse
+import urllib.request
+
+source=Path(__file__).resolve().parents[1]
+php=os.environ.get('PHP70_BIN','php')
+version=subprocess.check_output([php,'-r','echo PHP_VERSION;'],text=True)
+assert version.startswith('7.0.'),version
+checks=[]
+def check(ok,label):
+    assert ok,label
+    checks.append(label)
+    print('OK '+label,flush=True)
+with tempfile.TemporaryDirectory(prefix='assist-http-') as directory:
+    root=Path(directory)
+    files=subprocess.check_output(['git','ls-files','--cached','--others','--exclude-standard','-z'],cwd=source).decode().split('\0')
+    for name in filter(None,files):
+        if name.startswith(('work/','vendor/','node_modules/')): continue
+        destination=root/name;destination.parent.mkdir(parents=True,exist_ok=True);shutil.copy2(source/name,destination)
+    if (source/'vendor').exists():(root/'vendor').symlink_to((source/'vendor').resolve(),target_is_directory=True)
+    with (root/'http.log').open('w') as log:
+        server=subprocess.Popen([php,'-S','127.0.0.1:8093','-t',str(root)],cwd=root,env=dict(os.environ,APP_ENV='development',GESTISSER_DB_PATH=str(root/'database.sqlite')),stdout=log,stderr=log)
+        try:
+            jar=http.cookiejar.CookieJar();client=urllib.request.build_opener(urllib.request.HTTPCookieProcessor(jar))
+            def request(path,data=None,who=None):
+                try:r=(who or client).open('http://127.0.0.1:8093/'+path,data=urllib.parse.urlencode(data).encode() if data is not None else None,timeout=30)
+                except urllib.error.HTTPError as error:r=error
+                return r.status,r.read().decode(),r.geturl()
+            body=None
+            for attempt in range(50):
+                try:status,body,url=request('install.php');break
+                except urllib.error.URLError:time.sleep(.1)
+            if body is None: raise RuntimeError('PHP test server did not start; local network permissions may be required.')
+            password=secrets.token_urlsafe(24);csrf=re.search(r'name="csrf" value="([^"]+)"',body).group(1)
+            status,body,_=request('install.php',dict(action='new',environment='development',name='Assist fixture',email='assist@example.invalid',password=password,csrf=csrf))
+            check(status==200 and 'Ativação concluída' in body,'isolated installation')
+            status,body,_=request('login.php');token=re.search(r'name="_token" value="([^"]+)"',body).group(1)
+            status,body,_=request('login.php',dict(action='login_password',email='assist@example.invalid',password=password,_token=token))
+            check(status==200 and 'Erro interno' not in body,'existing authentication')
+            status,body,_=request('assist_admin.php');check(status==200 and 'Base de conhecimento' in body,'admin screen renders')
+            check('assist-open' in body,'shared shell contains SACO launcher')
+            token=re.search(r'name="_token" value="([^"]+)"',body).group(1)
+            db=sqlite3.connect(root/'database.sqlite')
+            category=db.execute("SELECT id FROM assist_categories WHERE name='Tintas'").fetchone()[0]
+            status,body,_=request('assist_admin.php',dict(action='save',category_id=category,title='Verificação viscosidade',procedure='1. Consultar a ficha interna.\n2. Registar a observação.',safety='Parar em segurança. <script>window.assistPwned=1</script>',synonyms='tinta grossa',language='pt',_token=token))
+            check(status==200 and 'Rascunho guardado' in body,'admin creates draft through CSRF form')
+            article=db.execute('SELECT id FROM assist_articles').fetchone()[0]
+            for action in ['submit','approve','publish']:
+                status,body,_=request('assist_admin.php',dict(action=action,id=article,version=1,_token=token));check(status==200 and 'Estado atualizado' in body,'human workflow '+action)
+            status,_,_=request('assist_article.php?id='+str(article)+'&version=999');check(status==404,'obsolete source version denied')
+            status,body,_=request('assist_api.php',dict(action='ask',question='viscosidade',language='pt',_token=token));answer=json.loads(body)
+            check(status==200 and answer['answer']['text']=='1. Consultar a ficha interna.\n2. Registar a observação.','real endpoint returns exact source')
+            status,body,_=request('assist_api.php',dict(action='ask',question='Quanto solvente adicionar?',language='pt',_token=token));check(json.loads(body)['answer']['outcome']=='none','real endpoint abstains on missing value')
+            status,body,_=request('assist_api.php',dict(action='ask',question='viscosidade'));check(status==419,'CSRF enforced')
+            anonymous=urllib.request.build_opener();status,_,_=request('assist_api.php',who=anonymous);check(status==401,'anonymous endpoint denied')
+            status,_,_=request('assist_article.php?id='+str(article),who=anonymous);check(status==401,'anonymous source denied')
+            for endpoint,marker in [('erp.php','ERP'),('hr.php','RH'),('shopfloor.php','Shopfloor')]:
+                status,body,_=request(endpoint);check(status==200 and 'Erro interno' not in body and marker.lower() in body.lower(),endpoint+' still renders')
+            user_id=db.execute("SELECT id FROM users WHERE email='assist@example.invalid'").fetchone()[0]
+            # Turn the fixture into a normal PIN operator; exercise exactly the same session.
+            db.execute('UPDATE users SET is_admin=0,access_profile="Utilizador",pin_only_login=1 WHERE id=?',(user_id,))
+            db.execute('UPDATE assist_settings SET value=? WHERE key="pilot_users"',(str(user_id),))
+            db.execute('INSERT INTO erp_user_permissions(user_id,permission_code,is_allowed) VALUES (?,"assist.use",1)',(user_id,));db.commit()
+            center_id=db.execute("INSERT INTO erp_work_centers(code,name,center_type) VALUES('ASSIST-TEST','Posto Assist','administrative')").lastrowid;db.commit()
+            status,body,_=request('shopfloor.php',dict(action='select_work_center',work_center_id=center_id,_token=token));check(status==200,'existing Shopfloor workstation selection')
+            cookies=[dict(name=c.name,value=c.value,domain=c.domain,path=c.path) for c in jar]
+            fixture=dict(url='http://127.0.0.1:8093/shopfloor.php',cookies=cookies,source=str(source),article=article)
+            fixture_path=root/'fixture.json';fixture_path.write_text(json.dumps(fixture))
+            browser=subprocess.run(['node',str(source/'tests/assist_browser.js'),str(fixture_path)],cwd=source,capture_output=True,text=True,timeout=120)
+            print(browser.stdout,flush=True)
+            if browser.returncode: print(browser.stderr,flush=True)
+            check(browser.returncode==0,'desktop and Android tablet browser checks')
+            status,body,_=request('assist_api.php');check(status==200,'PIN operator retains endpoint access')
+            # Source and history revoke instantly, including protected embedded article.
+            db.execute('UPDATE assist_articles SET status="archived" WHERE id=?',(article,));db.commit()
+            status,_,_=request('assist_article.php?id='+str(article)+'&embedded=1');check(status==404,'archived direct source denied')
+            status,body,_=request('assist_api.php');check(all(m['answer']['outcome']!='answer' for m in json.loads(body)['messages']),'archived excerpts removed from history')
+            db.execute('UPDATE users SET is_active=0 WHERE id=?',(user_id,));db.commit();status,_,_=request('assist_api.php');check(status==401,'inactive user denied')
+            check(db.execute('PRAGMA integrity_check').fetchone()[0]=='ok','SQLite integrity')
+            db.close()
+        finally:
+            server.terminate();server.wait(timeout=10)
+            # Keep only diagnostics in the ignored work directory.
+            work=source/'work/assist-http';work.mkdir(parents=True,exist_ok=True)
+            shutil.copy2(root/'http.log',work/'server.log')
+(source/'work/assist-http/results.json').write_text(json.dumps(dict(php=version,checks=checks),ensure_ascii=False,indent=2))
+print('OK HTTP: '+str(len(checks))+' checks')

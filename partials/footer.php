@@ -9,5 +9,6 @@
 <script src="assets/app.js?v=<?= h((string) (@filemtime(dirname(__DIR__) . '/assets/app.js') ?: '1')) ?>"></script>
 <script src="assets/searchable-select.js?v=<?= h((string) (@filemtime(dirname(__DIR__) . '/assets/searchable-select.js') ?: '1')) ?>"></script>
 <script src="assets/mapper-layout.js"></script>
+<?php if (isset($pdo) && isset($_SESSION['user_id'])) require __DIR__.'/assist_panel.php'; ?>
 </body>
 </html>

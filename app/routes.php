@@ -16,6 +16,9 @@ if (!function_exists('taskforce_routes')) {
             'hr.skills' => 'hr_skills.php',
             'erp.machines' => 'erp_machines.php',
             'erp.bi' => 'business_intelligence.php',
+            'assist.admin' => 'assist_admin.php',
+            'assist.api' => 'assist_api.php',
+            'assist.article' => 'assist_article.php',
         );
     }
 }

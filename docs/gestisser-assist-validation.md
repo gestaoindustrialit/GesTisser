@@ -1,0 +1,51 @@
+# GesTISSER Assist — entrega e validação
+
+Implementadas as fases 1 e 2 no repositório `GesTisser`: base de conhecimento com categorias, versões, aprovação humana e publicação; chat lateral partilhado pelo ERP e Shopfloor; pesquisa determinística com FTS5 opcional e alternativa SQLite; fontes com versão, histórico privado, sugestões e feedback. Inclui também reporte textual de problemas e conversão de soluções eficazes em rascunhos.
+
+O módulo reutiliza sessões, utilizadores, capacidades e auditoria existentes. Não consulta Internet ou serviços de IA para responder. As instruções devolvidas são excertos exatos de uma única fonte publicada/aprovada, com abstenção e esclarecimento nos casos insuficientes ou ambíguos. A ativação inicial é apenas para administradores; utilizadores piloto exigem configuração e permissões explícitas.
+
+## Resultados — 28 de outubro de 2026
+
+- Runtime confirmado: **PHP 7.0.33**.
+- Sintaxe: **352 ficheiros PHP aprovados; zero falhas**.
+- `assist_service_test.php`: **72 verificações aprovadas**.
+- Cinco testes de regressão aprovados: `shopfloor_page_sections_test.php`, `shopfloor_operation_flow_test.php`, `shopfloor_feedback_preview_test.php`, `sharepoint_document_sync_test.php`, `erp_migration_fast_path_test.php`.
+- **24 verificações HTTP aprovadas** numa instalação temporária, incluindo o instalador/login existentes, ciclo de aprovação/publicação real, sessão, CSRF, conta inativa, fontes retiradas e versões antigas.
+- Navegador Chromium: **desktop e tablet Android simulado aprovados**, com chat, fontes no painel, feedback, reporte, abstenção, dimensões e alvos de toque. Texto com script na fonte permaneceu inerte.
+- Os ecrãs ERP, RH e Shopfloor abriram com sucesso na instalação sintética; o teste usou também a seleção normal de centro de trabalho e acesso de operador com PIN.
+- JavaScript verificado com `node --check`; `git diff --check` sem problemas.
+
+Não foi executada toda a suíte de testes do repositório. Não foi testado um tablet físico nem o alojamento cPanel. Não houve deploy, alteração de dados de produção ou ativação geral. A publicação posterior numa branch GitHub foi autorizada pelo utilizador.
+
+## Como rever e instalar
+
+As alterações encontram-se no repositório de trabalho, incluindo os novos ficheiros ainda não rastreados. Rever o diff e esses ficheiros antes de integrar. O pacote de instalação encontra-se em `dist/Gestisser-Assist-SERVIDOR.zip`; as instruções estão em `ENTREGA-ASSIST.md`. A documentação completa está em `docs/gestisser-assist.md` e inclui arquitetura, esquema das dez tabelas e índice FTS opcional, rotas, capacidades, configuração, fluxo de aprovação, retenção, testes, limitações e ativação gradual no Shopfloor.
+
+Após instalar no ambiente de teste, entrar como administrador e abrir `assist_admin.php`. A migração aditiva é automática, através do PDO existente. Configurar pilotos e capacidades antes de ativar utilizadores comuns. Não criar dados técnicos fictícios; os dados dos testes são apenas temporários.
+
+## Limitações e trabalho pendente
+
+- Fases 3/4: importação PDF/DOCX/TXT/HTML, anexos/fotografias, originais protegidos, secções e validação individual; integração documental SharePoint com seleção de pastas, Forçar Sync e invalidação por alterações de origem. Não há upload/sync Assist nesta entrega.
+- A pesquisa é uma heurística conservadora; não faz compreensão semântica ou tradução. Pedidos de parâmetros/valores reconhecidos e perguntas com dígitos são recusados nesta versão. Os esclarecimentos exigem selecionar a fonte ou repetir a pergunta completa com o material.
+- Conteúdo em português, inglês e hindi deve ser criado e aprovado no respetivo idioma. A administração e parte das mensagens operacionais continuam em português.
+- Retenção do chat é configurável, mas a execução é manual. Os reportes e auditoria não são eliminados por essa política.
+- **Mascote SACO:** o botão usa o nome e o painel está preparado para `assets/assist-saco.png`. O ambiente recebeu o TXT, mas não o ficheiro binário da imagem mostrada no chat. A imagem exata não está incluída; é necessário disponibilizar o PNG original nesse caminho. Não foi gerada uma aproximação.
+
+## Ficheiros entregues
+
+- `app/Services/AssistService.php`
+- `app/routes.php`
+- `assets/assist.css`
+- `assets/assist.js`
+- `assist_admin.php`
+- `assist_api.php`
+- `assist_article.php`
+- `assist_migrations.php`
+- `docs/gestisser-assist-validation.md`
+- `docs/gestisser-assist.md`
+- `includes/assist_bootstrap.php`
+- `partials/assist_panel.php`
+- `partials/footer.php`
+- `tests/assist_browser.js`
+- `tests/assist_http.py`
+- `tests/assist_service_test.php`
