@@ -1,12 +1,18 @@
 # GesTISSER Assist — instalação no servidor
 
-Já tem o Assist instalado? [**Descarregar apenas a atualização do botão e painel**](dist/Gestisser-Assist-ATUALIZACAO-UI.zip). Substituir os três ficheiros do pacote; conservar `assets/assist-saco.png`.
+Já tem o Assist instalado? [**Descarregar apenas a atualização do botão e painel**](dist/Gestisser-Assist-ATUALIZACAO-UI.zip). Substituir os três ficheiros do pacote para atualizar apenas o aspeto; para importar Excel, usar o pacote abaixo. Conservar `assets/assist-saco.png`.
 
 [**Descarregar o ZIP para o servidor**](dist/Gestisser-Assist-SERVIDOR.zip)
 
-No GitHub, abrir o ZIP e clicar no ícone **Download raw file** para descarregar o pacote. Este ZIP contém apenas os 11 ficheiros da aplicação necessários e o ficheiro `LEIA-ME-SERVIDOR.txt`. O botão **Code → Download ZIP** descarrega o repositório completo, incluindo este pacote.
+No GitHub, abrir o ZIP e clicar no ícone **Download raw file** para descarregar o pacote. Este ZIP contém os ficheiros da aplicação necessários e o ficheiro `LEIA-ME-SERVIDOR.txt`. O botão **Code → Download ZIP** descarrega o repositório completo, incluindo este pacote.
 
 Extrair o pacote na raiz do GesTisser, onde estão `erp.php`, `shopfloor.php` e `config.php`, mantendo as pastas. Fazer backup primeiro. Os dois ficheiros existentes substituídos são `app/routes.php` e `partials/footer.php`; integrar eventuais alterações posteriores do servidor antes da substituição. Preservar `database.sqlite` e a configuração do servidor.
+
+## Template e importação de conhecimento
+
+[**Descarregar a atualização com template e importação Excel**](dist/Gestisser-Assist-ATUALIZACAO-EXCEL.zip) · [**Template Excel vazio**](dist/modelo_conhecimento_SACO.xlsx)
+
+Depois de instalar a atualização, abrir **Base de conhecimento → Importar Excel → Descarregar template Excel** para obter as categorias do próprio servidor. Preencher a folha Conhecimento, pré-visualizar e confirmar. Cada linha cria um rascunho, sujeito a validação e publicação. O template estático acima contém apenas as categorias iniciais. O cabeçalho passa a mostrar **SACO · Sistema de Apoio a Conhecimento Operacional**.
 
 ## Mascote SACO
 

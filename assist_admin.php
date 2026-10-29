@@ -1,13 +1,30 @@
 <?php
 require_once __DIR__.'/includes/assist_bootstrap.php';
+require_once __DIR__.'/app/Services/AssistKnowledgeSpreadsheet.php';
 header('Cache-Control: no-store');
 try { $assist->demand('assist.edit'); }catch(Throwable $e){http_response_code(403);exit('Acesso não autorizado.');}
 $error='';$success='';$editId=(int)($_GET['id']??0);
+if(isset($_SESSION['assist_import'])&&((int)$_SESSION['assist_import']['user_id']!==(int)$assistUser['id']||(int)$_SESSION['assist_import']['expires_at']<time()))unset($_SESSION['assist_import']);
 if(($_SERVER['REQUEST_METHOD']??'GET')==='POST') {
     validate_csrf_or_abort();
     try {
         $action=(string)($_POST['action']??'');
-        if($action==='save') { $editId=$assist->saveArticle($_POST);$success='Rascunho guardado. A aprovação anterior foi invalidada.'; }
+        if($action==='preview_import') {
+            unset($_SESSION['assist_import']);
+            $file=$_FILES['knowledge_file']??[];$tmp=(string)($file['tmp_name']??'');
+            if(($file['error']??UPLOAD_ERR_NO_FILE)!==UPLOAD_ERR_OK||!is_uploaded_file($tmp))throw new InvalidArgumentException('Selecione um ficheiro Excel .xlsx ou CSV UTF-8 até 5 MB.');
+            $records=AssistKnowledgeSpreadsheet::read($tmp,strtolower(pathinfo((string)$file['name'],PATHINFO_EXTENSION)),$assist->categories());
+            $_SESSION['assist_import']=['user_id'=>(int)$assistUser['id'],'expires_at'=>time()+1800,'token'=>bin2hex(random_bytes(24)),'records'=>$records];
+            $success='Ficheiro lido. Confira a pré-visualização e confirme a criação dos rascunhos.';
+        }
+        elseif($action==='confirm_import') {
+            $preview=$_SESSION['assist_import']??null;
+            if(!$preview||!hash_equals($preview['token'],(string)($_POST['import_token']??'')))throw new InvalidArgumentException('A pré-visualização expirou ou já foi utilizada. Carregue o ficheiro novamente.');
+            $imported=$assist->importDrafts($preview['records']);unset($_SESSION['assist_import']);
+            $success=count($imported).' artigo(s) importado(s) como rascunho. É necessária validação e publicação para aparecerem no SACO.';
+        }
+        elseif($action==='cancel_import') {unset($_SESSION['assist_import']);$success='Pré-visualização cancelada.';}
+        elseif($action==='save') { $editId=$assist->saveArticle($_POST);$success='Rascunho guardado. A aprovação anterior foi invalidada.'; }
         elseif(in_array($action,['submit','approve','reject','publish','archive'],true)) { $assist->transition((int)$_POST['id'],(int)$_POST['version'],$action,(string)($_POST['reason']??''));$success='Estado atualizado.'; }
         elseif($action==='category') { $assist->saveCategory($_POST);$success='Categoria guardada.'; }
         elseif($action==='permission') { $assist->setPermission((int)$_POST['user_id'],(string)$_POST['permission'],(string)$_POST['mode']);$success='Permissão atualizada no ERP.'; }
@@ -28,7 +45,24 @@ $pageTitle='GesTISSER Assist — Base de conhecimento';require __DIR__.'/partial
 <p>Rascunho → Em validação → Aprovado → Publicado → Arquivado. Apenas conteúdo publicado com aprovação válida pode responder no chat.</p>
 <?php if($error):?><div class="alert alert-danger" role="alert"><?=h($error)?></div><?php endif;?>
 <?php if($success):?><div class="alert alert-success" role="status"><?=h($success)?></div><?php endif;?>
-<nav class="d-flex gap-2 flex-wrap mb-3"><a class="btn btn-outline-primary" href="#articles">Artigos e aprovações</a><a class="btn btn-outline-primary" href="#editor">Novo artigo</a><?php if($assist->can('assist.admin')):?><a class="btn btn-outline-primary" href="#categories">Categorias</a><a class="btn btn-outline-primary" href="#problems">Problemas</a><a class="btn btn-outline-primary" href="#statistics">Estatísticas</a><a class="btn btn-outline-primary" href="#settings">Configurações</a><?php endif;?></nav>
+<nav class="d-flex gap-2 flex-wrap mb-3"><a class="btn btn-outline-primary" href="#articles">Artigos e aprovações</a><a class="btn btn-outline-primary" href="#editor">Novo artigo</a><a class="btn btn-outline-primary" href="#import">Importar Excel</a><?php if($assist->can('assist.admin')):?><a class="btn btn-outline-primary" href="#categories">Categorias</a><a class="btn btn-outline-primary" href="#problems">Problemas</a><a class="btn btn-outline-primary" href="#statistics">Estatísticas</a><a class="btn btn-outline-primary" href="#settings">Configurações</a><?php endif;?></nav>
+<section id="import" class="card mb-3"><div class="card-body">
+<h2 class="h5">Importar conhecimento por Excel</h2>
+<p>Descarregue o modelo, preencha uma linha por artigo e carregue o ficheiro para conferir antes de importar. Todos os artigos ficam em rascunho.</p>
+<a class="btn btn-outline-primary mb-3" href="assist_template.php">Descarregar template Excel</a>
+<p class="small text-muted">Obrigatórios: titulo, categoria e procedimento. Idioma predefinido: pt. As folhas Instrucoes e Categorias ajudam no preenchimento. Até 200 artigos e 5 MB. Use valores, sem fórmulas; os títulos repetidos na mesma categoria/idioma cancelam o lote sem substituir artigos.</p>
+<form method="post" enctype="multipart/form-data" class="d-flex gap-2 flex-wrap align-items-end">
+<?=csrf_input()?><input type="hidden" name="action" value="preview_import"><input type="hidden" name="MAX_FILE_SIZE" value="5242880">
+<label class="form-label flex-grow-1">Ficheiro Excel ou CSV UTF-8<input type="file" name="knowledge_file" class="form-control" accept=".xlsx,.csv" required></label>
+<button type="submit" class="btn btn-primary mb-2">Pré-visualizar importação</button></form>
+<?php if(isset($_SESSION['assist_import'])):$importPreview=$_SESSION['assist_import'];?>
+<h3 class="h6 mt-3">Pré-visualização: <?=count($importPreview['records'])?> artigo(s)</h3>
+<div class="table-responsive"><table class="table"><thead><tr><th>Título</th><th>Categoria</th><th>Idioma</th><th>Conteúdo a importar</th></tr></thead><tbody>
+<?php foreach($importPreview['records'] as $record):?><tr><td><?=h($record['title'])?></td><td><?=h($record['category_name'])?></td><td><?=h($record['language'])?></td><td><details><summary>Consultar campos</summary><?php foreach($labels as $field=>$label):if(trim($record[$field]??'')==='')continue;?><strong><?=h($label)?></strong><p style="white-space:pre-wrap"><?=h($record[$field])?></p><?php endforeach;?><?php if($record['expires_on']):?><p>Revisão até <?=h($record['expires_on'])?></p><?php endif;?></details></td></tr><?php endforeach;?>
+</tbody></table></div>
+<form method="post" class="d-flex gap-2"><?=csrf_input()?><input type="hidden" name="import_token" value="<?=h($importPreview['token'])?>"><button class="btn btn-success" name="action" value="confirm_import">Confirmar importação como rascunhos</button><button class="btn btn-outline-secondary" name="action" value="cancel_import">Cancelar</button></form>
+<?php endif;?>
+</div></section>
 <section id="articles" class="card mb-3"><div class="card-body"><h2 class="h5">Artigos e aprovações</h2><form method="get" class="d-flex gap-2 mb-3"><label class="flex-grow-1">Pesquisar artigos<input class="form-control" type="search" name="q" value="<?=h($assistSearch)?>"></label><button class="btn btn-outline-primary align-self-end">Pesquisar</button></form><div class="table-responsive"><table class="table"><thead><tr><th>Artigo</th><th>Categoria</th><th>Versão / estado</th><th>Revisão até</th><th>Ações</th></tr></thead><tbody>
 <?php foreach($articles as $a):?><tr><td><a href="assist_admin.php?id=<?=(int)$a['id']?>#editor"><?=h($a['title'])?></a></td><td><?=h($a['category'])?></td><td>v<?=(int)$a['version']?> · <?=h($a['status'])?></td><td><?=h((string)$a['expires_on'])?><?php if($a['expires_on'] && $a['expires_on']<date('Y-m-d')):?> <strong class="text-danger">Expirado</strong><?php endif;?></td><td><form method="post" class="d-flex flex-wrap gap-1"><?=csrf_input()?><input type="hidden" name="id" value="<?=(int)$a['id']?>"><input type="hidden" name="version" value="<?=(int)$a['version']?>">
 <?php if($a['status']==='draft'):?><button name="action" value="submit" class="btn btn-sm btn-outline-primary">Submeter</button><?php endif;?>

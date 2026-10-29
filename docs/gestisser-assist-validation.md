@@ -25,7 +25,7 @@ Após instalar no ambiente de teste, entrar como administrador e abrir `assist_a
 
 ## Limitações e trabalho pendente
 
-- Fases 3/4: importação PDF/DOCX/TXT/HTML, anexos/fotografias, originais protegidos, secções e validação individual; integração documental SharePoint com seleção de pastas, Forçar Sync e invalidação por alterações de origem. Não há upload/sync Assist nesta entrega.
+- Fases 3/4: importação PDF/DOCX/TXT/HTML, anexos/fotografias, originais protegidos, secções e validação individual; integração documental SharePoint com seleção de pastas, Forçar Sync e invalidação por alterações de origem. Já existe importação estruturada Excel/CSV; upload de documentos PDF/DOCX e sync Assist continuam pendentes.
 - A pesquisa é uma heurística conservadora; não faz compreensão semântica ou tradução. Pedidos de parâmetros/valores reconhecidos e perguntas com dígitos são recusados nesta versão. Os esclarecimentos exigem selecionar a fonte ou repetir a pergunta completa com o material.
 - Conteúdo em português, inglês e hindi deve ser criado e aprovado no respetivo idioma. A administração e parte das mensagens operacionais continuam em português.
 - Retenção do chat é configurável, mas a execução é manual. Os reportes e auditoria não são eliminados por essa política.
@@ -57,3 +57,15 @@ O botão fechado apresenta apenas `assets/assist-saco.png`, sem legenda visível
 Revalidação em PHP 7.0.33: sintaxe dos 352 ficheiros aprovada, 72 verificações do serviço Assist aprovadas e 24 verificações HTTP aprovadas, incluindo o uso em computador e tablet Android simulado. `node --check assets/assist.js` e `git diff --check` aprovados. Não houve alteração do motor de respostas ou do esquema da base de dados.
 
 Para instalações existentes, `dist/Gestisser-Assist-ATUALIZACAO-UI.zip` contém apenas `partials/assist_panel.php`, `assets/assist.css`, `assets/assist.js` e instruções. Conservar a imagem original já instalada em `assets/assist-saco.png`. O pacote completo também foi atualizado.
+
+## Significado de SACO e importação Excel — 29 de outubro de 2026
+
+O cabeçalho apresenta **SACO · Sistema de Apoio a Conhecimento Operacional**. O botão fechado mantém apenas a mascote.
+
+Criado `assist_template.php` e `AssistKnowledgeSpreadsheet`, reutilizando os leitores/geradores existentes. O template descarregável tem folhas Conhecimento, Instrucoes e Categorias, sem dados técnicos fictícios. O download na aplicação inclui apenas categorias autorizadas; a versão estática no repositório contém as categorias iniciais.
+
+A administração inclui upload `.xlsx`/CSV UTF-8, pré-visualização protegida por sessão, CSRF e nonce, e confirmação explícita para criar rascunhos. Limites: 200 artigos, 5 MB de ficheiro e 2 MB de artigos descodificados. Não aceita fórmulas, macros, entidades XML nem referências externas. Verifica limites de ZIP e células antes de chamar o leitor partilhado. Rejeita duplicados e efetua rollback integral em caso de erro, sem substituir conhecimento existente, aprovar ou publicar artigos.
+
+Validação em PHP 7.0.33: **355 ficheiros PHP sem erros de sintaxe**, **72 verificações do serviço**, **37 verificações de importação**, dois testes de regressão (`raw_material_spreadsheet_test.php`, `user_spreadsheet_export_test.php`) e **36 verificações HTTP**, incluindo computador e tablet Android simulado. Testado download de template real, upload de workbook preenchido, pré-visualização sem gravação, HTML escapado, token inválido, confirmação, replay, CSRF e recusa de utilizadores sem permissão. As datas Excel 1900/1904 são respeitadas. Nenhum deploy foi executado.
+
+Pacote completo atualizado; `dist/Gestisser-Assist-ATUALIZACAO-EXCEL.zip` contém os 10 ficheiros necessários à atualização e instruções, incluindo os dois serviços partilhados existentes como dependências. `dist/modelo_conhecimento_SACO.xlsx` é um template vazio com categorias iniciais. Não há migração adicional de esquema.

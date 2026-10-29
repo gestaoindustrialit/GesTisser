@@ -11,7 +11,7 @@ if($assistShell->enabled() && $assistShell->can('assist.use')):
 <section id="assist-panel" class="assist-panel" aria-label="GesTISSER Assist" hidden data-language="pt" data-token="<?=h(csrf_token())?>" data-equipment="<?= isset($selectedWorkCenterMachineId) && $selectedWorkCenterMachineId>0 ? (int)$selectedWorkCenterMachineId : '' ?>" data-order="<?=isset($selectedOf) && $selectedOf ? (int)$selectedOf['id'] : ''?>">
 <header class="assist-header"><div class="d-flex align-items-center gap-2">
 <?php if(is_file(dirname(__DIR__).'/assets/assist-saco.png')):?><img src="assets/assist-saco.png" width="52" height="52" alt="SACO, mascote GesTISSER" style="object-fit:contain"><?php endif;?>
-<div><strong>GesTISSER Assist</strong><div class="small">SACO · Conhecimento interno validado</div></div></div><button type="button" class="btn btn-light" id="assist-close" aria-label="Fechar Assist">×</button></header>
+<div class="assist-heading"><strong>GesTISSER Assist</strong><div class="small">SACO · Sistema de Apoio a Conhecimento Operacional</div></div></div><button type="button" class="btn btn-light" id="assist-close" aria-label="Fechar Assist">×</button></header>
 <div class="assist-toolbar">
 <?php if($assistShell->can('assist.edit')):?><a href="assist_admin.php" target="_blank" rel="noopener">Base de conhecimento ↗</a><?php endif;?>
 <button type="button" id="assist-new" class="btn btn-sm btn-outline-secondary">Nova conversa</button></div>

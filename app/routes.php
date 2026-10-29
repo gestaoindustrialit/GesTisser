@@ -19,6 +19,7 @@ if (!function_exists('taskforce_routes')) {
             'assist.admin' => 'assist_admin.php',
             'assist.api' => 'assist_api.php',
             'assist.article' => 'assist_article.php',
+            'assist.template' => 'assist_template.php',
         );
     }
 }

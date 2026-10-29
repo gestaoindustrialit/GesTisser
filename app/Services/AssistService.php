@@ -118,6 +118,27 @@ final class AssistService
             $this->index($id,false);$this->audit('save',['article'=>$id,'version'=>$version]);return $id;
         });
     }
+    /** Add-only batch: the whole transaction rolls back if any row fails. */
+    public function importDrafts(array $records): array
+    {
+        $this->demand('assist.edit');
+        if(!$records||count($records)>200)throw new InvalidArgumentException('Importe entre 1 e 200 artigos.');
+        return $this->atomic(function()use($records){
+            $ids=[];$seen=[];
+            foreach($records as $index=>$record){
+                $data=array_intersect_key($record,array_fill_keys(array_merge(self::FIELDS,['title','category_id','language','validator_id','expires_on']),true));
+                $category=$this->category((int)($data['category_id']??0));$title=trim((string)($data['title']??''));$language=(string)($data['language']??'pt');
+                if(trim((string)($data['procedure']??''))==='')throw new InvalidArgumentException('Registo '.($index+1).': preencha o procedimento.');
+                $key=$category['id'].'|'.$language.'|'.self::normalize($title);
+                if(isset($seen[$key]))throw new InvalidArgumentException('Registo '.($index+1).': título repetido no ficheiro para a mesma categoria e idioma.');
+                $seen[$key]=true;
+                $existing=$this->query('SELECT title FROM assist_articles WHERE category_id=? AND language=?',[$category['id'],$language])->fetchAll(PDO::FETCH_COLUMN);
+                foreach($existing as $existingTitle)if(self::normalize($existingTitle)===self::normalize($title))throw new InvalidArgumentException('Registo '.($index+1).': já existe um artigo com este título na categoria e idioma. Nenhum artigo foi substituído.');
+                $ids[]=$this->saveArticle($data);
+            }
+            $this->audit('import',['article_ids'=>$ids,'count'=>count($ids)]);return $ids;
+        });
+    }
     public function transition(int $id, int $version, string $action, string $reason = '')
     {
         $this->demand('assist.edit');

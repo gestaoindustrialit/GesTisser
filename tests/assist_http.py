@@ -1,6 +1,9 @@
 #!/usr/bin/env python3
 """Disposable PHP 7.0 integration + desktop/Android Chromium validation."""
 import http.cookiejar
+import io
+import zipfile
+import xml.etree.ElementTree as ET
 import json
 import os
 from pathlib import Path
@@ -35,10 +38,18 @@ with tempfile.TemporaryDirectory(prefix='assist-http-') as directory:
         server=subprocess.Popen([php,'-S','127.0.0.1:8093','-t',str(root)],cwd=root,env=dict(os.environ,APP_ENV='development',GESTISSER_DB_PATH=str(root/'database.sqlite')),stdout=log,stderr=log)
         try:
             jar=http.cookiejar.CookieJar();client=urllib.request.build_opener(urllib.request.HTTPCookieProcessor(jar))
-            def request(path,data=None,who=None):
+            def request(path,data=None,who=None,binary=False):
                 try:r=(who or client).open('http://127.0.0.1:8093/'+path,data=urllib.parse.urlencode(data).encode() if data is not None else None,timeout=30)
                 except urllib.error.HTTPError as error:r=error
-                return r.status,r.read().decode(),r.geturl()
+                body=r.read();return r.status,body if binary else body.decode(),r.geturl()
+            def upload(path,fields,filename,payload):
+                boundary='assist-'+secrets.token_hex(16);parts=[]
+                for name,value in fields.items():parts.append(('--'+boundary+'\r\nContent-Disposition: form-data; name="'+name+'"\r\n\r\n'+str(value)+'\r\n').encode())
+                parts.append(('--'+boundary+'\r\nContent-Disposition: form-data; name="knowledge_file"; filename="'+filename+'"\r\nContent-Type: application/vnd.openxmlformats-officedocument.spreadsheetml.sheet\r\n\r\n').encode()+payload+b'\r\n')
+                parts.append(('--'+boundary+'--\r\n').encode());req=urllib.request.Request('http://127.0.0.1:8093/'+path,data=b''.join(parts),headers={'Content-Type':'multipart/form-data; boundary='+boundary})
+                try:r=client.open(req,timeout=30)
+                except urllib.error.HTTPError as error:r=error
+                return r.status,r.read().decode()
             body=None
             for attempt in range(50):
                 try:status,body,url=request('install.php');break
@@ -69,6 +80,36 @@ with tempfile.TemporaryDirectory(prefix='assist-http-') as directory:
             status,_,_=request('assist_article.php?id='+str(article),who=anonymous);check(status==401,'anonymous source denied')
             for endpoint,marker in [('erp.php','ERP'),('hr.php','RH'),('shopfloor.php','Shopfloor')]:
                 status,body,_=request(endpoint);check(status==200 and 'Erro interno' not in body and marker.lower() in body.lower(),endpoint+' still renders')
+            status,template,_=request('assist_template.php',binary=True)
+            check(status==200 and template[:2]==b'PK','authenticated Excel template download')
+            template_zip=zipfile.ZipFile(io.BytesIO(template));ns={'x':'http://schemas.openxmlformats.org/spreadsheetml/2006/main'}
+            sheet=ET.fromstring(template_zip.read('xl/worksheets/sheet1.xml'));data=sheet.find('x:sheetData',ns)
+            columns=[c.find('x:is/x:t',ns).text for c in data[0]]
+            check(set(['titulo','categoria','procedimento']).issubset(columns) and 'xl/worksheets/sheet3.xml' in template_zip.namelist(),'template contains headers, instructions and categories')
+            for row in list(data)[1:]:data.remove(row)
+            row=ET.SubElement(data,'{'+ns['x']+'}row',{'r':'2'})
+            values={'titulo':'Conhecimento importado','categoria':'Tintas','procedimento':'Texto interno para revisão.','seguranca':'<script>window.previewPwned=1</script>'}
+            for name in columns:
+                cell=ET.SubElement(row,'{'+ns['x']+'}c',{'t':'inlineStr'});inline=ET.SubElement(cell,'{'+ns['x']+'}is');ET.SubElement(inline,'{'+ns['x']+'}t').text=values.get(name,'')
+            filled=io.BytesIO()
+            with zipfile.ZipFile(filled,'w',zipfile.ZIP_DEFLATED) as target:
+                for name in template_zip.namelist():target.writestr(name,ET.tostring(sheet,encoding='utf-8',xml_declaration=True) if name=='xl/worksheets/sheet1.xml' else template_zip.read(name))
+            before=db.execute('SELECT COUNT(*) FROM assist_articles').fetchone()[0]
+            status,body=upload('assist_admin.php',{'action':'preview_import','_token':token},'conhecimento.xlsx',filled.getvalue())
+            check(status==200 and 'Pré-visualização: 1 artigo' in body and db.execute('SELECT COUNT(*) FROM assist_articles').fetchone()[0]==before,'upload previews without creating articles')
+            check('&lt;script&gt;window.previewPwned=1&lt;/script&gt;' in body and '<script>window.previewPwned' not in body,'import preview escapes document HTML')
+            preview_token=re.search(r'name="import_token" value="([^"]+)"',body).group(1)
+            status,body,_=request('assist_admin.php',{'action':'confirm_import','_token':token,'import_token':'wrong'})
+            check(db.execute('SELECT COUNT(*) FROM assist_articles').fetchone()[0]==before,'tampered import confirmation token rejected')
+            status,body,_=request('assist_admin.php',{'action':'confirm_import','_token':token,'import_token':preview_token})
+            imported=db.execute('SELECT status,version,approved_by FROM assist_articles WHERE title="Conhecimento importado"').fetchone()
+            check(status==200 and imported==('draft',1,None),'explicit confirmation creates an unapproved version-one draft')
+            status,body,_=request('assist_admin.php',{'action':'confirm_import','_token':token,'import_token':preview_token})
+            check(db.execute('SELECT COUNT(*) FROM assist_articles').fetchone()[0]==before+1,'replaying confirmation creates no duplicate')
+            status,body,_=request('assist_api.php',dict(action='ask',question='Conhecimento importado',language='pt',_token=token))
+            check(json.loads(body)['answer']['outcome']=='none','imported draft remains outside SACO responses')
+            status,body=upload('assist_admin.php',{'action':'preview_import'},'conhecimento.xlsx',filled.getvalue());check(status==419,'CSRF enforced on spreadsheet uploads')
+            status,_,_=request('assist_template.php',who=anonymous);check(status==401,'anonymous template download denied')
             user_id=db.execute("SELECT id FROM users WHERE email='assist@example.invalid'").fetchone()[0]
             # Turn the fixture into a normal PIN operator; exercise exactly the same session.
             db.execute('UPDATE users SET is_admin=0,access_profile="Utilizador",pin_only_login=1 WHERE id=?',(user_id,))
@@ -84,6 +125,8 @@ with tempfile.TemporaryDirectory(prefix='assist-http-') as directory:
             if browser.returncode: print(browser.stderr,flush=True)
             check(browser.returncode==0,'desktop and Android tablet browser checks')
             status,body,_=request('assist_api.php');check(status==200,'PIN operator retains endpoint access')
+            status,_,_=request('assist_template.php');check(status==403,'operator without editing permission cannot download import template')
+            status,_,_=request('assist_admin.php');check(status==403,'operator cannot access import administration')
             # Source and history revoke instantly, including protected embedded article.
             db.execute('UPDATE assist_articles SET status="archived" WHERE id=?',(article,));db.commit()
             status,_,_=request('assist_article.php?id='+str(article)+'&embedded=1');check(status==404,'archived direct source denied')

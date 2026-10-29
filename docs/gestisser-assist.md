@@ -95,13 +95,13 @@ O utilizador escolhido como responsável pela validação deve possuir as capaci
 
 ### Documentos e importação
 
-Não há upload ou extração documental nesta entrega de fases 1/2. Para usar conhecimento existente, um editor deve transcrever o excerto interno para um rascunho, identificar a referência documental na descrição e seguir a validação. Nunca tratar texto extraído ou copiado como automaticamente aprovado.
+Já existe importação de conhecimento estruturado por Excel/CSV, descrita abaixo. Ainda não há upload de documentos PDF/DOCX/HTML ou extração documental. Para usar conhecimento existente, um editor deve transcrever o excerto interno para um rascunho, identificar a referência documental na descrição e seguir a validação. Nunca tratar texto extraído ou copiado como automaticamente aprovado.
 
 Na fase 3, reutilizar `UploadService` após confirmar a política de MIME/limites aplicável, guardar originais fora de acesso público, servir downloads por endpoint autorizado, e acrescentar documentos/secções com ligação de versão à aprovação. PDF/DOCX sem extrator disponível devem produzir aviso, sem obrigatoriedade de OCR. Esta documentação não apresenta esses fluxos como já disponíveis.
 
 ### Mascote SACO
 
-O botão fechado mostra exclusivamente a imagem `assets/assist-saco.png`, sem texto visível ou fundo, mantendo um nome acessível para leitores de ecrã. A imagem tem 72 px no botão e 52 px no cabeçalho. Deve conservar-se o PNG original já instalado nesse caminho; o pacote não o substitui nem inclui uma reprodução. O painel abre diretamente em português, sem escolha de língua.
+O botão fechado mostra exclusivamente a imagem `assets/assist-saco.png`, sem texto visível ou fundo, mantendo um nome acessível para leitores de ecrã. A imagem tem 72 px no botão e 52 px no cabeçalho. Deve conservar-se o PNG original já instalado nesse caminho; o pacote não o substitui nem inclui uma reprodução. O painel abre diretamente em português, sem escolha de língua. O cabeçalho apresenta **SACO · Sistema de Apoio a Conhecimento Operacional**.
 
 ### Ativação no Shopfloor
 
@@ -122,7 +122,7 @@ O primeiro comando recusa versões diferentes de PHP 7.0. O teste HTTP cria uma 
 
 O teste de serviço usa SQLite em memória, cobre publicação, rejeição, aprovação invalidada, expiração, arquivo, restrições herdadas, revogação no histórico, sinónimos, conflito de versões, ambiguidades e materiais, ausência de valores, privacidade, feedback, reportes, conversão em rascunho, retenção, limites, inglês/hindi, auditoria e alternativa sem FTS. Testa também que instruções em documentos não mudam estados do sistema. O teste HTTP/browser verifica XSS como texto inerte, CSRF, sessão/conta ativa, acesso por PIN, fontes/versionamento e chat/reportes em desktop e viewport Android com toque.
 
-Os resultados concretos da execução acompanham esta entrega em `docs/gestisser-assist-validation.md`. Testes de importação e falha de sincronização **Assist** não são apresentados como aprovados: não há essas funcionalidades nas fases 1/2. O teste de regressão de SharePoint exercita exclusivamente a integração já existente. Não foi realizada validação em tablet físico nem instalação em produção/cPanel.
+Os resultados concretos da execução acompanham esta entrega em `docs/gestisser-assist-validation.md`. Os testes de importação Excel/CSV estão disponíveis em `assist_spreadsheet_test.php` e no teste HTTP. Testes de extração PDF/DOCX e falha de sincronização **Assist** não são apresentados como aprovados: essas funcionalidades continuam pendentes. O teste de regressão de SharePoint exercita exclusivamente a integração já existente. Não foi realizada validação em tablet físico nem instalação em produção/cPanel.
 
 ## Limitações e próximas fases
 
@@ -141,3 +141,17 @@ Os resultados concretos da execução acompanham esta entrega em `docs/gestisser
 Novos: `assist_migrations.php`, `app/Services/AssistService.php`, `includes/assist_bootstrap.php`, `assist_admin.php`, `assist_api.php`, `assist_article.php`, `partials/assist_panel.php`, `assets/assist.css`, `assets/assist.js`, `tests/assist_service_test.php`, `tests/assist_http.py`, `tests/assist_browser.js`, esta documentação e o relatório de validação.
 
 Alterados: `partials/footer.php` (inclusão do painel no shell autenticado) e `app/routes.php` (três nomes de rotas). Nenhum outro módulo funcional foi alterado.
+
+## Importar conhecimento por Excel ou CSV
+
+Em **Base de conhecimento → Importar Excel**, descarregar o template. O endpoint `assist_template.php` exige sessão ativa, módulo ativado e `assist.edit`; o modelo contém folhas **Conhecimento**, **Instrucoes** e **Categorias**, estas limitadas às categorias autorizadas do editor. Não contém exemplos técnicos ou artigos fictícios. A versão estática em `dist/modelo_conhecimento_SACO.xlsx` lista apenas as categorias iniciais; usar o modelo descarregado da aplicação quando existirem categorias personalizadas.
+
+Preencher uma linha por artigo. São obrigatórios `titulo`, `categoria` e `procedimento`. As restantes colunas são `idioma` (pt por omissão; en/hi opcionais), `descricao`, `sintomas`, `causas`, `condicoes`, `seguranca`, `materiais_ferramentas`, `resultado_esperado`, `verificacao`, `palavras_chave`, `sinonimos`, `equipamento`, `material`, `operacao`, `validador_id` e `revisao_ate`. A categoria é o nome existente, não é criada automaticamente. O validador é um ID existente no ERP; a revisão aceita AAAA-MM-DD ou serial Excel, respeitando o sistema de datas do workbook.
+
+Carregar `.xlsx` ou CSV UTF-8 e clicar **Pré-visualizar importação**. Conferir os campos no ecrã e clicar **Confirmar importação como rascunhos**. A pré-visualização é guardada na sessão do utilizador durante 30 minutos, protegida por token próprio além de CSRF; o navegador não fornece os registos na confirmação. Confirmações repetidas não criam cópias. As permissões de categoria são verificadas novamente ao confirmar.
+
+Até 200 artigos e 5 MB por ficheiro; o conjunto de artigos descodificados não pode ultrapassar 2 MB. Os campos técnicos têm o limite habitual de 30 000 bytes. O modelo aceita texto e valores, sem fórmulas, macros ou ligações externas. O preflight valida limites do ZIP/XML, entidades e referências de células antes do leitor partilhado. O original permanece apenas no temporário do upload PHP, sem publicação ou armazenamento acessível pela Web. Excel requer ZIP e SimpleXML; CSV UTF-8 é uma alternativa de importação.
+
+A gravação é aditiva e transacional: todos os artigos são novos rascunhos com versão 1 e autor autenticado. Nunca importa estados, IDs de artigo ou aprovações. Um erro em qualquer registo anula o lote, incluindo versões e auditoria intermédia. Um título já existente na mesma categoria/idioma ou repetido no lote cancela a operação; não se substitui conhecimento existente. Editar artigos existentes pelo editor normal. Depois da importação, submeter os rascunhos à validação e publicar explicitamente. Até lá, não aparecem nas respostas do SACO.
+
+O processamento reutiliza `ArticleSpreadsheet` e a geração reutiliza `SimpleXlsx`, sem alterar esses serviços nem adicionar dependências Composer. O novo serviço é `app/Services/AssistKnowledgeSpreadsheet.php`; as ações administrativas são `preview_import`, `confirm_import` e `cancel_import`, com a capacidade `assist.edit`. Não há nova migração de base de dados.
