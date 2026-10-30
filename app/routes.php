@@ -9,6 +9,7 @@ if (!function_exists('taskforce_routes')) {
             'install' => 'install.php',
             'erp' => 'erp.php',
             'shopfloor' => 'shopfloor.php',
+            'colorimetry' => 'colorimetry.php',
             'users' => 'users.php',
             'hr' => 'hr.php',
             'hr.organogram' => 'hr_organogram.php',

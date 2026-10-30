@@ -2,11 +2,29 @@
 require_once __DIR__ . '/helpers.php';
 require_once __DIR__ . '/app/Services/UserSpreadsheetExport.php';
 require_login();
+require_once __DIR__.'/app/Services/ColorimetryService.php';
+gt_erp_run_phase1_migrations($pdo);
+ColorimetryService::migrate($pdo);
 
 $userId = (int) $_SESSION['user_id'];
 if (!is_admin($pdo, $userId)) {
     http_response_code(403);
     exit('Acesso reservado a administradores.');
+}
+
+function ink_save_user_permissions(PDO $pdo, $id)
+{
+    foreach (['ink.prepare','ink.formula.create','ink.formula.approve'] as $permission) {
+        $field = str_replace('.', '_', $permission);
+        $pdo->prepare('INSERT OR REPLACE INTO erp_user_permissions(user_id,permission_code,is_allowed) VALUES (?,?,?)')->execute([$id,$permission,isset($_POST[$field]) ? 1 : 0]);
+    }
+}
+function ink_permission_checkboxes(PDO $pdo, array $target = [])
+{
+    foreach (['ink.prepare'=>'Colorista','ink.formula.create'=>'Criar fórmulas de tinta','ink.formula.approve'=>'Aprovar fórmulas de tinta'] as $permission=>$label) {
+        $field=str_replace('.','_',$permission);$checked=$target && gt_erp_user_can($pdo,$target,$permission);
+        echo '<div class="col-md-6 form-check"><label class="form-check-label"><input class="form-check-input" type="checkbox" name="'.$field.'" value="1" '.($checked?'checked':'').'> '.h($label).'</label></div>';
+    }
 }
 
 $accessProfileOptions = ['Utilizador', 'Produção', 'Chefias', 'RH', 'Administração'];
@@ -612,7 +630,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     $municipality, $district, $placeOfBirth, $nationality,
                     $citizenCardNumber, $citizenCardExpiryDate !== '' ? $citizenCardExpiryDate : null, $maritalStatus, $dependentsCount,
                 ]);
-                $pdo->prepare('UPDATE users SET crm_enabled = ? WHERE id = ?')->execute([$crmEnabled, (int) $pdo->lastInsertId()]);
+                $createdUserId = (int) $pdo->lastInsertId();
+                $pdo->prepare('UPDATE users SET crm_enabled = ? WHERE id = ?')->execute([$crmEnabled, $createdUserId]);
+                ink_save_user_permissions($pdo, $createdUserId);
                 $flashSuccess = 'Utilizador criado com sucesso.';
             } catch (PDOException $e) {
                 if (stripos($e->getMessage(), 'users.email') !== false) {
@@ -736,6 +756,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     $stmt->execute([$name, $username, $email, $isTargetAdmin, $accessProfile, $isActive, $mustChangePassword, $pinCodeHash, $pinCodeHash, $pinOnlyLogin, $userType, $userNumber, $title, $shortName, $initials, $emailNotificationsActive, $smsNotificationsActive, $profession, $category, $managerName, $department, $departmentId > 0 ? $departmentId : null, $scheduleId > 0 ? $scheduleId : null, $hireDate, $birthDate, $terminationDate, $timezone, $phone, $mobile, $notes, $sendAccessEmail, $personalEmail, $taxNumber, $socialSecurityNumber, $address, $postalCode, $parish, $municipality, $district, $placeOfBirth, $nationality, $citizenCardNumber, $citizenCardExpiryDate !== '' ? $citizenCardExpiryDate : null, $maritalStatus, $dependentsCount, $crmEnabled, $targetUserId]);
                 }
 
+                ink_save_user_permissions($pdo, $targetUserId);
                 if ($passwordWasUpdated) {
                     $passwordCheckStmt = $pdo->prepare('SELECT password FROM users WHERE id = ? LIMIT 1');
                     $passwordCheckStmt->execute([$targetUserId]);
@@ -1579,7 +1600,7 @@ require __DIR__ . '/partials/header.php';
                 <div class="user-form-section">
                     <div class="user-form-section-title"><i class="bi bi-shield-check"></i> Acessos e notificações</div>
                     <div class="user-access-grid">
-                    <div class="col-md-6 form-check"><input class="form-check-input" type="checkbox" name="is_admin" value="1" id="isAdmin"><label class="form-check-label" for="isAdmin">Administrador</label></div>
+                    <?php ink_permission_checkboxes($pdo); ?><div class="col-md-6 form-check"><input class="form-check-input" type="checkbox" name="is_admin" value="1" id="isAdmin"><label class="form-check-label" for="isAdmin">Administrador</label></div>
                     <div class="col-md-6 form-check form-switch"><input class="form-check-input" type="checkbox" name="is_active" value="1" id="isActive" checked><label class="form-check-label" for="isActive">Ativo</label></div>
                     <div class="col-md-6 form-check form-switch"><input class="form-check-input" type="checkbox" name="email_notifications_active" value="1" id="emailNotificationsActive" checked><label class="form-check-label" for="emailNotificationsActive">Ativo para email</label></div>
                     <div class="col-md-6 form-check form-switch"><input class="form-check-input" type="checkbox" name="sms_notifications_active" value="1" id="smsNotificationsActive"><label class="form-check-label" for="smsNotificationsActive">Ativo para SMS</label></div>
@@ -1734,7 +1755,7 @@ require __DIR__ . '/partials/header.php';
                 <div class="user-form-section">
                     <div class="user-form-section-title"><i class="bi bi-shield-check"></i> Acessos e notificações</div>
                     <div class="user-access-grid">
-                    <div class="col-md-6 form-check"><input class="form-check-input" type="checkbox" name="is_admin" value="1" id="isAdminEdit<?= (int) $user['id'] ?>" <?= (int) $user['is_admin'] === 1 ? 'checked' : '' ?>><label class="form-check-label" for="isAdminEdit<?= (int) $user['id'] ?>">Administrador</label></div>
+                    <?php ink_permission_checkboxes($pdo, $user); ?><div class="col-md-6 form-check"><input class="form-check-input" type="checkbox" name="is_admin" value="1" id="isAdminEdit<?= (int) $user['id'] ?>" <?= (int) $user['is_admin'] === 1 ? 'checked' : '' ?>><label class="form-check-label" for="isAdminEdit<?= (int) $user['id'] ?>">Administrador</label></div>
                     <div class="col-md-6 form-check form-switch"><input class="form-check-input" type="checkbox" name="is_active" value="1" id="isActiveEdit<?= (int) $user['id'] ?>" <?= (int) ($user['is_active'] ?? 1) === 1 ? 'checked' : '' ?>><label class="form-check-label" for="isActiveEdit<?= (int) $user['id'] ?>">Ativo</label></div>
                     <div class="col-md-6 form-check form-switch"><input class="form-check-input" type="checkbox" name="email_notifications_active" value="1" id="emailNotificationsActiveEdit<?= (int) $user['id'] ?>" <?= (int) ($user['email_notifications_active'] ?? 1) === 1 ? 'checked' : '' ?>><label class="form-check-label" for="emailNotificationsActiveEdit<?= (int) $user['id'] ?>">Ativo para email</label></div>
                     <div class="col-md-6 form-check form-switch"><input class="form-check-input" type="checkbox" name="sms_notifications_active" value="1" id="smsNotificationsActiveEdit<?= (int) $user['id'] ?>" <?= (int) ($user['sms_notifications_active'] ?? 0) === 1 ? 'checked' : '' ?>><label class="form-check-label" for="smsNotificationsActiveEdit<?= (int) $user['id'] ?>">Ativo para SMS</label></div>

@@ -14,7 +14,7 @@ setup_check(!$status['installed'] && !$status['erp_ready'], 'Diagnóstico inicia
 setup_check((int)$db->query("SELECT COUNT(*) FROM sqlite_master WHERE name GLOB 'erp_print_*'")->fetchColumn()===0, 'Diagnóstico não altera o esquema');
 $status = $setup->prepare($directory.'/backup', 1);
 setup_check($status['erp_ready'] && !$status['enabled'], 'ERP preparado sem ativar impressão');
-setup_check($status['models_created']===3, 'Três modelos iniciais');
+setup_check($status['models_created']===4, 'Quatro modelos iniciais, incluindo tinta preparada');
 setup_check($status['agents']===0 && $status['printers']===0 && $status['associations']===0, 'Não inventar máquinas ou autorizações');
 setup_check((int)$db->query('SELECT COUNT(*) FROM erp_print_jobs')->fetchColumn()===0, 'Preparação não cria trabalhos');
 setup_check((int)$db->query('SELECT COUNT(*) FROM erp_printers')->fetchColumn()===1, 'Preservar impressoras existentes');

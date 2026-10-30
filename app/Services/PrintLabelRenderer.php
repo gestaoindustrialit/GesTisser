@@ -5,6 +5,7 @@ class PrintLabelRenderer
     private static function hex($value) { $out='';foreach(str_split((string)$value) as $byte)$out.='_'.strtoupper(bin2hex($byte));return $out; }
     public static function zpl(array $label,$kind,array $format,$dpi)
     {
+        if($kind==='prepared_ink'){require_once __DIR__.'/PreparedInkLabelRenderer.php';return PreparedInkLabelRenderer::zpl($label,$format,$dpi);}
         $width=(float)$format['width_mm'];$height=(float)$format['height_mm'];
         if($width<50||$height<30||$width>300||$height>300||!in_array((int)$dpi,[203,300,600],true))throw new InvalidArgumentException('Dimensões ou resolução incompatíveis.');
         $scale=$dpi/25.4;$w=(int)round($width*$scale);$h=(int)round($height*$scale);$font=max(12,(int)round(2.4*$scale));$x=(int)round(2*$scale);$y=$x;
@@ -16,6 +17,7 @@ class PrintLabelRenderer
     }
     public static function pdf(array $label,$kind,array $format)
     {
+        if($kind==='prepared_ink'){require_once __DIR__.'/PreparedInkLabelRenderer.php';return PreparedInkLabelRenderer::pdf($label,$format);}
         require_once __DIR__.'/../../vendor/setasign/fpdf/fpdf.php';
         // FPDF accepts custom dimensions in the requested order; do not rotate twice.
         $w=(float)$format['width_mm'];$h=(float)$format['height_mm'];

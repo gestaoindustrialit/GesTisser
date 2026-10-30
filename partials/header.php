@@ -169,6 +169,9 @@ header('Content-Type: text/html; charset=UTF-8');
                 <a class="gt-nav-link<?= $isCurrentFile('shopfloor.php') ? ' is-active' : '' ?>" href="<?= h(route_url('shopfloor', 'shopfloor.php')) ?>">
                     <i class="bi bi-speedometer2"></i><span>Shopfloor</span>
                 </a>
+                <?php if ($user && ((int)($user['is_admin']??0)===1 || (function_exists('gt_erp_user_can') && gt_erp_user_can($pdo,$user,'ink.prepare')))): ?>
+                    <a class="gt-nav-link<?= $isCurrentFile('colorimetry.php') ? ' is-active' : '' ?>" href="colorimetry.php"><i class="bi bi-palette-fill"></i><span>Tintas / Cores</span></a>
+                <?php endif; ?>
                 <a class="gt-nav-link<?= $isCurrentFile('production_planning.php') ? ' is-active' : '' ?>" href="production_planning.php">
                     <i class="bi bi-display"></i><span>Plano de produção</span>
                 </a>
@@ -314,6 +317,9 @@ header('Content-Type: text/html; charset=UTF-8');
                     <button type="button" class="btn btn-sm btn-warning fw-semibold" data-bs-toggle="modal" data-bs-target="#productionLabelModal" aria-label="Etiquetas" title="Etiquetas">
                         <i class="bi bi-tags-fill" aria-hidden="true"></i>
                     </button>
+                    <?php if (function_exists('gt_erp_user_can') && $user && gt_erp_user_can($pdo,$user,'ink.prepare')): ?>
+                        <a class="btn btn-sm btn-warning fw-semibold" href="colorimetry.php" title="Tintas / Cores"><i class="bi bi-palette-fill" aria-hidden="true"></i> Tintas / Cores</a>
+                    <?php endif; ?>
                     <?php if ($currentFile === 'shopfloor.php'): ?>
                         <button type="button" class="btn btn-sm btn-dark fw-semibold" data-bs-toggle="modal" data-bs-target="#shopfloorCalculatorModal" aria-label="Calculadora" title="Calculadora">
                             <i class="bi bi-calculator" aria-hidden="true"></i>

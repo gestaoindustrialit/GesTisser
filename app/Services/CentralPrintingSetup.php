@@ -16,6 +16,7 @@ class CentralPrintingSetup
     private function definitions()
     {
         return [
+            ['code'=>'prepared_ink_100x50', 'name'=>'Tinta preparada · 100 × 50 mm', 'type'=>'label', 'format'=>'100x50', 'renderer'=>'prepared_ink_label', 'width'=>100, 'height'=>50],
             ['code'=>'raw_material_roll_100x50', 'name'=>'Identificação de rolo · 100 × 50 mm', 'type'=>'label', 'format'=>'100x50', 'renderer'=>'raw_material_roll_label', 'width'=>100, 'height'=>50],
             ['code'=>'raw_material_ink_100x50', 'name'=>'Identificação de tinta · 100 × 50 mm', 'type'=>'label', 'format'=>'100x50', 'renderer'=>'raw_material_ink_label', 'width'=>100, 'height'=>50],
             ['code'=>'finished_product_a4', 'name'=>'Produto acabado · A4', 'type'=>'document', 'format'=>'A4', 'renderer'=>'product_label', 'width'=>210, 'height'=>297],
