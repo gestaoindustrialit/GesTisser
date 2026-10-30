@@ -1,6 +1,14 @@
 # Colorimetria e tintas preparadas
 
-Módulo PHP 7.0.33 / SQLite, acessível em `colorimetry.php`, no menu ERP e no botão **Tintas / Cores** junto às etiquetas do Shopfloor. Nas operações de produção existe um atalho de consumo que transporta a OF para o recipiente.
+Módulo PHP 7.0.33 / SQLite, aberto numa modal Bootstrap pelo menu ERP e pelo ícone **Tintas / Cores** junto às etiquetas do Shopfloor. Nas operações de produção existe um atalho de consumo que transporta a OF para o recipiente.
+
+## Navegação na modal
+
+O Shopfloor permanece carregado. Pesquisa de cores, preparação, stock, histórico, biblioteca e editores navegam dentro da mesma janela, através de fragmentos autenticados carregados por `fetch`. O botão do cabeçalho tem apenas o ícone, tooltip e nome acessível, com as dimensões dos atalhos vizinhos.
+
+`colorimetry.php` funciona como controlador de fragmentos (`modal=1`). Os links antigos sem esse parâmetro encaminham para o Shopfloor e abrem a modal na vista solicitada. A URL principal e a OF selecionada não são alteradas pela navegação interna. A impressão central reutiliza o spool; o PDF pode ser visualizado e descarregado na própria modal. Os anexos são descarregados sem substituir o Shopfloor.
+
+As vistas usam cartões de cores e recipientes, biblioteca em tabela, componentes com massa e unidade na mesma linha, totais e conferência de recipientes em tempo real e operações apresentadas por contexto. No telemóvel, a janela ocupa o ecrã e o conteúdo rola dentro dela. As permissões, CSRF, idempotência e transações existentes mantêm-se no backend. Erros de validação e ligação preservam os dados introduzidos; sair de um formulário alterado pede confirmação.
 
 ## Ativação
 
@@ -39,7 +47,16 @@ O segundo comando de testes requer rede local para o servidor PHP, Playwright e 
 
 Antes da utilização em produção, validar receitas e permissões com a TISSER, a legibilidade da etiqueta e do código no equipamento físico, as filas e DPI das Zebra e os fluxos num tablet Android real. A integração de balanças e a importação Excel/CSV de fórmulas ficam para uma fase futura, conforme solicitado.
 
-## Relatório da implementação
+## Validação da revisão das vistas
+
+- PHP 7.0.33: 107 testes aprovados e 354 ficheiros PHP sem erros de sintaxe.
+- Navegador: abertura e fecho da modal, Escape, botão Voltar, navegação sem recarregar a página principal, pesquisa e filtros, preparação com dois recipientes, pesagens reais, erro de stock com preservação dos campos, avaliação, consumo, correção, PDF dentro da modal e links antigos.
+- Administração: criação de cor e fórmula e aprovação dentro da modal; tabela compacta de componentes e adição/remoção de linhas.
+- Layout verificado em desktop, tablet de 800 px e telemóvel de 390 px. Impressora e tablet físicos continuam a requerer validação na instalação.
+
+Ficheiros da revisão: `assets/colorimetry.css`, `assets/js/colorimetry.js`, `colorimetry.php`, `includes/colorimetry_view_helpers.php`, `includes/colorimetry_views.php`, `partials/colorimetry_modal.php`, `partials/header.php`, `partials/footer.php`, `shopfloor.php`, `prepared_ink_label.php`, `print_label.php`, os testes HTTP/navegador e este guia. Não há novas migrações nesta revisão das vistas.
+
+## Relatório da implementação inicial
 
 Validação concluída em PHP 7.0.33: suite completa de 107 testes aprovada, 351 ficheiros PHP sem erros de sintaxe; testes HTTP e navegação Android emulada aprovados, incluindo preparação em vários recipientes, consumo, correção, geração/repetição de PDF e layout de 800 e 390 px. As alterações finais de navegação foram revalidadas nos testes de colorimetria, inventário e Shopfloor. `node --check` e `git diff --check` aprovados. Não foi efetuada instalação em produção.
 

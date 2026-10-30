@@ -72,8 +72,8 @@ with tempfile.TemporaryDirectory(prefix='ink-http-') as directory:
         status,body,_=request(admin,'install.php',dict(action='new',environment='development',name='Fixture colorimetria',email='admin@example.invalid',password=password,csrf=csrf))
         check(status==200 and 'Ativação concluída' in body,'Instalação descartável em PHP '+version)
         login(admin,'admin@example.invalid',password)
-        status,body,_=request(admin,'colorimetry.php')
-        check(status==200 and 'Pesquisar Cor' in body and 'Erro interno' not in body,'Migração e página administrativa')
+        status,body,_=request(admin,'colorimetry.php?modal=1')
+        check(status==200 and 'Pesquisar cor' in body and 'Erro interno' not in body,'Migração e página administrativa')
         # Build fixtures through the real service and existing ERP tables.
         seed=root/'seed.php'
         seed.write_text('''<?php
@@ -86,7 +86,8 @@ foreach(["AZUL"=>650,"BRANCO"=>250,"PRETO"=>100] as $code=>$mass){$pdo->prepare(
 $c=$ink->execute('color',["code"=>"TEST-001","name"=>"Cor de teste","customer_id"=>"","article_id"=>"","ink_type_id"=>""],bin2hex(random_bytes(16)));
 $f=$ink->execute('formula',["color_id"=>$c['color_id'],"components"=>$components],bin2hex(random_bytes(16)));$ink->execute('formula_state',["id"=>$f['formula_id'],"status"=>"Aprovada"],bin2hex(random_bytes(16)));
 foreach(["operador","bloqueado"] as $name){$pdo->prepare('INSERT INTO users(name,email,username,password,is_admin,access_profile,is_active) VALUES (?,?,?,?,0,"Produção",1)')->execute([$name,$name."@example.invalid",$name,$admin['password']]);$id=(int)$pdo->lastInsertId();if($name==="operador")$pdo->prepare('INSERT INTO erp_user_permissions(user_id,permission_code,is_allowed) VALUES (?,"ink.prepare",1)')->execute([$id]);}
-echo json_encode(["formula_id"=>$f['formula_id'],"warehouse_id"=>$wh,"sources"=>$sources]);
+$pdo->exec('INSERT INTO erp_work_centers(code,name) VALUES("INKMODAL","Teste da modal")');$center=(int)$pdo->lastInsertId();
+echo json_encode(["center_id"=>$center,"formula_id"=>$f['formula_id'],"warehouse_id"=>$wh,"sources"=>$sources]);
 ''')
         fixture=json.loads(subprocess.check_output([PHP,str(seed)],cwd=root,env=env,text=True))
         denied,_=client();login(denied,'bloqueado@example.invalid',password)
@@ -98,16 +99,18 @@ echo json_encode(["formula_id"=>$f['formula_id'],"warehouse_id"=>$wh,"sources"=>
         operator,jar=client();login(operator,'operador@example.invalid',password)
         status,body,_=request(operator,'shopfloor.php')
         check('href="colorimetry.php"' in body,'Botão Colorista junto às etiquetas no Shopfloor')
+        request(operator,'shopfloor.php',{'action':'select_work_center','work_center_id':fixture['center_id'],'_token':token(body)})
         status,body,_=request(operator,'colorimetry.php?tab=library')
         check(status==403,'Biblioteca administrativa bloqueada ao preparador')
-        status,body,_=request(operator,'colorimetry.php?tab=prepare&formula_id='+str(fixture['formula_id']))
+        status,body,_=request(operator,'colorimetry.php?modal=1&tab=prepare&formula_id='+str(fixture['formula_id']))
+        check('gt-topbar' not in body and 'id="ink-module"' in body,'Fragmento da modal sem cabeçalho ou página duplicada')
         key=secrets.token_hex(16)
-        status,_,_=request(operator,'colorimetry.php',{'action':'formula_state','_token':token(body),'request_key':key,'data[id]':fixture['formula_id'],'data[status]':'Inativa'})
+        status,_,_=request(operator,'colorimetry.php?modal=1',{'action':'formula_state','_token':token(body),'request_key':key,'data[id]':fixture['formula_id'],'data[status]':'Inativa'})
         check(status==403,'Aprovação proibida no endpoint POST')
-        status,body,_=request(operator,'colorimetry.php?tab=stock')
-        status,body,_=request(operator,'colorimetry.php',{'action':'consume','_token':'invalid','request_key':key,'data[container_id]':1})
+        status,body,_=request(operator,'colorimetry.php?modal=1&tab=stock')
+        status,body,_=request(operator,'colorimetry.php?modal=1',{'action':'consume','_token':'invalid','request_key':key,'data[container_id]':1})
         check('Pedido inválido' in body,'CSRF rejeitado no endpoint POST')
-        fixture.update(url=url,root=str(root),cookies=[dict(name=c.name,value=c.value,domain='127.0.0.1',path=c.path) for c in jar])
+        fixture.update(admincookies=[dict(name=c.name,value=c.value,domain='127.0.0.1',path=c.path) for c in adminjar],url=url,root=str(root),cookies=[dict(name=c.name,value=c.value,domain='127.0.0.1',path=c.path) for c in jar])
         fixture_path=ROOT/'work'/'colorimetry-browser-fixture.json'
         fixture_path.write_text(json.dumps(fixture))
         subprocess.run(['node',str(ROOT/'tests'/'colorimetry_browser.js'),str(fixture_path)],cwd=ROOT,env=env,check=True)

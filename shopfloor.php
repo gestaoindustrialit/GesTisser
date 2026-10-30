@@ -1374,7 +1374,7 @@ require __DIR__ . '/partials/header.php';
                         <?php endif; ?>
                         <?php if ($isOpen && $canRunHere): ?><form method="post"><input type="hidden" name="action" value="<?= $isPaused ? 'resume_operation' : 'pause_operation' ?>"><input type="hidden" name="entry_id" value="<?=(int)$op['open_entry_id']?>"><button class="shopfloor-operation-action <?= $isPaused ? 'is-resume' : '' ?>" title="<?= $isPaused ? 'Retomar produção' : 'Pausar produção' ?>" aria-label="<?= $isPaused ? 'Retomar produção' : 'Pausar produção' ?>"><i class="bi <?= $isPaused ? 'bi-play-circle' : 'bi-pause-fill' ?>" aria-hidden="true"></i></button></form><?php endif; ?>
                         <button type="button" class="shopfloor-operation-action" data-bs-toggle="modal" data-bs-target="#materialConsumptionModal-<?=(int)$op['id']?>" <?= $ofConsumptionMaterials ? 'title="Registar consumo" aria-label="Registar consumo"' : 'disabled title="Não existem materiais ativos" aria-label="Registar consumo indisponível"' ?>><i class="bi bi-box-seam" aria-hidden="true"></i></button>
-                        <?php if(gt_erp_user_can($pdo,$user,'ink.prepare')):?><a class="shopfloor-operation-action" href="colorimetry.php?tab=stock&amp;production_order_id=<?=$selectedOfId?>" title="Consumir tinta preparada nesta OF" aria-label="Consumir tinta preparada nesta OF"><i class="bi bi-palette-fill" aria-hidden="true"></i></a><?php endif;?>
+                        <?php if(gt_erp_user_can($pdo,$user,'ink.prepare')):?><a class="shopfloor-operation-action" data-ink-open href="colorimetry.php?tab=stock&amp;production_order_id=<?=$selectedOfId?>" title="Consumir tinta preparada nesta OF" aria-label="Consumir tinta preparada nesta OF"><i class="bi bi-palette-fill" aria-hidden="true"></i></a><?php endif;?>
                         <?php if(!empty($op['product_label_enabled'])):?><button type="button" class="shopfloor-operation-action" data-bs-toggle="modal" data-bs-target="#productGoodsLabelModal" data-product-label-operation="<?=(int)$op['id']?>" data-product-label-quantity="<?=h((string)((float)$op['quantity_good']>0?$op['quantity_good']:$selectedOf['planned_quantity']))?>" title="Imprimir etiqueta" aria-label="Imprimir etiqueta"><i class="bi bi-tag" aria-hidden="true"></i></button><?php endif;?>
                     </aside>
                 </article>
@@ -2437,6 +2437,8 @@ document.querySelectorAll('[id^="materialConsumptionModal-"]').forEach((modal) =
                 storage.set(form.querySelector('[name="work_center_id"]')?.value || '');
             });
         });
+
+        if (document.getElementById('colorimetryModal')?.classList.contains('show')) return;
 
         if (!selectedServerId) {
             const cachedId = storage.get();

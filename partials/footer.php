@@ -9,5 +9,6 @@
 <script src="assets/app.js?v=<?= h((string) (@filemtime(dirname(__DIR__) . '/assets/app.js') ?: '1')) ?>"></script>
 <script src="assets/searchable-select.js?v=<?= h((string) (@filemtime(dirname(__DIR__) . '/assets/searchable-select.js') ?: '1')) ?>"></script>
 <script src="assets/mapper-layout.js"></script>
+<?php if (is_logged_in()) require __DIR__.'/colorimetry_modal.php'; ?>
 </body>
 </html>
