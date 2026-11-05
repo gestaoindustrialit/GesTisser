@@ -22,9 +22,11 @@ var form=modal.querySelector('form'),error=form.querySelector('[data-item-error]
 function refreshInk(){
  var raw=form.elements.item_type.value==='raw_material',ink=raw&&form.querySelector('[data-quick-is-ink]').checked;
  form.querySelector('[data-quick-ink-section]').hidden=!raw;form.querySelector('[data-quick-ink-fields]').hidden=!ink;
- form.querySelectorAll('[data-quick-ink-fields] input,[data-quick-ink-fields] select').forEach(function(input){input.disabled=!ink;input.required=ink&&(input.name==='ink_color'||input.name==='ink_pantone');});
- form.querySelector('[data-quick-is-ink]').disabled=!raw;
+ form.querySelectorAll('[data-quick-ink-fields] input,[data-quick-ink-fields] select').forEach(function(input){input.disabled=!ink;input.required=ink&&(input.name==='ink_color'||input.name==='ink_pantone'||input.name==='ink_type_id');});
+ form.querySelector('[data-quick-is-ink]').disabled=!raw;refreshWater();
 }
+function refreshWater(){var select=form.elements.ink_type_id,option=select.options[select.selectedIndex];form.querySelector('[data-quick-water]').textContent=option&&option.dataset.inkCode==='AGUA'?'Sim':'Não';}
+form.elements.ink_type_id.addEventListener('change',refreshWater);
 form.elements.item_type.addEventListener('change',refreshInk);form.querySelector('[data-quick-is-ink]').addEventListener('change',refreshInk);refreshInk();
 form.addEventListener('submit',function(event){
  event.preventDefault();var submit=form.querySelector('[type=submit]');if(submit.disabled)return;submit.disabled=true;error.hidden=true;

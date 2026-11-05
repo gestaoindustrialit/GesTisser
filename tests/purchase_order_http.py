@@ -101,6 +101,15 @@ with tempfile.TemporaryDirectory(prefix='purchase-order-http-') as directory:
             # Explicit fixture settings override any inherited machine SMTP configuration.
             for key,value in [('smtp_host','127.0.0.1'),('smtp_port',str(smtp.server_address[1])),('smtp_secure','none'),('smtp_username','fixture@example.invalid'),('smtp_password','fixture-only')]:
                 c.execute('INSERT OR REPLACE INTO app_settings(setting_key,setting_value) VALUES(?,?)',(key,value))
+        with db() as c:
+            c.execute('INSERT OR IGNORE INTO erp_ink_types(code,name,icon,is_active) VALUES("UV","Tinta de UV","bi-circle-fill",1)')
+            water_type=c.execute('SELECT id FROM erp_ink_types WHERE code="AGUA"').fetchone()[0]
+            material_type=c.execute('INSERT INTO erp_material_types(code,name) VALUES("TINTA","Tinta existente")').lastrowid
+            feature=c.execute('INSERT INTO erp_material_features(code,description,material_type_id) VALUES("DOURADO-871","COR: DOURADO | PANTONE: 871",?)',(material_type,)).lastrowid
+            existing_gold=c.execute('INSERT INTO erp_raw_materials(code,description,material_type_id,material_feature_id,ink_type_id,is_water_based_ink,primary_unit_id,last_price) VALUES("504355","TINTA DOURADO PANTONE 871",?,?,?,1,?,4.12)',(material_type,feature,water_type,unit)).lastrowid
+            c.execute('INSERT INTO erp_stock_balances(item_type,item_id,warehouse_id,lot,physical_qty) VALUES("raw_material",?,? ,"LATA-EXISTENTE",19.69)',(existing_gold,warehouse))
+            c.execute('DELETE FROM erp_ink_material_schema')
+            catalogue_before=c.execute('SELECT id,code,name,icon,is_active FROM erp_ink_types ORDER BY id').fetchall()
         # Reproduce production's old required column names and a previous migration marker.
         with db() as c:
             c.execute('PRAGMA foreign_keys=OFF')
@@ -116,11 +125,15 @@ with tempfile.TemporaryDirectory(prefix='purchase-order-http-') as directory:
         with db() as c:
             check(c.execute('SELECT line_number,quantity,unit_price FROM erp_purchase_order_lines WHERE id=770').fetchone()==(1,5,2),'Migração conserva os valores e IDs das linhas antigas')
             check(c.execute('SELECT purchase_order_line_id FROM erp_stock_movements WHERE movement_number="LEGACY-RECEIPT"').fetchone()[0]==770,'Migração conserva ligações às receções existentes')
-        fixture={'url':url,'supplier':supplier,'materials':materials,'warehouse':warehouse,'cookies':[dict(name=c.name,value=c.value,domain='127.0.0.1',path=c.path) for c in jar],'result':str(root/'browser-result.json')}
+        fixture={'existing_gold':existing_gold,'url':url,'supplier':supplier,'materials':materials,'warehouse':warehouse,'cookies':[dict(name=c.name,value=c.value,domain='127.0.0.1',path=c.path) for c in jar],'result':str(root/'browser-result.json')}
         fixture_path=root/'browser.json';fixture_path.write_text(json.dumps(fixture))
         subprocess.run(['node',str(ROOT/'tests/purchase_order_browser.js'),str(fixture_path)],cwd=ROOT,env=env,check=True)
         result=json.loads((root/'browser-result.json').read_text());order=result['order']
         with db() as c:
+            check(c.execute('SELECT ink_color,ink_pantone,ink_type_id,legacy_ink_id FROM erp_raw_materials WHERE id=?',(existing_gold,)).fetchone()==('DOURADO','871',water_type,None),'Material 504355 reutilizado com característica e tipo originais')
+            check(c.execute('SELECT physical_qty FROM erp_stock_balances WHERE item_id=? AND lot="LATA-EXISTENTE"',(existing_gold,)).fetchone()[0]==19.69,'Stock do material existente conservado')
+            check(catalogue_before==c.execute('SELECT id,code,name,icon,is_active FROM erp_ink_types ORDER BY id').fetchall(),'Tipos e ícones existentes sem duplicações ou alterações')
+            check(c.execute('SELECT t.code,r.is_water_based_ink,r.is_solvent_based_ink FROM erp_raw_materials r JOIN erp_ink_types t ON t.id=r.ink_type_id WHERE r.code="5SF08AZ1183"').fetchone()==('UV',0,0),'Edição usa o tipo UV configurado e deriva os indicadores corretamente')
             check(c.execute('SELECT ink_color,ink_pantone,is_water_based_ink,last_price,legacy_ink_id FROM erp_raw_materials WHERE code="MODAL-NEW"').fetchone()==('AMARELO','000',1,4.12,'00215'),'Modal persiste cor, Pantone, água, preço e ID antigo')
             check(c.execute('SELECT COUNT(*) FROM erp_raw_materials WHERE code="5SF08AZ1183"').fetchone()[0]==1,'Reimportação usa o código e não duplica a tinta')
             check(c.execute('SELECT COUNT(*) FROM erp_audit_log WHERE action="import_ink"').fetchone()[0]==2,'Cada importação da tinta mantém auditoria própria')

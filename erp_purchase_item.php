@@ -31,7 +31,7 @@ InkMaterialSchema::ensure($pdo);
         if($exists)throw new RuntimeException('Não foi possível atribuir um código automático. Indique um código.');
     }
     $q=$pdo->prepare('SELECT 1 FROM '.$table.' WHERE code=? COLLATE NOCASE');$q->execute([$code]);if($q->fetchColumn())throw new RuntimeException('Já existe um artigo com este código. Selecione-o na encomenda ou indique outro código.');
-    $price=(float)$priceText;$uid=(int)$user['id'];$ink=[];if($type==='raw_material'){$input=$_POST;$input['code']=$code;$input['last_price']=$price;$ink=InkMaterialFields::normalize($pdo,$input);}
+    $price=(float)$priceText;$uid=(int)$user['id'];$ink=[];if($type==='raw_material'){$input=$_POST;$input['code']=$code;$input['last_price']=$price;$ink=InkMaterialFields::normalize($pdo,$input);if(!empty($ink['is_ink'])){$findType=$pdo->query('SELECT id FROM erp_material_types WHERE code="TINTA" COLLATE NOCASE LIMIT 1');if($materialType=$findType->fetchColumn())$ink['material_type_id']=(int)$materialType;$category='subsidiary';}}
     if($type==='raw_material')$pdo->prepare('INSERT INTO erp_raw_materials(code,description,primary_unit_id,last_price,standard_price,preferred_supplier_id,product_category,roll_controlled,created_by,updated_by) VALUES(?,?,?,?,?,?,?,0,?,?)')->execute([$code,$description,$unit,$price,$price,$supplier?:null,$category,$uid,$uid]);
     else $pdo->prepare('INSERT INTO erp_finished_products(code,description,unit_id,standard_cost,created_by,updated_by) VALUES(?,?,?,?,?,?)')->execute([$code,$description,$unit,$price,$uid,$uid]);
     $id=(int)$pdo->lastInsertId();
