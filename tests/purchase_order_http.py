@@ -101,6 +101,21 @@ with tempfile.TemporaryDirectory(prefix='purchase-order-http-') as directory:
             # Explicit fixture settings override any inherited machine SMTP configuration.
             for key,value in [('smtp_host','127.0.0.1'),('smtp_port',str(smtp.server_address[1])),('smtp_secure','none'),('smtp_username','fixture@example.invalid'),('smtp_password','fixture-only')]:
                 c.execute('INSERT OR REPLACE INTO app_settings(setting_key,setting_value) VALUES(?,?)',(key,value))
+        # Reproduce production's old required column names and a previous migration marker.
+        with db() as c:
+            c.execute('PRAGMA foreign_keys=OFF')
+            c.execute('DROP TABLE erp_purchase_order_lines')
+            c.execute('CREATE TABLE erp_purchase_order_lines(id INTEGER PRIMARY KEY AUTOINCREMENT,purchase_order_id INTEGER NOT NULL,line_no INTEGER NOT NULL,item_type TEXT NOT NULL,item_id INTEGER NOT NULL,ordered_quantity REAL NOT NULL,unit_cost REAL NOT NULL DEFAULT 0)')
+            legacy_order=c.execute('INSERT INTO erp_purchase_orders(order_number,supplier_id,order_date,status) VALUES(?,?,?,?)',('LEGACY-KEEP',supplier,'2026-11-01','Parcial')).lastrowid
+            c.execute('INSERT INTO erp_purchase_order_lines(id,purchase_order_id,line_no,item_type,item_id,ordered_quantity,unit_cost) VALUES(770,?,1,"raw_material",?,5,2)',(legacy_order,materials[0]))
+            c.execute('INSERT INTO erp_stock_movements(movement_number,movement_type,item_type,item_id,quantity,source_type,source_id,purchase_order_line_id) VALUES("LEGACY-RECEIPT","Entrada","raw_material",?,2,"purchase_order",?,770)',(materials[0],legacy_order))
+            c.execute('DELETE FROM gestisser_erp_schema_migrations')
+            c.execute('INSERT INTO gestisser_erp_schema_migrations(version) VALUES("2026110501")')
+        status,body,_=req('erp.php?page=orders&new_purchase_order=1')
+        check(status==200 and b'Erro interno' not in body,'Atualização automática de tabela legacy com campos obrigatórios')
+        with db() as c:
+            check(c.execute('SELECT line_number,quantity,unit_price FROM erp_purchase_order_lines WHERE id=770').fetchone()==(1,5,2),'Migração conserva os valores e IDs das linhas antigas')
+            check(c.execute('SELECT purchase_order_line_id FROM erp_stock_movements WHERE movement_number="LEGACY-RECEIPT"').fetchone()[0]==770,'Migração conserva ligações às receções existentes')
         fixture={'url':url,'supplier':supplier,'materials':materials,'warehouse':warehouse,'cookies':[dict(name=c.name,value=c.value,domain='127.0.0.1',path=c.path) for c in jar],'result':str(root/'browser-result.json')}
         fixture_path=root/'browser.json';fixture_path.write_text(json.dumps(fixture))
         subprocess.run(['node',str(ROOT/'tests/purchase_order_browser.js'),str(fixture_path)],cwd=ROOT,env=env,check=True)
@@ -149,7 +164,7 @@ with tempfile.TemporaryDirectory(prefix='purchase-order-http-') as directory:
             check(c.execute('SELECT COUNT(*) FROM erp_purchase_orders').fetchone()[0]==before,'Guardar inválido reverte cabeçalho e linhas')
             check(c.execute("SELECT next_number FROM erp_number_sequences WHERE code='purchase_order'").fetchone()[0]==before_number,'Guardar inválido não consome numeração')
         data['line_item_id[]']=[materials[0],materials[1]];data['order_date']='2026-02-31';_,body,_=req('erp.php?page=orders&new_purchase_order=1',data);check('datas válidas'.encode() in body,'Data inexistente rejeitada')
-        data['order_date']='2026-11-05';data['line_unit_cost[]']=[-1,2];_,body,_=req('erp.php?page=orders&new_purchase_order=1',data);check('preços válidos'.encode() in body,'Preço negativo rejeitado')
+        data['order_date']='2026-11-05';data['line_unit_cost[]']=[-1,2];_,body,_=req('erp.php?page=orders&new_purchase_order=1',data);check('preços válidos'.encode() in body,'Preço negativo rejeitado');check(b'value=\"'+str(supplier).encode()+b'\" selected' in body and b'\"unit_price\":\"-1\"' in body,'Erro conserva fornecedor e linhas do rascunho')
         # An authenticated user without purchasing permission must not read or send.
         with db() as c:
             denied_id=c.execute('INSERT INTO users(name,email,password,is_admin,is_active,access_profile) VALUES(?,?,?,0,1,?)',('Sem compras','denied@example.invalid','unused','Produção')).lastrowid
@@ -158,6 +173,14 @@ with tempfile.TemporaryDirectory(prefix='purchase-order-http-') as directory:
         denied=urllib.request.build_opener();denied.addheaders=[('Cookie',cookie)]
         check(req('erp_purchase_document.php?archive_id='+str(archive[0]),c=denied)[0]==403,'Utilizador autenticado sem compras não acede ao arquivo')
         check(req('erp_purchase_document.php',dispatch,c=denied)[0]==403,'Utilizador sem compras não pode enviar')
+        # Quick creation endpoint: explicit permissions, CSRF and both article classes.
+        quick={'_token':csrf,'item_type':'finished_product','description':'Acabado criado na compra','unit_id':unit,'price':'2.5'}
+        status,created,_=req('erp_purchase_item.php',quick);created=json.loads(created)
+        check(status==201 and created['item']['code'].startswith('PA-'),'Criação de artigo acabado com código automático')
+        quick['_token']='invalid';check(req('erp_purchase_item.php',quick)[0]==419,'Criação de artigo exige CSRF')
+        check(req('erp_purchase_item.php',quick,c=denied)[0]==403,'Criação de artigo exige permissões de compras e dados mestre')
+        with db() as c:
+            check(c.execute('SELECT COUNT(*) FROM erp_raw_materials WHERE code="MODAL-NEW"').fetchone()[0]==1,'Código duplicado na modal não cria outro artigo')
         # Transport refusal must retain the message and PDF in the archive.
         with db() as c:c.execute('UPDATE app_settings SET setting_value="1" WHERE setting_key="smtp_port"')
         dispatch.update(recipient='compras@example.invalid',_token=csrf,dispatch_key=secrets.token_hex(16));req('erp_purchase_document.php',dispatch)

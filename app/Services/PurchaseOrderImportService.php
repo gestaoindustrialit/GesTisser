@@ -1,6 +1,8 @@
 <?php
 declare(strict_types=1);
 
+require_once __DIR__.'/PurchaseOrderLineSchema.php';
+
 final class PurchaseOrderImportService
 {
     private $pdo;
@@ -12,8 +14,8 @@ final class PurchaseOrderImportService
         $ownsTransaction=!$this->pdo->inTransaction();if($ownsTransaction)$this->pdo->beginTransaction();try{
             $supplier=(int)($document['supplier']['id']??0);if(!$supplier)throw new RuntimeException('Confirme o fornecedor antes de criar a encomenda.');
             $seq=$this->pdo->query("SELECT prefix,next_number,padding,suffix FROM erp_number_sequences WHERE code='purchase_order'")->fetch(PDO::FETCH_ASSOC);if(!$seq)throw new RuntimeException('Sequência de encomendas não configurada.');$number=$seq['prefix'].str_pad((string)$seq['next_number'],(int)$seq['padding'],'0',STR_PAD_LEFT).($seq['suffix']??'');$this->pdo->exec("UPDATE erp_number_sequences SET next_number=next_number+1 WHERE code='purchase_order'");
-            $this->pdo->prepare('INSERT INTO erp_purchase_orders(order_number,supplier_id,order_date,expected_date,supplier_reference,status,created_by) VALUES(?,?,?,?,?,?,?)')->execute([$number,$supplier,$document['order_date'],$document['delivery_date']??null,$document['order_number']??null,'Aberta',$userId]);$orderId=(int)$this->pdo->lastInsertId();$insert=$this->pdo->prepare('INSERT INTO erp_purchase_order_lines(purchase_order_id,line_number,item_type,item_id,description,quantity,unit_original,unit_normalized,unit_price,line_total,expected_date) VALUES(?,?,?,?,?,?,?,?,?,?,?)');
-            $created=0;foreach($document['lines'] as $line){if(($line['type']??'')!=='ARTICLE'||!empty($line['ignored']))continue;if(empty($line['matched_item_id']))throw new RuntimeException('Todas as linhas de artigo devem ser associadas ou ignoradas.');$insert->execute([$orderId,$line['line_number'],$line['matched_item_type']??'raw_material',$line['matched_item_id'],$line['description'],$line['quantity'],$line['unit_original'],$line['unit_normalized'],$line['unit_price'],$line['total'],$line['delivery_date']??null]);$created++;}
+            $this->pdo->prepare('INSERT INTO erp_purchase_orders(order_number,supplier_id,order_date,expected_date,supplier_reference,status,created_by) VALUES(?,?,?,?,?,?,?)')->execute([$number,$supplier,$document['order_date'],$document['delivery_date']??null,$document['order_number']??null,'Aberta',$userId]);$orderId=(int)$this->pdo->lastInsertId();$insert=PurchaseOrderLineSchema::prepareInsert($this->pdo,['purchase_order_id','line_number','item_type','item_id','description','quantity','unit_original','unit_normalized','unit_price','line_total','expected_date']);
+            $created=0;foreach($document['lines'] as $line){if(($line['type']??'')!=='ARTICLE'||!empty($line['ignored']))continue;if(empty($line['matched_item_id']))throw new RuntimeException('Todas as linhas de artigo devem ser associadas ou ignoradas.');$insert->execute(['purchase_order_id'=>$orderId,'line_number'=>$line['line_number'],'item_type'=>$line['matched_item_type']??'raw_material','item_id'=>$line['matched_item_id'],'description'=>$line['description'],'quantity'=>$line['quantity'],'unit_original'=>$line['unit_original'],'unit_normalized'=>$line['unit_normalized'],'unit_price'=>$line['unit_price'],'line_total'=>$line['total'],'expected_date'=>$line['delivery_date']??null]);$created++;}
             if(!$created)throw new RuntimeException('A encomenda deve conter pelo menos uma linha de artigo.');$this->pdo->prepare('UPDATE erp_order_imports SET purchase_order_id=?,validated_data_json=?,status="completed",validated_by=?,validated_at=CURRENT_TIMESTAMP WHERE id=?')->execute([$orderId,json_encode($document,JSON_UNESCAPED_UNICODE),$userId,$importId]);if($ownsTransaction)$this->pdo->commit();return $orderId;
         }catch(Throwable $e){if($ownsTransaction&&$this->pdo->inTransaction())$this->pdo->rollBack();throw $e;}
     }

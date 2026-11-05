@@ -9,7 +9,7 @@ define('GESTISSER_ERP_MIGRATIONS_LOADED', true);
 // Bump this value whenever the phase-one schema below changes.  The marker lets
 // normal page requests stay read-only instead of re-running hundreds of
 // CREATE/INSERT/UPDATE statements and competing with the backup process.
-define('GESTISSER_ERP_SCHEMA_VERSION', '2026110501');
+define('GESTISSER_ERP_SCHEMA_VERSION', '2026110502');
 
 /** PHP 7.0's SQLite driver does not automatically reprepare after schema changes. */
 function gt_erp_schema_select(PDO $pdo, string $sql, array $params = []): PDOStatement
@@ -110,6 +110,18 @@ function gt_erp_migrate_production_cost_settings(PDO $pdo)
         ['energia_saco', 'energia', 'Custo energético por saco', '€/saco', 60],
     ] as $cost) {
         $insert->execute($cost);
+    }
+}
+
+/** Upgrade existing purchase-line tables in place; preserve IDs and receipt references. */
+function gt_erp_migrate_purchase_order_lines(PDO $pdo)
+{
+    $definitions=['line_number'=>'INTEGER','quantity'=>'REAL','unit_price'=>'REAL','description'=>'TEXT','unit_original'=>'TEXT','unit_normalized'=>'TEXT','line_total'=>'REAL','expected_date'=>'TEXT'];
+    $aliases=['line_number'=>'line_no','quantity'=>'ordered_quantity','unit_price'=>'unit_cost'];
+    foreach($definitions as $name=>$definition){
+        if(gt_erp_migration_column_exists($pdo,'erp_purchase_order_lines',$name))continue;
+        $pdo->exec('ALTER TABLE erp_purchase_order_lines ADD COLUMN '.$name.' '.$definition);
+        if(isset($aliases[$name])&&gt_erp_migration_column_exists($pdo,'erp_purchase_order_lines',$aliases[$name]))$pdo->exec('UPDATE erp_purchase_order_lines SET '.$name.'='.$aliases[$name]);
     }
 }
 
@@ -242,6 +254,7 @@ function gt_erp_run_phase1_migrations(PDO $pdo)
             'CREATE TABLE IF NOT EXISTS erp_stock_balances (item_type TEXT NOT NULL, item_id INTEGER NOT NULL, warehouse_id INTEGER, location_id INTEGER, lot TEXT, physical_qty REAL NOT NULL DEFAULT 0, reserved_qty REAL NOT NULL DEFAULT 0, blocked_qty REAL NOT NULL DEFAULT 0, ordered_qty REAL NOT NULL DEFAULT 0, updated_at DATETIME DEFAULT CURRENT_TIMESTAMP, PRIMARY KEY(item_type, item_id, warehouse_id, location_id, lot))'
         ];
         foreach ($sql as $statement) { $pdo->exec($statement); }
+        gt_erp_migrate_purchase_order_lines($pdo);
         $pdo->exec('CREATE TABLE IF NOT EXISTS erp_purchase_order_emails (id INTEGER PRIMARY KEY AUTOINCREMENT, purchase_order_id INTEGER NOT NULL REFERENCES erp_purchase_orders(id), recipient TEXT NOT NULL, subject TEXT NOT NULL, body TEXT NOT NULL, snapshot_json TEXT NOT NULL, pdf_content BLOB NOT NULL, pdf_sha256 TEXT NOT NULL, dispatch_key TEXT NOT NULL UNIQUE, status TEXT NOT NULL, error_message TEXT, created_by INTEGER, created_at TEXT DEFAULT CURRENT_TIMESTAMP)');
         $pdo->exec('CREATE INDEX IF NOT EXISTS idx_purchase_order_emails_order ON erp_purchase_order_emails(purchase_order_id,id)');
         /* The original material type table only contained code and name. Settings now
