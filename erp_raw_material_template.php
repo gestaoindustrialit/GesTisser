@@ -4,6 +4,7 @@ require_once __DIR__.'/app/Services/RawMaterialSpreadsheet.php';
 require_login();
 $headers=RawMaterialSpreadsheet::templateColumns();
 $values=['codigo'=>'MP-001','descricao'=>'Polipropileno','grupo_produto'=>'Materia Prima','categoria'=>'raw_material','tipo'=>'POLIMERO','caracteristica'=>'NATURAL','unidade'=>'KG','largura'=>'','gramagem'=>'','stock_minimo'=>'100','stock_maximo'=>'1000','ponto_reposicao'=>'250','prazo_entrega_dias'=>'5','fornecedor_preferencial'=>'FOR-001','preco_padrao'=>'1,2500','armazem_standard'=>'MP','localizacao_standard'=>'A-01','email_alerta'=>'aprovisionamento@empresa.pt','alertas_ativos'=>'Sim','controlar_lote'=>'Sim','controlar_bobina'=>'Não','permitir_consumo_parcial'=>'Sim','estado'=>'Ativo','observacoes'=>''];
+$values=array_merge($values,['is_tinta'=>'Não','cor'=>'','pantone'=>'','tinta_agua'=>'','ultimo_preco'=>'','id_antigo'=>'']);
 $example=[];foreach($headers as$header){$example[]=$values[$header]??'';}
 function raw_material_xlsx_cell(string$value):string{return '<c t="inlineStr"><is><t>'.htmlspecialchars($value,ENT_XML1|ENT_QUOTES,'UTF-8').'</t></is></c>';}
 $rows='<row>'.implode('',array_map('raw_material_xlsx_cell',$headers)).'</row><row>'.implode('',array_map('raw_material_xlsx_cell',$example)).'</row>';

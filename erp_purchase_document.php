@@ -1,10 +1,12 @@
 <?php
 require_once __DIR__.'/helpers.php';
 require_once __DIR__.'/erp_migrations.php';
+require_once __DIR__.'/app/Services/InkMaterialSchema.php';
 require_once __DIR__.'/app/Services/PurchaseOrderEmail.php';
 require_login();$user=current_user($pdo)?:[];
 if(!gt_erp_user_can($pdo,$user,'erp.view')||!gt_erp_user_can($pdo,$user,'erp.purchases')){http_response_code(403);exit('Acesso reservado às compras.');}
 gt_erp_run_phase1_migrations($pdo);
+InkMaterialSchema::ensure($pdo);
 try {
     if($_SERVER['REQUEST_METHOD']==='POST'&&!validate_csrf_or_abort(false)){http_response_code(419);exit('Pedido inválido.');}
     $archive=(int)($_GET['archive_id']??0);

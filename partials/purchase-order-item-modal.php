@@ -12,7 +12,13 @@
 <div class="col-md-6"><label class="form-label" for="quick-item-code">Código</label><input class="form-control" id="quick-item-code" name="code" maxlength="100" placeholder="Automático se ficar vazio"></div>
 <div class="col-md-6"><label class="form-label" for="quick-item-unit">Unidade *</label><select class="form-select" id="quick-item-unit" name="unit_id" required><option value="">Selecione…</option><?php foreach($units as $unit):?><option value="<?=(int)$unit['id']?>"><?=h($unit['code'].' — '.$unit['name'])?></option><?php endforeach;?></select></div>
 <div class="col-12"><label class="form-label" for="quick-item-description">Descrição *</label><input class="form-control" id="quick-item-description" name="description" maxlength="1000" required></div>
-<div class="col-md-6"><label class="form-label" for="quick-item-price">Preço unitário *</label><input class="form-control" id="quick-item-price" type="number" step="0.001" min="0" name="price" value="0" required></div>
+<div class="col-md-6"><label class="form-label" for="quick-item-price">Preço unitário / último preço *</label><input class="form-control" id="quick-item-price" type="number" step="0.0001" min="0" name="price" value="0" required></div>
+<div class="col-12 border-top pt-3" data-quick-ink-section><label class="form-check"><input class="form-check-input" type="checkbox" name="is_ink" value="1" data-quick-is-ink> <span class="form-check-label">Este artigo é uma tinta</span></label><div class="row g-2 mt-1" data-quick-ink-fields hidden>
+<div class="col-md-6"><label class="form-label" for="quick-ink-color">Cor *</label><input class="form-control" id="quick-ink-color" name="ink_color" maxlength="120"></div>
+<div class="col-md-6"><label class="form-label" for="quick-ink-pantone">Pantone *</label><input class="form-control" id="quick-ink-pantone" name="ink_pantone" maxlength="120" placeholder="000, 072, 130…"></div>
+<div class="col-md-6"><label class="form-label" for="quick-ink-water">Tinta de água</label><select class="form-select" id="quick-ink-water" name="is_water_based_ink"><option value="0">Não</option><option value="1">Sim</option></select></div>
+<div class="col-md-6"><label class="form-label" for="quick-ink-legacy">ID no ERP antigo</label><input class="form-control" id="quick-ink-legacy" name="legacy_ink_id" maxlength="120"></div>
+<p class="form-text col-12">Mantém o código original e os zeros de Pantone e ID antigo. O preço acima é guardado como último preço.</p></div></div>
 </div></div><div class="modal-footer"><button class="btn btn-outline-secondary" type="button" data-bs-dismiss="modal">Cancelar</button><button class="btn btn-primary" type="submit">Criar e selecionar artigo</button></div>
 </form></div></div></div>
 <?php endif; ?>

@@ -82,13 +82,23 @@ final class ArticleSpreadsheet
     private static function readXlsxMatrices(string $path): array
     {
         $zip=new ZipArchive(); if ($zip->open($path)!==true) { throw new RuntimeException('O ficheiro Excel não é um .xlsx válido.'); }
+        $zeroStyles=self::zeroPaddingStyles($zip);
         $shared=[]; $sharedXml=$zip->getFromName('xl/sharedStrings.xml');
         if ($sharedXml!==false) { $xml=simplexml_load_string(self::normalizeSpreadsheetXml($sharedXml)); if ($xml!==false) { foreach ($xml->si as $si) { $parts=[]; foreach ($si->xpath('.//t') as $text) { $parts[]=(string)$text; } $shared[]=implode('',$parts); } } }
         $matrices=[]; foreach (self::worksheetPaths($zip) as $sheetPath) { $sheetXml=$zip->getFromName($sheetPath); if ($sheetXml===false) { continue; }
             $xml=simplexml_load_string(self::normalizeSpreadsheetXml($sheetXml)); if ($xml===false) { continue; } $matrix=[];
-            foreach ($xml->sheetData->row as $row) { $values=[];$sequentialIndex=0;foreach ($row->c as $cell) { preg_match('/[A-Z]+/i',(string)$cell['r'],$m);$index=isset($m[0])?self::columnIndex(strtoupper($m[0])):$sequentialIndex;$type=(string)$cell['t'];$value=$type==='inlineStr'?self::inlineString($cell):(string)$cell->v;if($type==='s'){$value=$shared[(int)$value]??'';}$values[$index]=$value;$sequentialIndex=$index+1;}if($values){$matrix[]=array_replace(array_fill(0,max(array_keys($values))+1,''),$values);} }
+            foreach ($xml->sheetData->row as $row) { $values=[];$sequentialIndex=0;foreach ($row->c as $cell) { preg_match('/[A-Z]+/i',(string)$cell['r'],$m);$index=isset($m[0])?self::columnIndex(strtoupper($m[0])):$sequentialIndex;$type=(string)$cell['t'];$value=$type==='inlineStr'?self::inlineString($cell):(string)$cell->v;if($type==='s'){$value=$shared[(int)$value]??'';}if(($type===''||$type==='n')&&isset($zeroStyles[(int)$cell['s']])&&preg_match('/^[0-9]+$/',$value))$value=str_pad($value,$zeroStyles[(int)$cell['s']],'0',STR_PAD_LEFT);$values[$index]=$value;$sequentialIndex=$index+1;}if($values){$matrix[]=array_replace(array_fill(0,max(array_keys($values))+1,''),$values);} }
             $matrices[]=$matrix;
         } $zip->close(); if (!$matrices) { throw new RuntimeException('Não foram encontradas folhas no ficheiro Excel.'); } return $matrices;
+    }
+
+    /** Preserve identifiers displayed by Excel with formats such as 000 or 00000. */
+    private static function zeroPaddingStyles(ZipArchive $zip): array
+    {
+        $source=$zip->getFromName('xl/styles.xml');if($source===false)return [];
+        $xml=simplexml_load_string(self::normalizeSpreadsheetXml($source));if($xml===false)return [];
+        $formats=[];foreach($xml->numFmts->numFmt ?? [] as $format){$code=(string)$format['formatCode'];if(preg_match('/^0{2,100}$/D',$code))$formats[(int)$format['numFmtId']]=strlen($code);}
+        $styles=[];$index=0;foreach($xml->cellXfs->xf ?? [] as $style){$id=(int)$style['numFmtId'];if(isset($formats[$id]))$styles[$index]=$formats[$id];$index++;}return $styles;
     }
 
     private static function inlineString(SimpleXMLElement $cell): string

@@ -7,17 +7,19 @@ foreach([
 'erp_purchase_orders'=>'id INTEGER PRIMARY KEY,order_number TEXT,supplier_id INTEGER,order_date TEXT,expected_date TEXT,supplier_reference TEXT,notes TEXT,status TEXT',
 'erp_suppliers'=>'id INTEGER PRIMARY KEY,name TEXT,address TEXT,address_2 TEXT,postal_code TEXT,country TEXT,email TEXT',
 'erp_purchase_order_lines'=>'id INTEGER PRIMARY KEY,purchase_order_id INTEGER,line_number INTEGER,item_type TEXT,item_id INTEGER,description TEXT,quantity REAL,unit_price REAL,unit_normalized TEXT',
-'erp_raw_materials'=>'id INTEGER PRIMARY KEY,code TEXT,description TEXT,primary_unit_id INTEGER,color_id INTEGER',
+'erp_raw_materials'=>'id INTEGER PRIMARY KEY,code TEXT,description TEXT,primary_unit_id INTEGER,color_id INTEGER,ink_color TEXT,ink_pantone TEXT,legacy_ink_id TEXT,is_water_based_ink INTEGER',
 'erp_finished_products'=>'id INTEGER PRIMARY KEY,code TEXT,description TEXT,unit_id INTEGER',
 'erp_units'=>'id INTEGER PRIMARY KEY,code TEXT',
 'erp_colors'=>'id INTEGER PRIMARY KEY,code TEXT,name TEXT,pantone TEXT',
 'erp_stock_movements'=>'id INTEGER PRIMARY KEY,purchase_order_line_id INTEGER,movement_type TEXT,quantity REAL'
 ] as $table=>$columns)$pdo->exec('CREATE TABLE '.$table.'('.$columns.')');
-$pdo->exec("INSERT INTO erp_purchase_orders VALUES(1,'ENC-1',1,'2026-11-05',NULL,'REF-1','Confirmar entrega','Aberta');INSERT INTO erp_suppliers VALUES(1,'SINTIGRAF','Rua teste','','','Portugal','compras@example.com');INSERT INTO erp_units VALUES(1,'KG');INSERT INTO erp_colors VALUES(1,'AM','AMARELO','130');INSERT INTO erp_raw_materials VALUES(1,'5SF08AM1012','Tinta amarela',1,1);INSERT INTO erp_finished_products VALUES(2,'PA-2','Artigo acabado',1);INSERT INTO erp_purchase_order_lines VALUES(10,1,1,'raw_material',1,'Descrição guardada',40,6.65,'KG');INSERT INTO erp_purchase_order_lines VALUES(11,1,2,'finished_product',2,'',20,6.49,'KG');INSERT INTO erp_stock_movements VALUES(1,10,'Entrada',20);");
+$pdo->exec("INSERT INTO erp_purchase_orders VALUES(1,'ENC-1',1,'2026-11-05',NULL,'REF-1','Confirmar entrega','Aberta');INSERT INTO erp_suppliers VALUES(1,'SINTIGRAF','Rua teste','','','Portugal','compras@example.com');INSERT INTO erp_units VALUES(1,'KG');INSERT INTO erp_colors VALUES(1,'AM','AMARELO','130');INSERT INTO erp_raw_materials VALUES(1,'5SF08AM1012','Tinta amarela',1,1,NULL,NULL,NULL,0);INSERT INTO erp_finished_products VALUES(2,'PA-2','Artigo acabado',1);INSERT INTO erp_purchase_order_lines VALUES(10,1,1,'raw_material',1,'Descrição guardada',40,6.65,'KG');INSERT INTO erp_purchase_order_lines VALUES(11,1,2,'finished_product',2,'',20,6.49,'KG');INSERT INTO erp_stock_movements VALUES(1,10,'Entrada',20);");
 $lines=PurchaseOrderDocument::lines($pdo,1);
 purchase_check(count($lines)===2&&$lines[0]['item_description']==='Descrição guardada','Carregar várias linhas com descrição guardada.');
 purchase_check($lines[0]['pantone']==='130'&&$lines[0]['color_name']==='AMARELO','Carregar cor e referência Pantone.');
 purchase_check(PurchaseOrderDocument::progress($lines)===25.0,'Percentagem parcial por linha.');
+$pdo->exec('UPDATE erp_raw_materials SET ink_color="AZUL",ink_pantone="072",legacy_ink_id="00009",is_water_based_ink=1 WHERE id=1');
+$inkLine=PurchaseOrderDocument::lines($pdo,1)[0];purchase_check($inkLine['pantone']==='072'&&$inkLine['color_name']==='AZUL'&&$inkLine['legacy_ink_id']==='00009','Encomenda utiliza as referências próprias da tinta, em vez da cor genérica.');
 $snapshot=PurchaseOrderDocument::snapshot($pdo,1);$pdf=PurchaseOrderDocument::pdf($snapshot);
 purchase_check(substr($pdf,0,5)==='%PDF-','PDF gerado no runtime PHP 7.0.');
 $long=$snapshot;$long['lines']=array_fill(0,120,$snapshot['lines'][0]);$longPdf=PurchaseOrderDocument::pdf($long);

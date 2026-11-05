@@ -64,6 +64,7 @@ $pageTitle = 'Ficha de material'; $navbarClockControl = [];
 require __DIR__.'/partials/header.php';
 $groups = ['raw_material'=>'Matéria-prima','subsidiary'=>'Subsidiário','consumable'=>'Consumível (legado)','finished_product'=>'Produto acabado','merchandise'=>'Mercadoria','packaging'=>'Embalagem','other'=>'Outro'];
 $identity = ['Código interno'=>$material['code'],'Designação'=>$material['description'],'Grupo'=>$groups[$material['product_category']] ?? $material['product_category'],'Tipo'=>$material['type_name'],'Característica'=>$material['feature_name'],'Tipo de tinta'=>$material['ink_name'],'Unidade principal'=>$material['unit_code'],'Fornecedor principal'=>$material['supplier_name'],'Estado'=>$material['status']];
+if(!empty($material['is_ink']))$identity=array_merge($identity,['Cor'=>$material['ink_color']??'','Pantone'=>$material['ink_pantone']??'','Tinta de água'=>!empty($material['is_water_based_ink'])?'Sim':'Não','ID no ERP antigo'=>$material['legacy_ink_id']??'']);
 ?>
 <link rel="stylesheet" href="assets/customer-profile.css">
 <main class="container-fluid py-4 customer-profile">

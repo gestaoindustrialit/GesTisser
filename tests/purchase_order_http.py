@@ -120,6 +120,12 @@ with tempfile.TemporaryDirectory(prefix='purchase-order-http-') as directory:
         fixture_path=root/'browser.json';fixture_path.write_text(json.dumps(fixture))
         subprocess.run(['node',str(ROOT/'tests/purchase_order_browser.js'),str(fixture_path)],cwd=ROOT,env=env,check=True)
         result=json.loads((root/'browser-result.json').read_text());order=result['order']
+        with db() as c:
+            check(c.execute('SELECT ink_color,ink_pantone,is_water_based_ink,last_price,legacy_ink_id FROM erp_raw_materials WHERE code="MODAL-NEW"').fetchone()==('AMARELO','000',1,4.12,'00215'),'Modal persiste cor, Pantone, água, preço e ID antigo')
+            check(c.execute('SELECT COUNT(*) FROM erp_raw_materials WHERE code="5SF08AZ1183"').fetchone()[0]==1,'Reimportação usa o código e não duplica a tinta')
+            check(c.execute('SELECT COUNT(*) FROM erp_audit_log WHERE action="import_ink"').fetchone()[0]==2,'Cada importação da tinta mantém auditoria própria')
+            trace=c.execute('SELECT new_values_json FROM erp_audit_log WHERE action="import_ink" ORDER BY id DESC LIMIT 1').fetchone()[0]
+            check(json.loads(trace)['_import_original_row']['id_antigo']=='00009' and json.loads(trace)['_import_filename']=='tintas-antigas.csv','Auditoria conserva ID, linha original e nome do ficheiro de importação')
         check(len(messages)==1,'Um único email capturado pelo servidor SMTP local')
         message=BytesParser(policy=email.policy.default).parsebytes(messages[0]);attachments=list(message.iter_attachments())
         check(len(attachments)==1 and attachments[0].get_content_type()=='application/pdf','PDF anexo no email MIME real')
