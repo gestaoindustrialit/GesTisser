@@ -34,11 +34,11 @@ final class PurchaseReceiptService
             $lineStmt->execute([$lineId, $orderId]);
             $line = $lineStmt->fetch(PDO::FETCH_ASSOC);
             if (!$line) { throw new RuntimeException('Um dos artigos não pertence à encomenda selecionada.'); }
-            $missing = max(0.0, (float) $line['ordered_quantity'] - (float) $line['received_quantity']);
-            if ($quantity > $missing + 0.000001) { throw new RuntimeException('A quantidade recebida excede a quantidade em falta da linha '.(int) $line['line_no'].'.'); }
+            $missing = max(0.0, (float) $line['quantity'] - (float) $line['received_quantity']);
+            if ($quantity > $missing + 0.000001) { throw new RuntimeException('A quantidade recebida excede a quantidade em falta da linha '.(int) $line['line_number'].'.'); }
             $labelCount = (int) ($labels[$index] ?? 0);
             if ($labelCount < 0 || $labelCount > 1000) { throw new RuntimeException('O número de etiquetas deve estar entre 0 e 1000.'); }
-            $unitCost = max(0.0, (float) ($costs[$index] ?? $line['unit_cost']));
+            $unitCost = max(0.0, (float) ($costs[$index] ?? $line['unit_price']));
             $number = 'MOV-'.date('YmdHis').'-'.$userId.'-'.($index + 1).'-'.bin2hex(random_bytes(2));
             $insertMovement->execute([$number,'Entrada',$line['item_type'],(int) $line['item_id'],$quantity,$warehouseId ?: null,$locationId ?: null,$unitCost,$quantity*$unitCost,'purchase_order',$orderId,$order['order_number'],$lineId,$labelCount,trim((string) ($data['reason'] ?? '')),trim((string) ($data['notes'] ?? '')),$userId]);
             $movementIds[] = (int) $pdo->lastInsertId();
@@ -49,7 +49,7 @@ final class PurchaseReceiptService
         }
         if (!$movementIds) { throw new RuntimeException('Indique uma quantidade a receber em pelo menos uma linha.'); }
 
-        $remainingStmt = $pdo->prepare('SELECT COUNT(*) FROM erp_purchase_order_lines pol WHERE pol.purchase_order_id=? AND pol.ordered_quantity > COALESCE((SELECT SUM(sm.quantity) FROM erp_stock_movements sm WHERE sm.purchase_order_line_id=pol.id AND sm.movement_type="Entrada"),0)+0.000001');
+        $remainingStmt = $pdo->prepare('SELECT COUNT(*) FROM erp_purchase_order_lines pol WHERE pol.purchase_order_id=? AND pol.quantity > COALESCE((SELECT SUM(sm.quantity) FROM erp_stock_movements sm WHERE sm.purchase_order_line_id=pol.id AND sm.movement_type="Entrada"),0)+0.000001');
         $remainingStmt->execute([$orderId]);
         $status = (int) $remainingStmt->fetchColumn() === 0 ? 'Recebida' : 'Parcial';
         $pdo->prepare('UPDATE erp_purchase_orders SET status=?,updated_at=CURRENT_TIMESTAMP WHERE id=?')->execute([$status,$orderId]);

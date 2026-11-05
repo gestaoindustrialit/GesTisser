@@ -1,0 +1,54 @@
+const {chromium}=require('playwright');
+const fs=require('fs');
+const assert=require('assert').strict;
+const fixture=JSON.parse(fs.readFileSync(process.argv[2],'utf8'));
+(async()=>{
+ const browser=await chromium.launch({executablePath:process.env.CHROMIUM_BIN||'/usr/bin/chromium',headless:true,args:['--no-sandbox','--disable-dev-shm-usage']});
+ try{
+  const context=await browser.newContext({viewport:{width:1440,height:1050}});await context.addCookies(fixture.cookies);
+  await context.route('https://**/*',route=>{const u=route.request().url();if(u.includes('bootstrap@5.3.3')&&u.endsWith('.css')&&fs.existsSync('/workspace/gestisser-env/bootstrap.min.css'))return route.fulfill({contentType:'text/css',body:fs.readFileSync('/workspace/gestisser-env/bootstrap.min.css')});if(u.includes('bootstrap@5.3.3')&&u.endsWith('.js')&&fs.existsSync('/workspace/gestisser-env/bootstrap.bundle.min.js'))return route.fulfill({contentType:'text/javascript',body:fs.readFileSync('/workspace/gestisser-env/bootstrap.bundle.min.js')});return route.abort();});
+  const page=await context.newPage(),errors=[];page.setDefaultTimeout(12000);page.on('pageerror',e=>errors.push(e.message));
+  await page.goto(fixture.url+'erp.php?page=orders&new_purchase_order=1');
+  const form=page.locator('#order-editor form').first();
+  await form.locator('[name=supplier_id]').selectOption(String(fixture.supplier),{force:true});
+  await page.locator('[data-item]').first().selectOption('raw_material:'+fixture.materials[0],{force:true});
+  assert.equal(await page.locator('[data-line-unit]').first().innerText(),'KG');
+  assert.equal(await form.locator('[name="line_unit_cost[]"]').first().inputValue(),'6.65');
+  assert((await page.locator('[data-item] option:checked').first().innerText()).includes('Tinta amarela'));
+  await form.locator('[name="line_quantity[]"]').first().fill('40');
+  await page.getByRole('button',{name:'Adicionar linha'}).click();
+  await page.locator('[data-item]').nth(1).selectOption('raw_material:'+fixture.materials[1],{force:true});
+  await form.locator('[name="line_quantity[]"]').nth(1).fill('20');
+  await page.getByRole('button',{name:'Adicionar linha'}).click();await page.getByRole('button',{name:'Remover linha'}).last().click();
+  assert.equal(await page.locator('[data-order-lines] tr').count(),2);
+  await form.getByRole('button',{name:'Guardar encomenda',exact:true}).click();
+  await page.getByText('Enviar ao fornecedor',{exact:true}).waitFor();
+  assert(!(await page.locator('body').innerText()).includes('Erro:'));
+  assert.equal(await page.locator('[data-order-lines] tr').count(),2);
+  assert((await page.locator('[data-order-lines]').innerText()).includes('KG'));
+  const order=await page.locator('#order-editor input[name=purchase_order_id]').first().inputValue();
+  await page.getByRole('link',{name:'Registar receção parcial no armazém'}).click();
+  await page.locator('[data-receipt-lines-list] [name="receipt_quantity[]"]').first().waitFor();
+  assert.equal(await page.locator('[data-purchase-order]').inputValue(),order);
+  const receipt=page.locator('[data-stock-adjust-form]');
+  await receipt.locator('[name="receipt_quantity[]"]').first().fill('10');
+  await receipt.locator('[name="receipt_quantity[]"]').nth(1).fill('0');
+  await receipt.locator('[name=warehouse_id]').selectOption(String(fixture.warehouse),{force:true});
+  await receipt.locator('[type=submit], button:not([type])').last().click();
+  assert(!(await page.locator('body').innerText()).includes('Erro:'));
+  await page.goto(fixture.url+'erp.php?page=orders&purchase_order_id='+order);
+  assert((await page.locator('body').innerText()).includes('12.5% entregue'));
+  assert.equal(await page.locator('[data-add-line]').count(),0);
+  await page.getByText('Enviar ao fornecedor',{exact:true}).click();
+  const mail=page.locator('form[action="erp_purchase_document.php"]');
+  await mail.locator('[name=body]').fill('Mensagem de teste com acentuação: confirmação da encomenda.');
+  await mail.getByRole('button',{name:'Enviar encomenda com PDF'}).click();
+  await page.locator('#purchase-email-history').getByText('Enviado',{exact:true}).waitFor();
+  assert((await page.locator('#purchase-email-history').innerText()).includes('compras@example.invalid'));
+  fs.writeFileSync(fixture.result,JSON.stringify({order:Number(order),errors}));
+  assert.deepEqual(errors,[]);
+  console.log('PASS (browser): várias linhas, unidades, preços, guardar, receção parcial, bloqueio após receção e envio SMTP.');
+  for(const width of [800,390]){await page.setViewportSize({width,height:1000});assert(await page.evaluate(()=>document.documentElement.scrollWidth<=window.innerWidth+1),'Layout a '+width+' px');}
+  console.log('PASS (browser): sem erros JavaScript; layout a 1440, 800 e 390 px.');
+ }finally{await browser.close();}
+})().catch(e=>{console.error(e);process.exitCode=1;});
