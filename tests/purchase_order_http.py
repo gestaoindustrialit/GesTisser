@@ -62,7 +62,7 @@ with tempfile.TemporaryDirectory(prefix='purchase-order-http-') as directory:
         src=ROOT/name
         if not name or not src.is_file() or name.startswith(('vendor/','work/','storage/')) or src.suffix=='.sqlite':continue
         dest=root/name;dest.parent.mkdir(parents=True,exist_ok=True);shutil.copy2(src,dest)
-    (root/'vendor').symlink_to((ROOT/'vendor').resolve(),target_is_directory=True)
+    if os.environ.get('PURCHASE_TEST_WITHOUT_VENDOR','1')!='1':(root/'vendor').symlink_to((ROOT/'vendor').resolve(),target_is_directory=True)
     smtp=socketserver.ThreadingTCPServer(('127.0.0.1',0),SMTP);threading.Thread(target=smtp.serve_forever,daemon=True).start()
     sock=socket.socket();sock.bind(('127.0.0.1',0));port=sock.getsockname()[1];sock.close()
     url='http://127.0.0.1:'+str(port)+'/'
@@ -157,8 +157,21 @@ with tempfile.TemporaryDirectory(prefix='purchase-order-http-') as directory:
         req('erp_purchase_document.php',dispatch);check(len(messages)==1,'Repetir POST não duplica o email')
         dispatch['dispatch_key']=secrets.token_hex(16);dispatch['_token']='invalid';status,_,_=req('erp_purchase_document.php',dispatch)
         check(status==419 and len(messages)==1,'CSRF inválido bloqueia o envio')
-        dispatch['_token']=csrf;dispatch['recipient']='invalid';status,_,_=req('erp_purchase_document.php',dispatch)
-        check(status==400 and len(messages)==1,'Destinatário inválido rejeitado')
+        dispatch['_token']=csrf;dispatch['recipient']='invalid';status,body,_=req('erp_purchase_document.php',dispatch)
+        check(status==200 and len(messages)==1 and 'email válido'.encode() in body and 'O texto do email foi conservado'.encode() in body,'Destinatário inválido rejeitado sem perder a mensagem')
+        check(req('erp_purchase_document.php?purchase_order_id=99999999')[0]==404,'Encomenda inexistente devolve 404 controlado')
+        # Deliberately excessive header exercises a recoverable PDF failure, never a raw 500.
+        with db() as c:
+            address_before=c.execute('SELECT address FROM erp_suppliers WHERE id=?',(supplier,)).fetchone()[0]
+            archive_count=c.execute('SELECT COUNT(*) FROM erp_purchase_order_emails').fetchone()[0]
+            c.execute('UPDATE erp_suppliers SET address=? WHERE id=?',('Morada demasiado extensa\n'*120,supplier))
+        check(req('erp_purchase_document.php?purchase_order_id='+str(order))[0]==400,'Erro de composição do PDF é tratado e permite voltar à encomenda')
+        recover=dict(dispatch,recipient='compras@example.invalid',subject='Assunto conservado',body='Mensagem que deve ficar conservada',dispatch_key=secrets.token_hex(16))
+        status,recovered,_=req('erp_purchase_document.php',recover)
+        check(status==200 and b'Assunto conservado' in recovered and b'Mensagem que deve ficar conservada' in recovered,'Falha de PDF no envio regressa à encomenda com assunto e mensagem')
+        with db() as c:
+            check(c.execute('SELECT COUNT(*) FROM erp_purchase_order_emails').fetchone()[0]==archive_count and len(messages)==1,'Falha ao preparar PDF não envia email nem cria um falso envio')
+            c.execute('UPDATE erp_suppliers SET address=? WHERE id=?',(address_before,supplier))
         anonymous=urllib.request.build_opener();_,_,target=req('erp_purchase_document.php?archive_id='+str(archive[0]),c=anonymous)
         check(target.endswith('login.php'),'Arquivo protegido contra acesso anónimo')
         receipt={'action':'stock_adjust','movement_direction':'entry','purchase_order_id':order,'warehouse_id':warehouse,'receipt_line_id[]':[x[0] for x in lines],'receipt_quantity[]':[31,0],'receipt_labels[]':[0,0],'_token':csrf}
