@@ -1,7 +1,7 @@
 <?php
 require_once __DIR__.'/../app/Services/PurchaseOrderEmail.php';
 function purchase_check($ok,$message){if(!$ok)throw new RuntimeException($message);}
-function app_setting(PDO $pdo,$key,$fallback=''){return $fallback;}
+function app_setting(PDO $pdo,$key,$fallback=''){return isset($GLOBALS['purchase_settings'][$key])?$GLOBALS['purchase_settings'][$key]:$fallback;}
 $pdo=new PDO('sqlite::memory:');$pdo->setAttribute(PDO::ATTR_ERRMODE,PDO::ERRMODE_EXCEPTION);
 foreach([
 'erp_purchase_orders'=>'id INTEGER PRIMARY KEY,order_number TEXT,supplier_id INTEGER,order_date TEXT,expected_date TEXT,supplier_reference TEXT,notes TEXT,status TEXT',
@@ -20,7 +20,15 @@ purchase_check($lines[0]['pantone']==='130'&&$lines[0]['color_name']==='AMARELO'
 purchase_check(PurchaseOrderDocument::progress($lines)===25.0,'Percentagem parcial por linha.');
 $pdo->exec('UPDATE erp_raw_materials SET ink_color="AZUL",ink_pantone="072",legacy_ink_id="00009",is_water_based_ink=1 WHERE id=1');
 $inkLine=PurchaseOrderDocument::lines($pdo,1)[0];purchase_check($inkLine['pantone']==='072'&&$inkLine['color_name']==='AZUL'&&$inkLine['legacy_ink_id']==='00009','Encomenda utiliza as referências próprias da tinta, em vez da cor genérica.');
+$logoBytes=file_get_contents(__DIR__.'/../docs/mapper-reference/ui/assets/logo-tisser-blue.png');
+$GLOBALS['purchase_settings']=['logo_report_dark'=>'missing-report-logo.png','logo_navbar_light'=>'data:image/png;base64,'.base64_encode($logoBytes)];
 $snapshot=PurchaseOrderDocument::snapshot($pdo,1);$pdf=PurchaseOrderDocument::pdf($snapshot);
+purchase_check($snapshot['company']['logo_data']===$GLOBALS['purchase_settings']['logo_navbar_light'],'Logótipo alternativo quando o relatório aponta para um ficheiro inexistente.');
+purchase_check(strpos($pdf,'/Logo Do')!==false,'Logótipo real incorporado no PDF.');
+$GLOBALS['purchase_settings']['logo_report_dark']=$GLOBALS['purchase_settings']['logo_navbar_light'];
+$GLOBALS['purchase_settings']['logo_navbar_light']='missing-navbar.png';
+purchase_check(PurchaseOrderDocument::snapshot($pdo,1)['company']['logo_data']===$GLOBALS['purchase_settings']['logo_report_dark'],'Preferência pelo logótipo de relatórios.');
+$GLOBALS['purchase_settings']=[];
 purchase_check(substr($pdf,0,5)==='%PDF-','PDF gerado no runtime PHP 7.0.');
 $long=$snapshot;$long['lines']=array_fill(0,120,$snapshot['lines'][0]);$longPdf=PurchaseOrderDocument::pdf($long);
 purchase_check(preg_match_all('#/Type\s*/Page\b#',$longPdf,$matches)>1,'PDF com múltiplas páginas para encomendas extensas.');

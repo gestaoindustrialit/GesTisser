@@ -218,7 +218,16 @@ final class ProductionDossierPdf
         if (substr($decoded, 0, 2) === "\xFF\xD8") return ['data'=>$decoded,'width'=>(int)($size[0]??1),'height'=>(int)($size[1]??1),'filter'=>'DCTDecode'];
         if (!function_exists('imagecreatefromstring')) return self::pngForPdf($decoded);
         $image = @imagecreatefromstring($decoded); if (!$image) return [];
-        $width=imagesx($image);$height=imagesy($image);ob_start(); imagejpeg($image, null, 92); $jpeg = (string) ob_get_clean(); unset($image); return ['data'=>$jpeg,'width'=>$width,'height'=>$height,'filter'=>'DCTDecode'];
+        // JPEG has no alpha channel: composite transparent brand artwork on paper white.
+        $width=imagesx($image);$height=imagesy($image);
+        $canvas=imagecreatetruecolor($width,$height);
+        if (!$canvas) {imagedestroy($image);return [];}
+        imagefill($canvas,0,0,imagecolorallocate($canvas,255,255,255));
+        imagealphablending($canvas,true);
+        imagecopy($canvas,$image,0,0,0,0,$width,$height);
+        ob_start();$written=imagejpeg($canvas,null,92);$jpeg=(string)ob_get_clean();
+        imagedestroy($image);imagedestroy($canvas);
+        return $written ? ['data'=>$jpeg,'width'=>$width,'height'=>$height,'filter'=>'DCTDecode'] : [];
     }
 
     /** Embed ordinary RGB/RGBA PNG logos even on servers where GD is unavailable. */

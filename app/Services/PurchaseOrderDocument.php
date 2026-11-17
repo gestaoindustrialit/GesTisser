@@ -19,8 +19,15 @@ final class PurchaseOrderDocument
         $lines=self::lines($pdo,$id);if(!$lines)throw new RuntimeException('A encomenda não tem artigos.');
         $company=[];foreach(['name','address','email','phone','tax_number','fax'] as $key)$company[$key]=(string)app_setting($pdo,'company_'.$key,$key==='name'?'TISSER':'');
         require_once __DIR__.'/SalesOrderConfirmation.php';
-        $logo=trim((string)app_setting($pdo,'logo_report_dark',''));if($logo==='')$logo=(string)app_setting($pdo,'logo_navbar_light','');
-        $company['logo_data']=SalesOrderConfirmation::logoData($logo,dirname(__DIR__,2));
+        require_once __DIR__.'/ProductionDossierPdf.php';
+        $company['logo_data']='';
+        foreach (['logo_report_dark','logo_navbar_light'] as $setting) {
+            $logo=SalesOrderConfirmation::logoData((string)app_setting($pdo,$setting,''),dirname(__DIR__,2));
+            // A stale path or unsupported image must not hide a usable alternative.
+            if ($logo!=='' && ProductionDossierPdf::reportImage($logo)) {
+                $company['logo_data']=$logo;break;
+            }
+        }
         return ['order'=>$order,'lines'=>$lines,'company'=>$company];
     }
     public static function pdf(array $snapshot): string
