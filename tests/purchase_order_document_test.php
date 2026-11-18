@@ -21,13 +21,17 @@ purchase_check(PurchaseOrderDocument::progress($lines)===25.0,'Percentagem parci
 $pdo->exec('UPDATE erp_raw_materials SET ink_color="AZUL",ink_pantone="072",legacy_ink_id="00009",is_water_based_ink=1 WHERE id=1');
 $inkLine=PurchaseOrderDocument::lines($pdo,1)[0];purchase_check($inkLine['pantone']==='072'&&$inkLine['color_name']==='AZUL'&&$inkLine['legacy_ink_id']==='00009','Encomenda utiliza as referências próprias da tinta, em vez da cor genérica.');
 $logoBytes=file_get_contents(__DIR__.'/../docs/mapper-reference/ui/assets/logo-tisser-blue.png');
-$GLOBALS['purchase_settings']=['logo_report_dark'=>'missing-report-logo.png','logo_navbar_light'=>'data:image/png;base64,'.base64_encode($logoBytes)];
+$GLOBALS['purchase_settings']=['logo_report_dark'=>'','logo_navbar_light'=>'data:image/png;base64,'.base64_encode($logoBytes)];
 $snapshot=PurchaseOrderDocument::snapshot($pdo,1);$pdf=PurchaseOrderDocument::pdf($snapshot);
-purchase_check($snapshot['company']['logo_data']===$GLOBALS['purchase_settings']['logo_navbar_light'],'Logótipo alternativo quando o relatório aponta para um ficheiro inexistente.');
+purchase_check($snapshot['company']['logo_data']===$GLOBALS['purchase_settings']['logo_navbar_light'],'Logótipo da navbar apenas quando o de relatórios não está configurado.');
 purchase_check(strpos($pdf,'/Logo Do')!==false,'Logótipo real incorporado no PDF.');
 $GLOBALS['purchase_settings']['logo_report_dark']=$GLOBALS['purchase_settings']['logo_navbar_light'];
 $GLOBALS['purchase_settings']['logo_navbar_light']='missing-navbar.png';
 purchase_check(PurchaseOrderDocument::snapshot($pdo,1)['company']['logo_data']===$GLOBALS['purchase_settings']['logo_report_dark'],'Preferência pelo logótipo de relatórios.');
+$GLOBALS['purchase_settings']['logo_report_dark']='missing-report-logo.png';
+$missingLogo=PurchaseOrderDocument::snapshot($pdo,1);
+purchase_check($missingLogo['company']['logo_data']===''&&$missingLogo['company']['logo_error']!=='','Configuração inválida assinalada sem impor outro logótipo.');
+try{PurchaseOrderDocument::pdf($missingLogo);throw new LogicException('Logótipo inválido não foi detetado.');}catch(RuntimeException $e){purchase_check(strpos($e->getMessage(),'Empresa e Branding')!==false,'Erro útil em vez de logótipo de texto.');}
 $GLOBALS['purchase_settings']=[];
 purchase_check(substr($pdf,0,5)==='%PDF-','PDF gerado no runtime PHP 7.0.');
 $long=$snapshot;$long['lines']=array_fill(0,120,$snapshot['lines'][0]);$longPdf=PurchaseOrderDocument::pdf($long);

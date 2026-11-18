@@ -1,6 +1,7 @@
 <?php $sendSnapshot=PurchaseOrderDocument::snapshot($pdo,(int)$selectedPurchaseOrder['id']);$savedOrder=$sendSnapshot['order']; ?>
 <?php $emailDraft=(array)($_SESSION['purchase_order_email_drafts'][(int)$savedOrder['id']]??[]);$emailNotice=$_SESSION['purchase_order_email_notice']??null;
 if(is_array($emailNotice)&&(int)$emailNotice['order_id']===(int)$savedOrder['id']):unset($_SESSION['purchase_order_email_notice']);?><div class="alert alert-danger mt-3" role="alert"><?=h($emailNotice['message'])?> O texto do email foi conservado.</div><?php endif;?>
+<?php if(!empty($sendSnapshot['company']['logo_error'])):?><div class="alert alert-warning mt-3" role="alert"><?=h($sendSnapshot['company']['logo_error'])?> <a href="company_profile.php">Empresa e Branding</a></div><?php endif;?>
 <div class="border-top mt-3 pt-3">
 <div class="d-flex flex-wrap align-items-center gap-2" data-purchase-actions>
 <a class="btn btn-outline-secondary" target="_blank" rel="noopener" href="erp_purchase_document.php?purchase_order_id=<?=(int)$savedOrder['id']?>"><i class="bi bi-file-earmark-pdf" aria-hidden="true"></i> Ver PDF</a>

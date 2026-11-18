@@ -22,6 +22,14 @@ if($image['filter']==='DCTDecode'){
 $method=new ReflectionMethod('ProductionDossierPdf','pngForPdf');$method->setAccessible(true);
 $plain=$method->invoke(null,$png);$pixels=gzuncompress($plain['data']);
 logo_check(substr($pixels,1,3)==="\xff\xff\xff",'Transparência branca também sem GD.');
+$adam7='';
+foreach([[0,0,8,8],[4,0,8,8],[0,4,4,8],[2,0,4,4],[0,2,2,4],[1,0,2,2],[0,1,1,2]] as $pass){
+    list($sx,$sy,$dx,$dy)=$pass;
+    for($y=$sy;$y<$height;$y+=$dy){$adam7.="\0";for($x=$sx;$x<$width;$x+=$dx)$adam7.=substr($rows,$y*(1+$width*4)+1+$x*4,4);}
+}
+$interlaced="\x89PNG\r\n\x1a\n".logo_chunk('IHDR',pack('NNCCCCC',$width,$height,8,6,0,0,1)).logo_chunk('IDAT',gzcompress($adam7)).logo_chunk('IEND','');
+$interlacedImage=$method->invoke(null,$interlaced);
+logo_check(isset($interlacedImage['data'])&&gzuncompress($interlacedImage['data'])===$pixels,'PNG entrelaçado conserva todos os píxeis mesmo sem GD.');
 $snapshot=['company'=>['name'=>'Empresa teste','logo_data'=>$uri],'order'=>['order_number'=>'ENC-LOGO','order_date'=>'2026-11-17','status'=>'Aberta'],'lines'=>[]];
 $pdf=PurchaseOrderDocument::pdf($snapshot);
 logo_check(strpos($pdf,'/Subtype /Image')!==false&&strpos($pdf,'/Logo Do')!==false,'PDF incorpora a imagem.');

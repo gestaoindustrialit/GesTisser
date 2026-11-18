@@ -217,7 +217,7 @@ final class ProductionDossierPdf
         $size=@getimagesizefromstring($decoded);
         if (substr($decoded, 0, 2) === "\xFF\xD8") return ['data'=>$decoded,'width'=>(int)($size[0]??1),'height'=>(int)($size[1]??1),'filter'=>'DCTDecode'];
         if (!function_exists('imagecreatefromstring')) return self::pngForPdf($decoded);
-        $image = @imagecreatefromstring($decoded); if (!$image) return [];
+        $image = @imagecreatefromstring($decoded); if (!$image) return self::pngForPdf($decoded);
         // JPEG has no alpha channel: composite transparent brand artwork on paper white.
         $width=imagesx($image);$height=imagesy($image);
         $canvas=imagecreatetruecolor($width,$height);
@@ -244,31 +244,46 @@ final class ProductionDossierPdf
             elseif ($name==='IEND') break;
         }
         $validDepths=[0=>[1,2,4,8,16],2=>[8,16],3=>[1,2,4,8],4=>[8,16],6=>[8,16]];
-        if($width<1||$height<1||$interlace!==0||!isset($validDepths[$type])||!in_array($depth,$validDepths[$type],true)||($type===3&&strlen($palette)<3))return[];
+        if($width<1||$height<1||!in_array($interlace,[0,1],true)||!isset($validDepths[$type])||!in_array($depth,$validDepths[$type],true)||($type===3&&strlen($palette)<3))return[];
         $raw=@gzuncompress($idat);if(!is_string($raw))return[];
-        $channels=[0=>1,2=>3,3=>1,4=>2,6=>4][$type];$scanlineBytes=(int)ceil($width*$channels*$depth/8);$filterBytes=max(1,(int)ceil($channels*$depth/8));$previous=array_fill(0,$scanlineBytes,0);$position=0;$rawLength=strlen($raw);$pdf='';
-        for($row=0;$row<$height;$row++){
+        $channels=[0=>1,2=>3,3=>1,4=>2,6=>4][$type];$filterBytes=max(1,(int)ceil($channels*$depth/8));$position=0;$rawLength=strlen($raw);
+        $rows=array_fill(0,$height,str_repeat("\xff",$width*3));
+        // Adam7 PNGs are accepted by browsers and by the company branding form too.
+        $passes=$interlace===1?[[0,0,8,8],[4,0,8,8],[0,4,4,8],[2,0,4,4],[0,2,2,4],[1,0,2,2],[0,1,1,2]]:[[0,0,1,1]];
+        foreach($passes as $pass){
+        list($startX,$startY,$stepX,$stepY)=$pass;
+        $passWidth=max(0,(int)ceil(($width-$startX)/$stepX));$passHeight=max(0,(int)ceil(($height-$startY)/$stepY));if(!$passWidth||!$passHeight)continue;
+        $scanlineBytes=(int)ceil($passWidth*$channels*$depth/8);$previous=array_fill(0,$scanlineBytes,0);
+        for($row=0;$row<$passHeight;$row++){
             if($position>=$rawLength)return[];$filter=ord($raw[$position++]);$bytes=[];
             for($i=0;$i<$scanlineBytes;$i++){
                 if($position>=$rawLength)return[];$byte=ord($raw[$position++]);$left=$i>=$filterBytes?$bytes[$i-$filterBytes]:0;$up=$previous[$i];$upperLeft=$i>=$filterBytes?$previous[$i-$filterBytes]:0;
                 if($filter===1)$byte=($byte+$left)&255;elseif($filter===2)$byte=($byte+$up)&255;elseif($filter===3)$byte=($byte+(int)floor(($left+$up)/2))&255;elseif($filter===4){$p=$left+$up-$upperLeft;$pa=abs($p-$left);$pb=abs($p-$up);$pc=abs($p-$upperLeft);$byte=($byte+($pa<=$pb&&$pa<=$pc?$left:($pb<=$pc?$up:$upperLeft)))&255;}elseif($filter!==0)return[];$bytes[]=$byte;
             }
-            $previous=$bytes;$samples=[];$bitPosition=0;$sampleCount=$width*$channels;$maxSample=(1<<min($depth,8))-1;
+            $previous=$bytes;$samples=[];$bitPosition=0;$sampleCount=$passWidth*$channels;$maxSample=(1<<min($depth,8))-1;
             for($sample=0;$sample<$sampleCount;$sample++){
                 if($depth===16){$byteIndex=intdiv($bitPosition,8);$samples[]=($bytes[$byteIndex]<<8)|$bytes[$byteIndex+1];$bitPosition+=16;continue;}
                 $byteIndex=intdiv($bitPosition,8);$shift=8-$depth-($bitPosition%8);$samples[]=($bytes[$byteIndex]>>$shift)&$maxSample;$bitPosition+=$depth;
             }
-            $pdf.="\0";
-            for($pixel=0;$pixel<$width;$pixel++){
+            $pdfRow='';
+            for($pixel=0;$pixel<$passWidth;$pixel++){
                 $base=$pixel*$channels;$scale=function($sample)use($depth){return $depth===16?(int)round($sample/257):($depth===8?$sample:(int)round($sample*255/((1<<$depth)-1)));};
                 if($type===0){$red=$green=$blue=$scale($samples[$base]);$alpha=255;}
                 elseif($type===2){$red=$scale($samples[$base]);$green=$scale($samples[$base+1]);$blue=$scale($samples[$base+2]);$alpha=255;}
                 elseif($type===3){$index=$samples[$base];$paletteOffset=$index*3;if($paletteOffset+2>=strlen($palette))return[];$red=ord($palette[$paletteOffset]);$green=ord($palette[$paletteOffset+1]);$blue=ord($palette[$paletteOffset+2]);$alpha=$index<strlen($transparency)?ord($transparency[$index]):255;}
                 elseif($type===4){$red=$green=$blue=$scale($samples[$base]);$alpha=$scale($samples[$base+1]);}
                 else{$red=$scale($samples[$base]);$green=$scale($samples[$base+1]);$blue=$scale($samples[$base+2]);$alpha=$scale($samples[$base+3]);}
-                foreach([$red,$green,$blue]as$colour)$pdf.=chr((int)round(($colour*$alpha+255*(255-$alpha))/255));
+                foreach([$red,$green,$blue]as$colour)$pdfRow.=chr((int)round(($colour*$alpha+255*(255-$alpha))/255));
+            }
+            $targetY=$startY+$row*$stepY;
+            if($stepX===1)$rows[$targetY]=$pdfRow;
+            else for($pixel=0;$pixel<$passWidth;$pixel++){
+                $target=($startX+$pixel*$stepX)*3;$source=$pixel*3;
+                for($channel=0;$channel<3;$channel++)$rows[$targetY][$target+$channel]=$pdfRow[$source+$channel];
             }
         }
+        }
+        $pdf='';foreach($rows as $row)$pdf.="\0".$row;
         return ['data'=>gzcompress($pdf,9),'width'=>$width,'height'=>$height,'filter'=>'FlateDecode'];
     }
 

@@ -81,21 +81,8 @@ function technical_sheet_date(string $value, string $fallback = ''): string
 
 function technical_sheet_logo_src(string $configuredPath): string
 {
-    $configuredPath = trim($configuredPath);
-    if ($configuredPath === '') {
-        return '';
-    }
-    if (preg_match('#^https?://#i', $configuredPath)) {
-        return $configuredPath;
-    }
-    $absolutePath = __DIR__ . '/' . ltrim($configuredPath, '/');
-    if (!is_file($absolutePath)) {
-        return '';
-    }
-    $extension = strtolower((string) pathinfo($absolutePath, PATHINFO_EXTENSION));
-    $mimeTypes = ['png' => 'image/png', 'jpg' => 'image/jpeg', 'jpeg' => 'image/jpeg', 'webp' => 'image/webp', 'svg' => 'image/svg+xml'];
-    $contents = file_get_contents($absolutePath);
-    return $contents === false ? '' : 'data:' . ($mimeTypes[$extension] ?? 'application/octet-stream') . ';base64,' . base64_encode($contents);
+    require_once __DIR__ . '/app/Services/ReportLogo.php';
+    return ReportLogo::source($configuredPath, __DIR__);
 }
 
 $companyName = trim((string) app_setting($pdo, 'company_name', 'TISSER')) ?: 'TISSER';

@@ -2,6 +2,7 @@
 """Real PHP 7.0 HTTP, SMTP and Chromium checks in a disposable installation.
 Requires PHP 7.0, Node/Playwright, Chromium and pdftotext. Never sends external mail.
 """
+import base64
 import email.policy
 from email.parser import BytesParser
 import hashlib
@@ -98,6 +99,12 @@ with tempfile.TemporaryDirectory(prefix='purchase-order-http-') as directory:
             for code,desc,price in [('TEST-AM','Tinta amarela',6.65),('TEST-CT','Tinta castanha',6.49)]:
                 materials.append(c.execute('INSERT INTO erp_raw_materials(code,description,primary_unit_id,last_price) VALUES(?,?,?,?)',(code,desc,unit,price)).lastrowid)
             warehouse=c.execute("SELECT id FROM erp_warehouses LIMIT 1").fetchone()[0]
+            # Use the uploaded company report logo, with a different navbar logo.
+            (root/'assets/uploads').mkdir(parents=True,exist_ok=True)
+            shutil.copy2(ROOT/'docs/mapper-reference/ui/assets/logo-tisser-blue.png',root/'assets/uploads/company-report.png')
+            (root/'assets/uploads/company-navbar.png').write_bytes(base64.b64decode('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAIAAACQd1PeAAAADElEQVR4nGP4z8AAAAMBAQDJ/pLvAAAAAElFTkSuQmCC'))
+            for key,value in [('logo_report_dark','assets/uploads/company-report.png'),('logo_navbar_light','assets/uploads/company-navbar.png')]:
+                c.execute('INSERT OR REPLACE INTO app_settings(setting_key,setting_value) VALUES(?,?)',(key,value))
             # Explicit fixture settings override any inherited machine SMTP configuration.
             for key,value in [('smtp_host','127.0.0.1'),('smtp_port',str(smtp.server_address[1])),('smtp_secure','none'),('smtp_username','fixture@example.invalid'),('smtp_password','fixture-only')]:
                 c.execute('INSERT OR REPLACE INTO app_settings(setting_key,setting_value) VALUES(?,?)',(key,value))
@@ -144,12 +151,22 @@ with tempfile.TemporaryDirectory(prefix='purchase-order-http-') as directory:
         check(len(attachments)==1 and attachments[0].get_content_type()=='application/pdf','PDF anexo no email MIME real')
         check('confirmação da encomenda' in message.get_body(preferencelist=('plain',)).get_content(),'Texto e acentuação conservados no email')
         with db() as c:
-            archive=c.execute('SELECT id,pdf_content,pdf_sha256,dispatch_key FROM erp_purchase_order_emails WHERE purchase_order_id=?',(order,)).fetchone()
+            archive=c.execute('SELECT id,pdf_content,pdf_sha256,dispatch_key,snapshot_json FROM erp_purchase_order_emails WHERE purchase_order_id=?',(order,)).fetchone()
             lines=c.execute('SELECT id,quantity FROM erp_purchase_order_lines WHERE purchase_order_id=? ORDER BY line_number',(order,)).fetchall()
             check(c.execute('SELECT status FROM erp_purchase_orders WHERE id=?',(order,)).fetchone()[0]=='Parcial','Receção parcial atualiza o estado')
         archived=archive[1].encode('latin1') if isinstance(archive[1],str) else archive[1]
+        logo=json.loads(archive[4])['company']['logo_data']
+        check(logo.startswith('data:image/png;base64,') and base64.b64decode(logo.split(',',1)[1])==(root/'assets/uploads/company-report.png').read_bytes() and b'/Logo Do' in archived,'PDF e snapshot usam exatamente o Logo escuro configurado na empresa, em vez do logo diferente da navbar')
         check(hashlib.sha256(archived).hexdigest()==archive[2] and attachments[0].get_payload(decode=True)==archived,'PDF enviado corresponde exatamente ao arquivo')
         status,body,_=req('erp_purchase_document.php?archive_id='+str(archive[0]));check(status==200 and body==archived,'PDF arquivado acessível pelo endpoint autenticado')
+        with db() as c:
+            c.execute('UPDATE app_settings SET setting_value=? WHERE setting_key=?',('assets/uploads/company-navbar.png','logo_report_dark'))
+        new_status,new_pdf,_=req('erp_purchase_document.php?purchase_order_id='+str(order))
+        check(new_status==200 and b'/Logo Do' in new_pdf and new_pdf!=archived,'Alterar o logótipo da empresa altera a imagem nos novos PDFs')
+        archived_status,old_pdf,_=req('erp_purchase_document.php?archive_id='+str(archive[0]))
+        check(archived_status==200 and old_pdf==archived,'Alteração de branding não modifica o PDF já enviado e arquivado')
+        with db() as c:
+            c.execute('UPDATE app_settings SET setting_value=? WHERE setting_key=?',('assets/uploads/company-report.png','logo_report_dark'))
         pdf=root/'purchase.pdf';pdf.write_bytes(body);text=subprocess.check_output(['pdftotext',str(pdf),'-'],text=True)
         check(all(value in text for value in ['TEST-AM','TEST-CT','Tinta amarela','Fornecedor de teste','EUR']),'PDF extraído contém fornecedor, duas linhas e moeda')
         _,body,_=req('erp.php?page=orders&purchase_order_id='+str(order));csrf=token(body)

@@ -23,6 +23,10 @@ try {
         dossier_logo_check(strpos($source, 'data:' . $mime . ';base64,') === 0, 'Tipo de imagem incorreto: ' . $extension);
         dossier_logo_check(base64_decode(substr($source, strpos($source, ',') + 1), true) === 'logo-' . $extension, 'Conteúdo do logótipo alterado.');
     }
+    mkdir($root.'/assets');file_put_contents($root.'/assets/brand.png','configured-logo');
+    dossier_logo_check(ReportLogo::source('/gestisser/assets/brand.png',$root)===ReportLogo::source('assets/brand.png',$root),'Prefixo da instalação altera o logótipo.');
+    dossier_logo_check(ReportLogo::source('https://old.example.invalid/gestisser/assets/brand.png',$root)===ReportLogo::source('assets/brand.png',$root),'URL do próprio upload deve usar a imagem local, sem ligação HTTP.');
+    unlink($root.'/assets/brand.png');rmdir($root.'/assets');
     foreach (['https://example.com/logo.png','http://example.com/logo.svg'] as $url) {
         dossier_logo_check(ReportLogo::source($url, $root) === $url, 'A URL do logótipo não foi preservada.');
     }
