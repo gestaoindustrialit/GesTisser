@@ -28,6 +28,11 @@ purchase_check(strpos($pdf,'/Logo Do')!==false,'Logótipo real incorporado no PD
 $GLOBALS['purchase_settings']['logo_report_dark']=$GLOBALS['purchase_settings']['logo_navbar_light'];
 $GLOBALS['purchase_settings']['logo_navbar_light']='missing-navbar.png';
 purchase_check(PurchaseOrderDocument::snapshot($pdo,1)['company']['logo_data']===$GLOBALS['purchase_settings']['logo_report_dark'],'Preferência pelo logótipo de relatórios.');
+$originalSvg=file_get_contents((getenv('PURCHASE_TEST_LOGO_SVG')?:__DIR__.'/fixtures/outlined_report_logo.svg'));
+$GLOBALS['purchase_settings']['logo_report_dark']='data:image/svg+xml;base64,'.base64_encode($originalSvg);
+$svgSnapshot=PurchaseOrderDocument::snapshot($pdo,1);
+purchase_check($svgSnapshot['company']['logo_data']===$GLOBALS['purchase_settings']['logo_report_dark']&&$svgSnapshot['company']['logo_error']==='','SVG configurado conserva o ficheiro original no snapshot.');
+purchase_check(strpos(PurchaseOrderDocument::pdf($svgSnapshot),'/Subtype /Form')!==false,'PDF incorpora o SVG definido na empresa.');
 $GLOBALS['purchase_settings']['logo_report_dark']='missing-report-logo.png';
 $missingLogo=PurchaseOrderDocument::snapshot($pdo,1);
 purchase_check($missingLogo['company']['logo_data']===''&&$missingLogo['company']['logo_error']!=='','Configuração inválida assinalada sem impor outro logótipo.');

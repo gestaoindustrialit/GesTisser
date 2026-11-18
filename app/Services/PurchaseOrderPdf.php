@@ -1,5 +1,6 @@
 <?php
 require_once __DIR__.'/ProductionDossierPdf.php';
+require_once __DIR__.'/SvgLogoPdf.php';
 /** Standalone purchase PDF, using the native report primitives (no vendor, fonts or temp files). */
 final class PurchaseOrderPdf
 {
@@ -8,10 +9,15 @@ final class PurchaseOrderPdf
     private $content='';
     private $y=0;
     private $logo=[];
+    public static function logo(string $source): array
+    {
+        $svg=SvgLogoPdf::fromDataUri($source);
+        return $svg?:ProductionDossierPdf::reportImage($source);
+    }
     public static function render(array $snapshot): string
     {
         $pdf=new self();$pdf->snapshot=$snapshot;
-        $pdf->logo=ProductionDossierPdf::reportImage((string)($snapshot['company']['logo_data']??''));
+        $pdf->logo=self::logo((string)($snapshot['company']['logo_data']??''));
         $pdf->startPage();$total=0.0;$complete=true;
         foreach($snapshot['lines'] as $line){
             $price=$line['unit_price']??null;$amount=$price===null?null:(float)$line['quantity']*(float)$price;
@@ -94,7 +100,7 @@ final class PurchaseOrderPdf
     private function document(): string
     {
         $objects=[1=>'<< /Type /Catalog /Pages 2 0 R >>',3=>'<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica /Encoding /WinAnsiEncoding >>',4=>'<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica-Bold /Encoding /WinAnsiEncoding >>'];$next=5;$resources='/Font << /F1 3 0 R /F2 4 0 R >>';
-        if($this->logo){$data=$this->logo['data'];$decode=$this->logo['filter']==='FlateDecode'?' /DecodeParms << /Predictor 15 /Colors 3 /BitsPerComponent 8 /Columns '.$this->logo['width'].' >>':'';$objects[$next]='<< /Type /XObject /Subtype /Image /Width '.$this->logo['width'].' /Height '.$this->logo['height'].' /ColorSpace /DeviceRGB /BitsPerComponent 8 /Filter /'.$this->logo['filter'].$decode.' /Length '.strlen($data).">>\nstream\n".$data."\nendstream";$resources.=' /XObject << /Logo '.$next.' 0 R >>';$next++;}
+        if($this->logo){$data=$this->logo['data'];if(($this->logo['type']??'')==='form'){$objects[$next]='<< /Type /XObject /Subtype /Form /FormType 1 /BBox [0 0 1 1] /Resources << >> /Length '.strlen($data).">>\nstream\n".$data."\nendstream";}else{$decode=$this->logo['filter']==='FlateDecode'?' /DecodeParms << /Predictor 15 /Colors 3 /BitsPerComponent 8 /Columns '.$this->logo['width'].' >>':'';$objects[$next]='<< /Type /XObject /Subtype /Image /Width '.$this->logo['width'].' /Height '.$this->logo['height'].' /ColorSpace /DeviceRGB /BitsPerComponent 8 /Filter /'.$this->logo['filter'].$decode.' /Length '.strlen($data).">>\nstream\n".$data."\nendstream";}$resources.=' /XObject << /Logo '.$next.' 0 R >>';$next++;}
         $kids=[];$count=count($this->pages);$terms=[];
 
         foreach($this->pages as $index=>$stream){$this->content=$stream;$this->text(30,138,7,'Valores sem IVA. Não constitui documento fiscal.');$y=120;foreach($terms as $term){$this->text(30,$y,6.7,$term,true);$y-=9;}

@@ -19,15 +19,15 @@ final class PurchaseOrderDocument
         $lines=self::lines($pdo,$id);if(!$lines)throw new RuntimeException('A encomenda não tem artigos.');
         $company=[];foreach(['name','address','email','phone','tax_number','fax'] as $key)$company[$key]=(string)app_setting($pdo,'company_'.$key,$key==='name'?'TISSER':'');
         require_once __DIR__.'/ReportLogo.php';
-        require_once __DIR__.'/ProductionDossierPdf.php';
+        require_once __DIR__.'/PurchaseOrderPdf.php';
         $company['logo_data']='';$company['logo_error']='';
         $configured=trim((string)app_setting($pdo,'logo_report_dark',''));
         if($configured==='')$configured=trim((string)app_setting($pdo,'logo_navbar_light',''));
         if($configured!==''){
             $logo=ReportLogo::source($configured,dirname(__DIR__,2));
             if(preg_match('#^https?://#i',$logo))$logo=self::remoteLogo($logo);
-            if($logo!=='' && ProductionDossierPdf::reportImage($logo))$company['logo_data']=$logo;
-            else $company['logo_error']='Não foi possível carregar no PDF o logótipo definido em Empresa e Branding ('.(trim((string)app_setting($pdo,'logo_report_dark',''))!==''?'Logo escuro — relatórios':'Logo claro — navbar').'). Verifique o ficheiro configurado; utilize PNG ou JPEG legível pelo servidor.';
+            if($logo!=='' && PurchaseOrderPdf::logo($logo))$company['logo_data']=$logo;
+            else $company['logo_error']='Não foi possível carregar no PDF o logótipo definido em Empresa e Branding ('.(trim((string)app_setting($pdo,'logo_report_dark',''))!==''?'Logo escuro — relatórios':'Logo claro — navbar').'). Verifique o ficheiro configurado; utilize PNG, JPEG ou SVG vetorial compatível.';
         }
         return ['order'=>$order,'lines'=>$lines,'company'=>$company];
     }
@@ -42,7 +42,8 @@ final class PurchaseOrderDocument
         }
         if(!is_string($bytes)||$bytes===''||strlen($bytes)>16*1024*1024)return '';
         $info=@getimagesizefromstring($bytes);$mime=is_array($info)?(string)($info['mime']??''):'';
-        return in_array($mime,['image/png','image/jpeg','image/webp'],true)?'data:'.$mime.';base64,'.base64_encode($bytes):'';
+        if($mime===''&&preg_match('/<svg\b/i',$bytes))$mime='image/svg+xml';
+        return in_array($mime,['image/png','image/jpeg','image/webp','image/svg+xml'],true)?'data:'.$mime.';base64,'.base64_encode($bytes):'';
     }
     public static function pdf(array $snapshot): string
     {

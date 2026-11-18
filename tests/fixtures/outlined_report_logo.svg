@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="10 20 120 40" width="360" height="120">
+  <title>Synthetic report logo fixture</title>
+  <g transform="translate(10 20)">
+    <path d="M0 0H120V40H0Z" style="fill:#182838;fill-opacity:1;fill-rule:nonzero;stroke:none"/>
+    <path d="m0 0 12 0 0 22 -12 0z" transform="matrix(1,0,0,-1,94,30)" style="fill:#0077cc;fill-opacity:1;fill-rule:nonzero;stroke:none"/>
+    <path d="M12 10C35 4 60 4 82 10L76 28H18Z M25 14L28 23H66L69 14Z" style="fill:#ffffff;fill-opacity:1;fill-rule:evenodd;stroke:none"/>
+  </g>
+</svg>

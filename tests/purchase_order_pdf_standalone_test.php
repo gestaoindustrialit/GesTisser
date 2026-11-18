@@ -1,7 +1,7 @@
 <?php
-// Use only the three local renderer files: this fixture has no vendor directory at all.
+// Use only the four local renderer files: this fixture has no vendor directory at all.
 $root=sys_get_temp_dir().'/purchase-pdf-standalone-'.bin2hex(random_bytes(5));mkdir($root.'/app/Services',0700,true);
-$files=['PurchaseOrderDocument.php','PurchaseOrderPdf.php','ProductionDossierPdf.php'];
+$files=['PurchaseOrderDocument.php','PurchaseOrderPdf.php','ProductionDossierPdf.php','SvgLogoPdf.php'];
 try{
     foreach($files as $file)copy(__DIR__.'/../app/Services/'.$file,$root.'/app/Services/'.$file);
     require $root.'/app/Services/PurchaseOrderDocument.php';
@@ -9,6 +9,9 @@ try{
     $pdf=PurchaseOrderDocument::pdf($snapshot);
     if(substr($pdf,0,8)!=='%PDF-1.4'||strpos($pdf,'395,80')===false||strpos($pdf,'072')===false||strpos($pdf,'Fornecedor')===false)throw new RuntimeException('PDF autónomo inválido ou dados incompletos.');
     if(is_dir($root.'/vendor'))throw new RuntimeException('O teste não pode depender de vendor.');
+    $snapshot['company']['logo_data']='data:image/svg+xml;base64,'.base64_encode(file_get_contents((getenv('PURCHASE_TEST_LOGO_SVG')?:__DIR__.'/fixtures/outlined_report_logo.svg')));
+    $svgPdf=PurchaseOrderDocument::pdf($snapshot);
+    if(strpos($svgPdf,'/Subtype /Form')===false||strpos($svgPdf,'/Logo Do')===false)throw new RuntimeException('SVG original não foi incorporado no PDF autónomo.');
     $snapshot['lines']=array_fill(0,150,$snapshot['lines'][0]);$long=PurchaseOrderDocument::pdf($snapshot);
     if(preg_match_all('#/Type\s*/Page\b#',$long,$matches)<3)throw new RuntimeException('Paginação de encomendas extensas inválida.');
     echo "purchase_order_pdf_standalone_test: OK — PDF sem Composer, fontes externas ou ficheiros temporários.\n";

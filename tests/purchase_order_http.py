@@ -101,9 +101,9 @@ with tempfile.TemporaryDirectory(prefix='purchase-order-http-') as directory:
             warehouse=c.execute("SELECT id FROM erp_warehouses LIMIT 1").fetchone()[0]
             # Use the uploaded company report logo, with a different navbar logo.
             (root/'assets/uploads').mkdir(parents=True,exist_ok=True)
-            shutil.copy2(ROOT/'docs/mapper-reference/ui/assets/logo-tisser-blue.png',root/'assets/uploads/company-report.png')
+            shutil.copy2(Path(os.environ['PURCHASE_TEST_LOGO_SVG']) if os.environ.get('PURCHASE_TEST_LOGO_SVG') else ROOT/'tests/fixtures/outlined_report_logo.svg',root/'assets/uploads/company-report.svg')
             (root/'assets/uploads/company-navbar.png').write_bytes(base64.b64decode('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAIAAACQd1PeAAAADElEQVR4nGP4z8AAAAMBAQDJ/pLvAAAAAElFTkSuQmCC'))
-            for key,value in [('logo_report_dark','assets/uploads/company-report.png'),('logo_navbar_light','assets/uploads/company-navbar.png')]:
+            for key,value in [('logo_report_dark','assets/uploads/company-report.svg'),('logo_navbar_light','assets/uploads/company-navbar.png')]:
                 c.execute('INSERT OR REPLACE INTO app_settings(setting_key,setting_value) VALUES(?,?)',(key,value))
             # Explicit fixture settings override any inherited machine SMTP configuration.
             for key,value in [('smtp_host','127.0.0.1'),('smtp_port',str(smtp.server_address[1])),('smtp_secure','none'),('smtp_username','fixture@example.invalid'),('smtp_password','fixture-only')]:
@@ -156,7 +156,7 @@ with tempfile.TemporaryDirectory(prefix='purchase-order-http-') as directory:
             check(c.execute('SELECT status FROM erp_purchase_orders WHERE id=?',(order,)).fetchone()[0]=='Parcial','Receção parcial atualiza o estado')
         archived=archive[1].encode('latin1') if isinstance(archive[1],str) else archive[1]
         logo=json.loads(archive[4])['company']['logo_data']
-        check(logo.startswith('data:image/png;base64,') and base64.b64decode(logo.split(',',1)[1])==(root/'assets/uploads/company-report.png').read_bytes() and b'/Logo Do' in archived,'PDF e snapshot usam exatamente o Logo escuro configurado na empresa, em vez do logo diferente da navbar')
+        check(logo.startswith('data:image/svg+xml;base64,') and base64.b64decode(logo.split(',',1)[1])==(root/'assets/uploads/company-report.svg').read_bytes() and b'/Logo Do' in archived and b'/Subtype /Form' in archived,'PDF e snapshot usam exatamente o Logo escuro configurado na empresa, em vez do logo diferente da navbar')
         check(hashlib.sha256(archived).hexdigest()==archive[2] and attachments[0].get_payload(decode=True)==archived,'PDF enviado corresponde exatamente ao arquivo')
         status,body,_=req('erp_purchase_document.php?archive_id='+str(archive[0]));check(status==200 and body==archived,'PDF arquivado acessível pelo endpoint autenticado')
         with db() as c:
@@ -166,7 +166,7 @@ with tempfile.TemporaryDirectory(prefix='purchase-order-http-') as directory:
         archived_status,old_pdf,_=req('erp_purchase_document.php?archive_id='+str(archive[0]))
         check(archived_status==200 and old_pdf==archived,'Alteração de branding não modifica o PDF já enviado e arquivado')
         with db() as c:
-            c.execute('UPDATE app_settings SET setting_value=? WHERE setting_key=?',('assets/uploads/company-report.png','logo_report_dark'))
+            c.execute('UPDATE app_settings SET setting_value=? WHERE setting_key=?',('assets/uploads/company-report.svg','logo_report_dark'))
         pdf=root/'purchase.pdf';pdf.write_bytes(body);text=subprocess.check_output(['pdftotext',str(pdf),'-'],text=True)
         check(all(value in text for value in ['TEST-AM','TEST-CT','Tinta amarela','Fornecedor de teste','EUR']),'PDF extraído contém fornecedor, duas linhas e moeda')
         _,body,_=req('erp.php?page=orders&purchase_order_id='+str(order));csrf=token(body)
