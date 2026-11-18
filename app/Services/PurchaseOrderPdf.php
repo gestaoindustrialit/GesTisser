@@ -21,15 +21,15 @@ final class PurchaseOrderPdf
         $pdf->startPage();$total=0.0;$complete=true;
         foreach($snapshot['lines'] as $line){
             $price=$line['unit_price']??null;$amount=$price===null?null:(float)$line['quantity']*(float)$price;
-            $fields=[self::quantity($line['quantity']),(string)($line['unit_code']??''),self::price($price),(string)($line['pantone']??''),(string)($line['item_code']??'')."\n".(string)($line['item_description']??''),(string)($line['color_name']??''),self::number($amount,2)];
-            $cells=[];$rowCount=1;$widths=[45,21,53,39,129,124,49];
-            foreach($fields as $i=>$field){$cells[$i]=self::wrap($field,$widths[$i],$i===4?7.5:8);$rowCount=max($rowCount,count($cells[$i]));}
+            $fields=[(string)($line['item_code']??'')."\n".(string)($line['item_description']??''),(string)($line['pantone']??''),(string)($line['color_name']??''),self::quantity($line['quantity']),(string)($line['unit_code']??''),self::price($price),self::number($amount,2)];
+            $cells=[];$rowCount=1;$widths=[175,35,100,35,20,50,50];
+            foreach($fields as $i=>$field){$cells[$i]=self::wrap($field,$widths[$i],$i===0?7.5:8);$rowCount=max($rowCount,count($cells[$i]));}
             $offset=0;
             while($offset<$rowCount){
                 $capacity=(int)floor(($pdf->y-158-12)/11);if($capacity<2){$pdf->startPage();continue;}
                 $count=min($capacity,$rowCount-$offset);$height=max(32,$count*11+12);$bottom=$pdf->y-$height;
-                $pdf->rect(30,$bottom,535,$height,[1,1,1],true);foreach([86,116,180,230,370,505] as $x)$pdf->line($x,$bottom,$x,$pdf->y,[.86,.89,.92]);
-                foreach($cells as $i=>$rows){$x=[80,90,174,184,235,375,559][$i];$right=in_array($i,[0,2,6],true);foreach(array_slice($rows,$offset,$count) as $j=>$text)$pdf->text($x,$pdf->y-14-$j*11,$i===4?7.5:8,$text,$i===4&&$offset+$j===0,$right);}
+                $pdf->rect(30,$bottom,535,$height,[1,1,1],true);foreach([215,260,370,415,445,505] as $x)$pdf->line($x,$bottom,$x,$pdf->y,[.86,.89,.92]);
+                foreach($cells as $i=>$rows){$x=[35,220,265,409,420,499,559][$i];$right=in_array($i,[3,5,6],true);foreach(array_slice($rows,$offset,$count) as $j=>$text)$pdf->text($x,$pdf->y-14-$j*11,$i===0?7.5:8,$text,$i===0&&$offset+$j===0,$right);}
                 $offset+=$count;$pdf->y=$bottom;
             }
             if($amount===null)$complete=false;else $total+=$amount;
@@ -68,13 +68,12 @@ final class PurchaseOrderPdf
         $bar=min($left,$right)-12;
         if($bar<280)throw new RuntimeException('Os dados de identificação são demasiado extensos para o documento A4.');
         $this->line(30,$bar,565,$bar,[.8,.84,.88]);$bar-=14;
-        $bar=$this->paragraph(30,$bar,535,'Encomenda '.$order['order_number'].' · Data da encomenda: '.self::date($order['order_date']).' · Estado: '.$order['status'],7.5);
         if(trim((string)($order['supplier_reference']??''))!=='')$bar=$this->paragraph(30,$bar,535,'Referência do fornecedor: '.$order['supplier_reference'],7.5);
         if(!empty($order['expected_date']))$bar=$this->paragraph(30,$bar,535,'Entrega prevista: '.self::date($order['expected_date']),7.5);
         $this->y=$bar-8;
         if($table){
             $this->rect(30,$this->y-24,535,24,[.94,.95,.97]);
-            foreach([[35,'Quant.'],[90,'Un.'],[120,'Preço U.'],[184,'Pantone'],[235,'Código / descrição'],[375,'Cor'],[511,'Total EUR']] as $heading)$this->text($heading[0],$this->y-16,7.5,$heading[1],true);
+            foreach([[35,'Código / descrição'],[220,'Pantone'],[265,'Cor'],[375,'Qtd'],[420,'Uni'],[450,'Preço'],[511,'Total EUR']] as $heading)$this->text($heading[0],$this->y-16,7.5,$heading[1],true);
             $this->y-=24;
         }
         if($this->y<200)throw new RuntimeException('Os dados do cabeçalho são demasiado extensos para o documento A4.');
