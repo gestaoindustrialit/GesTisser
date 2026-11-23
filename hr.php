@@ -610,6 +610,7 @@ foreach ($approvedLeavesToday as $leave) {
                 <a class="btn btn-outline-secondary" href="hr_schedules.php">Horários</a>
                 <a class="btn btn-outline-secondary" href="hr_calendar.php">Calendário</a>
                 <a class="btn btn-outline-secondary" href="hr_bank.php">Banco de horas</a>
+                <a class="btn btn-outline-secondary" href="hr_epi.php">Gestão de EPI</a>
                 <a class="btn btn-outline-secondary" href="hr_absences.php">Ausências</a>
                 <a class="btn btn-outline-secondary" href="hr_vacations.php">Férias</a>
                 <a class="btn btn-outline-secondary" href="hr_raffle.php">Sorteio</a>

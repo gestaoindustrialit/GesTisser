@@ -154,7 +154,7 @@ function require_login()
         // Artwork is a protected Shopfloor resource, not an ERP screen. Without
         // this exception a PIN-only terminal receives the shopfloor HTML through
         // a login redirect where PDF.js expects application/pdf.
-        $allowedPages = ['shopfloor.php', 'article_artwork.php', 'logout.php'];
+        $allowedPages = ['shopfloor.php', 'article_artwork.php', 'hr_epi.php', 'logout.php'];
         if (!in_array($currentPage, $allowedPages, true)) {
             redirect('shopfloor.php');
         }

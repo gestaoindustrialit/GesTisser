@@ -112,7 +112,7 @@ $shopfloorUserShortName = $shopfloorUserNameParts !== []
 $shopfloorUserNumber = trim((string) ($user['user_number'] ?? ''));
 $shopfloorUserLabel = trim($shopfloorUserNumber . ' · ' . $shopfloorUserShortName, ' ·');
 $hrFiles = [
-    'hr.php', 'users.php', 'hr_departments.php', 'hr_schedules.php', 'hr_calendar.php',
+    'hr.php', 'hr_epi.php', 'users.php', 'hr_departments.php', 'hr_schedules.php', 'hr_calendar.php',
     'hr_bank.php', 'hr_absences.php', 'hr_vacations.php', 'hr_alerts.php',
     'hr_evaluations.php', 'hr_evaluation_rules.php', 'hr_evaluation_history.php',
     'resultados.php', 'shopfloor_absence_reasons.php', 'shopfloor_break_reasons.php',
@@ -240,6 +240,7 @@ header('Content-Type: text/html; charset=UTF-8');
                             <a class="<?= $isCurrentFile('hr_skills.php') ? 'is-active' : '' ?>" href="hr_skills.php"><i class="bi bi-stars" aria-hidden="true"></i><span>Matriz de competências</span></a>
                             <a class="<?= $isCurrentFile('hr_job_descriptions.php') ? 'is-active' : '' ?>" href="hr_job_descriptions.php"><i class="bi bi-journal-text" aria-hidden="true"></i><span>Cadernos de encargos</span></a>
                             <span class="gt-nav-label">Operação diária</span>
+                            <a class="<?= $isCurrentFile('hr_epi.php') ? 'is-active' : '' ?>" href="hr_epi.php"><i class="bi bi-shield-check" aria-hidden="true"></i><span>Gestão de EPI</span></a>
                             <a class="<?= $isCurrentFile('hr_calendar.php') ? 'is-active' : '' ?>" href="hr_calendar.php"><i class="bi bi-calendar3" aria-hidden="true"></i><span>Calendário</span></a>
                             <a class="<?= $isCurrentFile('hr_absences.php') ? 'is-active' : '' ?>" href="hr_absences.php"><i class="bi bi-person-dash" aria-hidden="true"></i><span>Ausências</span></a>
                             <a class="<?= $isCurrentFile('hr_vacations.php') ? 'is-active' : '' ?>" href="hr_vacations.php"><i class="bi bi-sun" aria-hidden="true"></i><span>Férias</span></a>
@@ -269,6 +270,11 @@ header('Content-Type: text/html; charset=UTF-8');
                         </div>
                     </details>
                 <?php endif; ?>
+            <?php endif; ?>
+            <?php if ($user && ($isShopfloorOnlyNavigation || !$showHrMenu)): ?>
+                <a class="gt-nav-link<?= $isCurrentFile('hr_epi.php') ? ' is-active' : '' ?>" href="hr_epi.php">
+                    <i class="bi bi-shield-check" aria-hidden="true"></i><span>EPI</span>
+                </a>
             <?php endif; ?>
         </nav>
 

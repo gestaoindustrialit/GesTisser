@@ -27,6 +27,29 @@ function ink_permission_checkboxes(PDO $pdo, array $target = [])
     }
 }
 
+function epi_save_user_permissions(PDO $pdo, $id)
+{
+    foreach (['hr.epi.deliver', 'hr.epi.manage'] as $permission) {
+        $field = str_replace('.', '_', $permission);
+        $pdo->prepare('INSERT OR REPLACE INTO erp_user_permissions(user_id,permission_code,is_allowed) VALUES (?,?,?)')
+            ->execute([$id, $permission, isset($_POST[$field]) ? 1 : 0]);
+    }
+}
+
+function epi_permission_checkboxes(PDO $pdo, array $target = [])
+{
+    foreach (['hr.epi.deliver' => 'Registar entregas de EPI', 'hr.epi.manage' => 'Gerir EPI (SST)'] as $permission => $label) {
+        $field = str_replace('.', '_', $permission);
+        $checked = $target && gt_erp_user_can($pdo, $target, $permission);
+        ?>
+        <label class="col-md-6 form-check">
+            <input class="form-check-input" type="checkbox" name="<?= h($field) ?>" value="1" <?= $checked ? 'checked' : '' ?>>
+            <?= h($label) ?>
+        </label>
+        <?php
+    }
+}
+
 $accessProfileOptions = ['Utilizador', 'Produção', 'Chefias', 'RH', 'Administração'];
 $userTypeOptions = ['Funcionário', 'Administrador', 'Trabalhador Externo', 'Prestador'];
 $timezoneOptions = ['Europe/Lisbon', 'Europe/Madrid', 'UTC'];
@@ -482,6 +505,7 @@ if (isset($_GET['download']) && $_GET['download'] === 'bulk-export') {
 }
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+    validate_csrf_or_abort(true);
     $action = (string) ($_POST['action'] ?? '');
 
     if ($action === 'upload_user_document') {
@@ -633,6 +657,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $createdUserId = (int) $pdo->lastInsertId();
                 $pdo->prepare('UPDATE users SET crm_enabled = ? WHERE id = ?')->execute([$crmEnabled, $createdUserId]);
                 ink_save_user_permissions($pdo, $createdUserId);
+                epi_save_user_permissions($pdo, $createdUserId);
                 $flashSuccess = 'Utilizador criado com sucesso.';
             } catch (PDOException $e) {
                 if (stripos($e->getMessage(), 'users.email') !== false) {
@@ -757,6 +782,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 }
 
                 ink_save_user_permissions($pdo, $targetUserId);
+                epi_save_user_permissions($pdo, $targetUserId);
                 if ($passwordWasUpdated) {
                     $passwordCheckStmt = $pdo->prepare('SELECT password FROM users WHERE id = ? LIMIT 1');
                     $passwordCheckStmt->execute([$targetUserId]);
@@ -1481,6 +1507,7 @@ require __DIR__ . '/partials/header.php';
 <div class="modal fade" id="bulkImportUsersModal" tabindex="-1" aria-hidden="true">
     <div class="modal-dialog">
         <form class="modal-content" method="post" enctype="multipart/form-data">
+            <?= csrf_input() ?>
             <input type="hidden" name="action" value="bulk_import_users">
             <div class="modal-header"><h5 class="modal-title">Importar utilizadores em bulk</h5><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div>
             <div class="modal-body">
@@ -1499,6 +1526,7 @@ require __DIR__ . '/partials/header.php';
 <div class="modal fade" id="userModal" tabindex="-1" aria-hidden="true">
     <div class="modal-dialog modal-xl modal-dialog-centered modal-dialog-scrollable">
         <form class="modal-content user-form-compact" method="post" enctype="multipart/form-data">
+            <?= csrf_input() ?>
             <input type="hidden" name="action" value="create_user">
             <div class="modal-header"><h5 class="modal-title">Novo utilizador</h5><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div>
             <div class="modal-body">
@@ -1600,7 +1628,7 @@ require __DIR__ . '/partials/header.php';
                 <div class="user-form-section">
                     <div class="user-form-section-title"><i class="bi bi-shield-check"></i> Acessos e notificações</div>
                     <div class="user-access-grid">
-                    <?php ink_permission_checkboxes($pdo); ?><div class="col-md-6 form-check"><input class="form-check-input" type="checkbox" name="is_admin" value="1" id="isAdmin"><label class="form-check-label" for="isAdmin">Administrador</label></div>
+                    <?php ink_permission_checkboxes($pdo); epi_permission_checkboxes($pdo); ?><div class="col-md-6 form-check"><input class="form-check-input" type="checkbox" name="is_admin" value="1" id="isAdmin"><label class="form-check-label" for="isAdmin">Administrador</label></div>
                     <div class="col-md-6 form-check form-switch"><input class="form-check-input" type="checkbox" name="is_active" value="1" id="isActive" checked><label class="form-check-label" for="isActive">Ativo</label></div>
                     <div class="col-md-6 form-check form-switch"><input class="form-check-input" type="checkbox" name="email_notifications_active" value="1" id="emailNotificationsActive" checked><label class="form-check-label" for="emailNotificationsActive">Ativo para email</label></div>
                     <div class="col-md-6 form-check form-switch"><input class="form-check-input" type="checkbox" name="sms_notifications_active" value="1" id="smsNotificationsActive"><label class="form-check-label" for="smsNotificationsActive">Ativo para SMS</label></div>
@@ -1620,10 +1648,17 @@ require __DIR__ . '/partials/header.php';
 <div class="modal fade" id="editUserModal<?= (int) $user['id'] ?>" tabindex="-1" aria-hidden="true">
     <div class="modal-dialog modal-xl modal-dialog-centered modal-dialog-scrollable">
         <form class="modal-content user-form-compact" method="post" enctype="multipart/form-data">
+            <?= csrf_input() ?>
             <input type="hidden" name="user_id" value="<?= (int) $user['id'] ?>">
             <input type="hidden" name="action" value="update_user">
             <div class="modal-header"><h5 class="modal-title">Editar utilizador</h5><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div>
             <div class="modal-body">
+                <div class="nav nav-tabs mb-3" role="tablist" aria-label="Ficha do colaborador">
+                    <button class="nav-link active" type="button" data-bs-toggle="tab" data-bs-target="#user-details-<?= (int) $user['id'] ?>" role="tab" aria-selected="true">Dados do colaborador</button>
+                    <button class="nav-link" type="button" data-bs-toggle="tab" data-bs-target="#user-epi-<?= (int) $user['id'] ?>" role="tab" aria-selected="false" data-epi-tab>EPI Entregues</button>
+                </div>
+                <div class="tab-content">
+                    <div class="tab-pane active" id="user-details-<?= (int) $user['id'] ?>" role="tabpanel">
                 <div class="user-form-section">
                     <div class="user-form-section-title"><i class="bi bi-person-badge"></i> Dados do colaborador</div>
                     <div class="row g-3">
@@ -1755,7 +1790,7 @@ require __DIR__ . '/partials/header.php';
                 <div class="user-form-section">
                     <div class="user-form-section-title"><i class="bi bi-shield-check"></i> Acessos e notificações</div>
                     <div class="user-access-grid">
-                    <?php ink_permission_checkboxes($pdo, $user); ?><div class="col-md-6 form-check"><input class="form-check-input" type="checkbox" name="is_admin" value="1" id="isAdminEdit<?= (int) $user['id'] ?>" <?= (int) $user['is_admin'] === 1 ? 'checked' : '' ?>><label class="form-check-label" for="isAdminEdit<?= (int) $user['id'] ?>">Administrador</label></div>
+                    <?php ink_permission_checkboxes($pdo, $user); epi_permission_checkboxes($pdo, $user); ?><div class="col-md-6 form-check"><input class="form-check-input" type="checkbox" name="is_admin" value="1" id="isAdminEdit<?= (int) $user['id'] ?>" <?= (int) $user['is_admin'] === 1 ? 'checked' : '' ?>><label class="form-check-label" for="isAdminEdit<?= (int) $user['id'] ?>">Administrador</label></div>
                     <div class="col-md-6 form-check form-switch"><input class="form-check-input" type="checkbox" name="is_active" value="1" id="isActiveEdit<?= (int) $user['id'] ?>" <?= (int) ($user['is_active'] ?? 1) === 1 ? 'checked' : '' ?>><label class="form-check-label" for="isActiveEdit<?= (int) $user['id'] ?>">Ativo</label></div>
                     <div class="col-md-6 form-check form-switch"><input class="form-check-input" type="checkbox" name="email_notifications_active" value="1" id="emailNotificationsActiveEdit<?= (int) $user['id'] ?>" <?= (int) ($user['email_notifications_active'] ?? 1) === 1 ? 'checked' : '' ?>><label class="form-check-label" for="emailNotificationsActiveEdit<?= (int) $user['id'] ?>">Ativo para email</label></div>
                     <div class="col-md-6 form-check form-switch"><input class="form-check-input" type="checkbox" name="sms_notifications_active" value="1" id="smsNotificationsActiveEdit<?= (int) $user['id'] ?>" <?= (int) ($user['sms_notifications_active'] ?? 0) === 1 ? 'checked' : '' ?>><label class="form-check-label" for="smsNotificationsActiveEdit<?= (int) $user['id'] ?>">Ativo para SMS</label></div>
@@ -1763,6 +1798,11 @@ require __DIR__ . '/partials/header.php';
                     <div class="col-md-6 form-check form-switch"><input class="form-check-input" type="checkbox" name="must_change_password" value="1" id="mustChangePasswordEdit<?= (int) $user['id'] ?>" <?= (int) ($user['must_change_password'] ?? 0) === 1 ? 'checked' : '' ?>><label class="form-check-label" for="mustChangePasswordEdit<?= (int) $user['id'] ?>">Obrigar alteração da senha no próximo login</label></div>
                     <div class="col-md-6 form-check form-switch"><input class="form-check-input" type="checkbox" name="pin_only_login" value="1" id="pinOnlyLoginEdit<?= (int) $user['id'] ?>" <?= (int) ($user['pin_only_login'] ?? 0) === 1 ? 'checked' : '' ?>><label class="form-check-label" for="pinOnlyLoginEdit<?= (int) $user['id'] ?>">Login apenas com PIN (Shopfloor)</label></div>
                     <div class="col-md-6 form-check form-switch"><input class="form-check-input js-crm-enabled" type="checkbox" name="crm_enabled" value="1" id="crmEnabledEdit<?= (int) $user['id'] ?>" <?= (int) ($user['crm_enabled'] ?? 1) === 1 && (int) ($user['pin_only_login'] ?? 0) !== 1 ? 'checked' : '' ?>><label class="form-check-label" for="crmEnabledEdit<?= (int) $user['id'] ?>">Módulo CRM<small>Apresenta o CRM e permite o respetivo acesso.</small></label></div>
+                    </div>
+                </div>
+                    </div>
+                    <div class="tab-pane" id="user-epi-<?= (int) $user['id'] ?>" role="tabpanel">
+                        <iframe class="w-100 border-0" style="min-height: 55vh" title="EPI Entregues" data-src="hr_epi.php?tab=history&amp;embed=1&amp;employee=<?= (int) $user['id'] ?>"></iframe>
                     </div>
                 </div>
             </div>
@@ -1785,6 +1825,17 @@ require __DIR__ . '/partials/header.php';
 <?php endforeach; ?>
 
 <script>
+    document.querySelectorAll('[data-epi-tab]').forEach((tab) => {
+        const form = tab.closest('form');
+        const footer = form.querySelector('.modal-footer');
+        tab.addEventListener('shown.bs.tab', () => {
+            const frame = document.querySelector(tab.dataset.bsTarget + ' iframe');
+            if (!frame.hasAttribute('src')) frame.src = frame.dataset.src;
+            footer.classList.add('d-none');
+        });
+        tab.addEventListener('hidden.bs.tab', () => footer.classList.remove('d-none'));
+    });
+
     function buildInitialsFromName(name) {
         return name.trim().split(/\s+/).filter(Boolean).slice(0, 3).map((part) => part.charAt(0).toUpperCase()).join('');
     }

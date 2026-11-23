@@ -7,6 +7,8 @@ require_once dirname(__DIR__).'/app/Services/SharePointIntegration.php';
 require_once dirname(__DIR__).'/app/Services/SharePointArticleImport.php';
 require_once dirname(__DIR__).'/app/Services/SharePointDocumentSync.php';
 require_once dirname(__DIR__).'/app/Services/SharePointSchedule.php';
+require_once dirname(__DIR__).'/app/Services/HrEpiSharePoint.php';
+require_once dirname(__DIR__).'/app/Services/AuditLog.php';
 if(!app_config('cron_enabled',false)||!app_config('external_services_enabled',false)){echo "SharePoint cron disabled in this environment.\n";exit(0);}
 $path=app_config('db_path');
 if(!is_file($path)){fwrite(STDERR,"Existing database unavailable; no database created.\n");exit(1);}
@@ -14,10 +16,19 @@ $lock=null;$exitCode=0;
 try{
     $pdo=new PDO('sqlite:'.$path);$pdo->setAttribute(PDO::ATTR_ERRMODE,PDO::ERRMODE_EXCEPTION);
     $pdo->exec('PRAGMA foreign_keys=ON');$pdo->exec('PRAGMA busy_timeout=5000');
+    if ($pdo->query("SELECT 1 FROM sqlite_master WHERE type='table' AND name='hr_epi_outbox'")->fetchColumn()) {
+        try {
+            $epiCount = (new HrEpiSharePoint($pdo))->run();
+            if ($epiCount) echo "EPI sincronizados: ".$epiCount."\n";
+        } catch (Throwable $epiError) {
+            fwrite(STDERR,json_encode(SharePointImportFailure::safe($epiError),JSON_UNESCAPED_UNICODE)."\n");
+            $exitCode=1;
+        }
+    }
     $scheduler=new SharePointSchedule($pdo);
-    if(empty($scheduler->settings()['enabled'])){echo "SharePoint schedule disabled.\n";exit(0);}
+    if(empty($scheduler->settings()['enabled'])){echo "SharePoint schedule disabled.\n";exit($exitCode);}
     $settings=(new SharePointIntegration($pdo,app_config('paths.uploads')))->settings();
-    if(!$scheduler->hasWork()){echo "No SharePoint work due.\n";exit(0);}
+    if(!$scheduler->hasWork()){echo "No SharePoint work due.\n";exit($exitCode);}
     $lock=fopen(sys_get_temp_dir().'/gestisser-sp-'.hash('sha256',$settings['site_id'].'/'.$settings['list_id']).'.lock','c');
     if(!$lock || !flock($lock,LOCK_EX|LOCK_NB)){echo "SharePoint operation already running.\n";exit(0);}
     $client=new SharePointGraphClient($settings);$secret=SharePointClientSecret::read();
